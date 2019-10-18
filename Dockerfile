@@ -12,7 +12,7 @@
 # and clean up the web/ source code
 #########################################################################
 
-FROM node:8-alpine AS app-builder
+FROM --platform=$BUILDPLATFORM node:8-alpine AS app-builder
 
 RUN apk add --no-cache \
     autoconf \
@@ -61,7 +61,7 @@ RUN npm install && \
 # Now, create a documentation build container for the Sphinx docs
 #########################################################################
 
-FROM python:3.7-alpine3.10 as docs-builder
+FROM --platform=$BUILDPLATFORM python:3.7-alpine3.10 as docs-builder
 
 # Install only dependencies absolutely required for documentation building
 RUN apk add --no-cache \
@@ -137,7 +137,7 @@ COPY --from=pg12-builder /usr/local/bin/psql /usr/local/pgsql/pgsql-12/
 # Assemble everything into the final container.
 #########################################################################
 
-FROM python:3.7-alpine3.10
+FROM --platform=$TARGETPLATFORM python:3.7-alpine3.10
 
 COPY --from=tool-builder /usr/local/pgsql /usr/local/
 
