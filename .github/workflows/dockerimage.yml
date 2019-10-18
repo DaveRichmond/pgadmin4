@@ -31,4 +31,4 @@ jobs:
         run: docker version ; docker buildx ls ; docker buildx inspect multibuilder
       - uses: actions/checkout@v1
       - name: Build the Docker image
-        run: docker buildx build --platform linux/amd64,linux/arm/v7 -t daverichmond/pgadmin4:latest --push .
+        run: docker buildx build --platform linux/amd64,linux/arm/v7,linux/arm64 -t daverichmond/pgadmin4:latest --push .
