@@ -689,6 +689,7 @@ define([
         }
         var el = $((tmpls['panel'])(_.extend(o, {
           'tabIndex': idx,
+          'tabPanelCodeClass': o.tabPanelCodeClass ? o.tabPanelCodeClass : '',
         })))
           .appendTo(tabContent)
           .removeClass('collapse').addClass('collapse');
@@ -2690,7 +2691,7 @@ define([
         'focus input': 'clearInvalid',
         'focusout input': 'closePicker',
         'change.datetimepicker': 'onChange',
-        'click': 'togglePicker',
+        'click .input-group': 'togglePicker',
       },
       togglePicker: function() {
         if (this.has_datepicker) {
