@@ -273,13 +273,20 @@ _.extend(pgBrowser.keyboardNavigation, {
   },
   bindSubMenuCreate: function() {
     const tree = this.getTreeDetails();
-
-    if (!tree.d || pgAdmin.Browser.Nodes[tree.t.itemData(tree.i)._type].collection_node === true)
+    let node_obj = pgAdmin.Browser.Nodes[tree.t.itemData(tree.i)._type];
+    if (!tree.d){
       return;
+    } else if(node_obj.collection_node === true) {
+      if(node_obj.node) {
+        node_obj = pgAdmin.Browser.Nodes[node_obj.node];
+      } else {
+        return;
+      }
+    }
 
     // Open properties dialog in edit mode
     pgAdmin.Browser.Node.callbacks.show_obj_properties.call(
-      pgAdmin.Browser.Nodes[tree.t.itemData(tree.i)._type], {action: 'create'}
+      node_obj, {action: 'create', item: tree.i}
     );
   },
   bindSubMenuDelete: function() {
@@ -300,8 +307,9 @@ _.extend(pgBrowser.keyboardNavigation, {
   },
   bindContextMenu: function(event) {
     const tree = this.getTreeDetails();
-    const left = $(event.srcElement).find('.aciTreeEntry').position().left + 70;
-    const top = $(event.srcElement).find('.aciTreeEntry').position().top + 70;
+    let _srcElement = event.srcElement || event.target;
+    const left = $(_srcElement).find('.aciTreeEntry').position().left + 70;
+    const top = $(_srcElement).find('.aciTreeEntry').position().top + 70;
 
     tree.t.blur(tree.i);
     $('#tree').trigger('blur');
