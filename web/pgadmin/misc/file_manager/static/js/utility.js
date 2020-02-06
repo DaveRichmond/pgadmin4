@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -432,13 +432,207 @@ define([
     return permission;
   };
 
+  var getNoDataView = function(data) {
+    var lg = pgAdmin.FileUtils.lg;
+    var cap_no_folders = ['upload', 'create'];
+    data.Capabilities = cap_no_folders;
+    bindToolbar(data);
 
+    return `<div class="no_folder_found">${lg.could_not_retrieve_folder}</div>`;
+  };
+
+  var getGridView = function(data, capabilities) {
+    let ret_ele = '<ul id="contents" class="grid">',
+      no_data = _.isEmpty(data);
+
+    if(!no_data) {
+      ret_ele += Object.keys(data).sort(function keyOrder(x, y) {
+        return pgAdmin.natural_sort(x.toLowerCase(), y.toLowerCase());
+      }).map(function(key) {
+        let item_data = data[key],
+          props = item_data.Properties,
+          filename = _.escape(item_data.Filename),
+          icon_type = '',
+          cap_classes = '';
+
+        cap_classes = Object.keys(capabilities).map(function(cap) {
+          if (has_capability(item_data, capabilities[cap])) {
+            return 'cap_' + capabilities[cap];
+          }
+        }).join(' ');
+
+        item_data.Capabilities = capabilities;
+        bindToolbar(item_data);
+
+        if (item_data.file_type == 'dir') {
+          icon_type = 'fa fa-folder-open fm_folder_grid';
+        } else if (item_data.file_type == 'drive') {
+          icon_type = 'fa fa-hdd-o fm_drive';
+        } else {
+          icon_type = 'fa fa-file-text-o fm_file_grid';
+        }
+
+        /* For the html ele */
+        let item_ele =
+          `<li class="${cap_classes}" tabindex="0">
+            <div class="clip">
+            <span data-alt="${_.escape(item_data.Path)}" class="${icon_type}"></span>`;
+
+        if (item_data.Protected == 1) {
+          item_ele += '<span class="fa fa-lock fm_lock_icon" data-protected="protected" role="img"></span>';
+        }
+
+        item_ele += '</div>';
+
+        if (!has_capability(item_data, 'rename')) {
+          item_ele += `<span>${filename}</span>`;
+        } else {
+          item_ele +=
+            `<div>
+              <input type="text" class="fm_file_rename" />
+              <span class="less_text" title="${filename}">${filename}</span>
+            </div>`;
+        }
+        if (props.Width && props.Width != '') {
+          item_ele += `<span class="meta dimensions">${props.Width}x${props.Height}</span>`;
+        }
+        if (props.Size && props.Size != '') {
+          item_ele += `<span class="meta size">${props.Size}</span>`;
+        }
+        if (props['Date Created'] && props['Date Created'] != '') {
+          item_ele += `<span class="meta created">${props['Date Created']}</span>`;
+        }
+        if (props['Date Modified'] && props['Date Modified'] != '') {
+          item_ele += `<span class="meta modified">${props['Date Modified']}</span>`;
+        }
+        item_ele += '</li>';
+
+        return item_ele;
+      }).join('\n');
+    }
+
+    ret_ele += '</ul>';
+
+    if(no_data) {
+      ret_ele += getNoDataView(data);
+    }
+    return ret_ele;
+  };
+
+  var getListView = function(data, capabilities) {
+    let lg = pgAdmin.FileUtils.lg;
+    let no_data = _.isEmpty(data);
+
+    /* file_listing_table class makes height 100%, because of which No folder message is not displayed
+     * file_listing_table_no_data will be removed when new folder is created
+     */
+    let ret_ele =
+      `<table id="contents" class="table table-bordered table-noouter-border table-bottom-border table-right-border table-hover tablesorter file_listing_table ${no_data?'file_listing_table_no_data':''}">
+        <thead>
+          <tr>
+            <th tabindex="0">
+              <span>${lg.name}</span>
+            </th>
+            <th class="sorter-metric" data-metric-name-full="byte|Byte|BYTE" data-metric-name-abbr="b|B">
+              <span>${lg.size}</span>
+            </th>
+            <th class="sorter-shortDate">
+              <span>${lg.modified}</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+    if(!no_data) {
+      ret_ele += Object.keys(data).sort(function keyOrder(x, y) {
+        return pgAdmin.natural_sort(x.toLowerCase(), y.toLowerCase());
+      }).map(function(key) {
+        let item_data = data[key],
+          props = item_data.Properties,
+          icon_type = '',
+          class_type = '',
+          cap_classes = '';
+
+        cap_classes = Object.keys(capabilities).map(function(cap) {
+          if (has_capability(item_data, capabilities[cap])) {
+            return 'cap_' + capabilities[cap];
+          }
+        }).join(' ');
+
+        item_data.Capabilities = capabilities;
+        bindToolbar(item_data);
+
+        if (item_data.file_type == 'dir') {
+          class_type = 'tbl_folder';
+          icon_type = 'fa fa-folder-open fm_folder_list';
+        } else if (item_data.file_type == 'drive') {
+          class_type = 'tbl_drive';
+          icon_type = 'fa fa-hdd-o';
+        } else {
+          class_type = 'tbl_file';
+          icon_type = 'fa fa-file-text-o';
+        }
+
+        /* For the html ele */
+        let item_ele =
+          `<tr class="${cap_classes}" tabindex="0">
+            <td title="${_.escape(item_data.Path)}" class="${class_type}">`;
+
+        let data_protected = '';
+        if (item_data.Protected == 1) {
+          data_protected = '<i class="fa fa-lock tbl_lock_icon" data-protected="protected" role="img"></i>';
+        }
+        if (!has_capability(data[key], 'rename')) {
+          item_ele +=
+            `${data_protected};
+            <span title="${item_data.Filename}">${_.escape(item_data.Filename)}</span>`;
+        } else {
+          item_ele +=
+            `<div>
+              <input type="text" class="fm_file_rename"/>
+              <div class="fm_file_name">
+                <div class="d-flex">
+                  <span class="fm_file_list ${icon_type}"></span>
+                  ${data_protected}
+                  <span class="less_text ml-2" title="${item_data.Filename}">${_.escape(item_data.Filename)}</span>
+                </div>
+              <div>
+            </div>`;
+        }
+        item_ele += '</td>';
+        if (props.Size && props.Size != '') {
+          item_ele += `<td><span class="less_text" title="${props.Size}">${props.Size}</span></td>`;
+        } else {
+          item_ele += '<td></td>';
+        }
+
+        if (props['Date Modified'] && props['Date Modified'] != '') {
+          item_ele += `<td>${props['Date Modified']}</td>`;
+        } else {
+          item_ele += '<td></td>';
+        }
+
+        item_ele += '</tr>';
+
+        return item_ele;
+      }).join('\n');
+    }
+
+    ret_ele +=
+      `</tbody>
+      </table>`;
+
+    if(no_data) {
+      ret_ele += getNoDataView(data);
+    }
+    return ret_ele;
+  };
 
   /*
    * Retrieves data for all items within the given folder and
    * creates a list view.
    */
-  var getFolderInfo = function(path, file_type) {
+  var getFolderInfo = function(path, file_type, user_input) {
     $('.storage_dialog #uploader .input-path').prop('disabled', true);
     if (!file_type) {
       file_type = '';
@@ -446,6 +640,9 @@ define([
     var capabilities = pgAdmin.FileUtils.data.Capabilities;
     // Update location for status, upload, & new folder functions.
     pgAdmin.FileUtils.setUploader(path);
+    if(user_input) {
+      $('.storage_dialog #uploader .input-path').val(path+user_input);
+    }
 
     // set default selected file type
     if (file_type === '') {
@@ -489,7 +686,6 @@ define([
       'show_hidden': $('#show_hidden').prop('checked'),
     };
 
-    var lg = pgAdmin.FileUtils.lg;
     $.ajax({
       type: 'POST',
       data: JSON.stringify(post_data),
@@ -502,7 +698,7 @@ define([
         $('.storage_dialog #uploader .input-path').prop('disabled', false);
         var result = '',
           data = resp.data.result;
-
+        let isGridView = false;
         // hide activity indicator
         $('.fileinfo').find('span.activity').hide();
         if (data.Code === 0) {
@@ -513,184 +709,107 @@ define([
         var $this, orig_value, newvalue;
 
         // generate HTML for files/folder and render into container
-        if (!_.isEmpty(data)) {
-          if ($('.fileinfo').data('view') == 'grid') {
-            result += '<ul id="contents" class="grid">';
-            Object.keys(data).sort(function keyOrder(x, y) {
-              return pgAdmin.natural_sort(x.toLowerCase(), y.toLowerCase());
-            }).forEach(function(key) {
-              var props = (data[key]).Properties,
-                cap_classes = '';
-
-              Object.keys(capabilities).forEach(function(cap) {
-                if (has_capability(data[key], capabilities[cap])) {
-                  cap_classes += 'cap_' + capabilities[cap];
-                }
-              });
-
-              (data[key]).Capabilities = capabilities;
-              bindToolbar(data[key]);
-
-              var class_type;
-              if ((data[key]).file_type == 'dir') {
-                class_type = 'fa fa-folder-open fm_folder_grid';
-              } else if ((data[key]).file_type == 'drive') {
-                class_type = 'fa fa-hdd-o fm_drive';
-              } else {
-                class_type = 'fa fa-file-text-o fm_file_grid';
-              }
-
-              var fm_filename = (data[key]).Filename;
-              if (fm_filename.length > 15) {
-                fm_filename = (data[key]).Filename.substr(0, 10) + '...';
-              }
-              fm_filename = _.escape(fm_filename);
-
-              var file_path_orig = _.escape((data[key]).Path);
-
-              result += '<li class="' + cap_classes +
-              '"><div class="clip"><span data-alt="' +
-              file_path_orig + '" class="' + class_type + '"></span>';
-              if ((data[key]).Protected == 1) {
-                result += '<span class="fa fa-lock fm_lock_icon" data-protected="protected"></span>';
-              }
-
-              result += '</div>';
-              if (!has_capability(data[key], 'rename')) {
-                result += '<span>' + fm_filename + '</span>';
-              } else {
-                result +=
-                '<div><input type="text" class="fm_file_rename" />' +
-                '<span class="less_text" title="' + fm_filename + '">' + fm_filename +
-                '</span></div>';
-              }
-              if (props.Width && props.Width != '') {
-                result += '<span class="meta dimensions">' +
-                props.Width + 'x' + props.Height + '</span>';
-              }
-              if (props.Size && props.Size != '') {
-                result += '<span class="meta size">' +
-                props.Size + '</span>';
-              }
-              if (props['Date Created'] && props['Date Created'] != '') {
-                result += '<span class="meta created">' +
-                props['Date Created'] + '</span>';
-              }
-              if (props['Date Modified'] && props['Date Modified'] != '') {
-                result += '<span class="meta modified">' +
-                props['Date Modified'] + '</span>';
-              }
-              result += '</li>';
-            });
-
-            result += '</ul>';
-          } else {
-            result += '<table id="contents" class="table table-bordered table-noouter-border table-bottom-border table-hover tablesorter file_listing_table">';
-            result += '<thead><tr><th>';
-            result += '<span>' + lg.name + '</span></th>';
-            result += '<th class="sorter-metric" data-metric-name-full="byte|Byte|BYTE" data-metric-name-abbr="b|B"><span>' + lg.size + '</span></th>';
-            result += '<th class="sorter-shortDate"><span>' + lg.modified + '</span></th></tr></thead>';
-            result += '<tbody>';
-
-            Object.keys(data).sort(function keyOrder(x, y) {
-              return pgAdmin.natural_sort(x.toLowerCase(), y.toLowerCase());
-            }).forEach(function(key) {
-              var path = _.escape((data[key]).Path),
-                props = (data[key]).Properties,
-                cap_classes = '',
-                cap, class_type, icon_type;
-
-              for (cap in capabilities) {
-                if (has_capability(data[key], capabilities[cap])) {
-                  cap_classes += ' cap_' + capabilities[cap];
-                }
-              }
-
-              (data[key]).Capabilities = capabilities;
-              bindToolbar(data[key]);
-
-              if ((data[key]).file_type == 'dir') {
-                class_type = 'tbl_folder';
-                icon_type = 'fa fa-folder-open fm_folder_list';
-              } else if ((data[key]).file_type == 'drive') {
-                class_type = 'tbl_drive';
-                icon_type = 'fa fa-hdd-o';
-              } else {
-                class_type = 'tbl_file';
-                icon_type = 'fa fa-file-text-o';
-              }
-
-              result += '<tr class="' + cap_classes + '">';
-
-              var fm_filename = (data[key]).Filename;
-              if (fm_filename.length > 48) {
-                fm_filename = (data[key]).Filename.substr(0, 48) + '...';
-              }
-              fm_filename = _.escape(fm_filename);
-
-              result += '<td title="' + path + '" class="' + class_type + '">';
-
-              let data_protected = '';
-              if ((data[key]).Protected == 1) {
-                data_protected = '<i class="fa fa-lock tbl_lock_icon" data-protected="protected"></i>';
-              }
-              if (!has_capability(data[key], 'rename')) {
-                result += data_protected;
-                result += '<span title="' + (data[key]).Filename + '">' +
-                fm_filename + '</span></td>';
-              } else {
-                result += '<div><input type="text" class="fm_file_rename"/>'+
-                        '<div class="d-flex">' +
-                        '<span class="fm_file_list '+icon_type+'"></span>' +
-                        data_protected +
-                        '<span class="less_text ml-2" title="' + fm_filename + '">' + fm_filename + '</span>' +
-                        '</div>' +
-                        '</div></td>';
-              }
-              if (props.Size && props.Size != '') {
-                result += '<td><span title="' + props.Size + '">' +
-                props.Size + '</span></td>';
-              } else {
-                result += '<td></td>';
-              }
-
-              if (props['Date Modified'] && props['Date Modified'] != '') {
-                result += '<td>' + props['Date Modified'] + '</td>';
-              } else {
-                result += '<td></td>';
-              }
-
-              result += '</tr>';
-            });
-
-            result += '</tbody>';
-            result += '</table>';
-          }
+        if ($('.fileinfo').data('view') == 'grid') {
+          result += getGridView(data, capabilities);
+          isGridView = true;
         } else {
-          if ($('.fileinfo').data('view') == 'grid') {
-            result += '<ul id="contents" class="grid"></ul>';
-          } else {
-          /* file_listing_table class makes height 100%, because of which No folder message is not displayed
-           * file_listing_table_no_data will be removed when new folder is created
-           */
-            result += '<table id="contents" class="table table-bordered table-noouter-border table-bottom-border table-hover tablesorter file_listing_table file_listing_table_no_data">';
-            result += '<thead><tr><th><span>' + lg.name + '</span></th>' +
-                    '<th class="sorter-metric" data-metric-name-full="byte|Byte|BYTE" data-metric-name-abbr="b|B"><span>' + lg.size + '</span></th>' +
-                    '<th class="sorter-shortDate"><span>' + lg.modified + '</span></th>' +
-                    '</tr></thead>' +
-                    '<tbody></tbody>';
-            result += '</table>';
-          }
-          result += '<div class="no_folder_found">' + lg.could_not_retrieve_folder + '</div>';
-          var cap_no_folders = ['upload', 'create'];
-
-          data.Capabilities = cap_no_folders;
-          bindToolbar(data);
+          result += getListView(data, capabilities);
         }
 
         // Add the new markup to the DOM.
         $('.fileinfo .file_listing').html(result);
-        $('.fileinfo .file_listing #contents').tablesorter();
+
+        let $listing_table = $('.fileinfo .file_listing .file_listing_table');
+
+        $listing_table.tablesorter({
+          widgets: [ 'resizable', 'stickyHeaders' ],
+          widgetOptions : {
+            stickyHeaders_attachTo:'.file_listing',
+            stickyHeaders_offset: 0,
+            resizable_widths: ['400px', '100px', '175px'],
+          },
+        });
+
+        /* In order to fit our UI, some things need to be explicitly set
+         * as tablesorter resizable is creating trouble.
+         */
+        $listing_table.on( 'resizableComplete', function() {
+          let wo = this.config.widgetOptions;
+          $.tablesorter.resizable.setWidth($listing_table.find('th[data-column="2"]'), wo.resizable_widths[2]);
+        });
+
+        /* Role of this function is to click or double click on element when user is doing keyboard navigation*/
+        var clickOnFileFolderManually = function(event) {
+          let self = this;
+          event.preventDefault();
+          event.stopPropagation();
+          // if file/folder is protected do nothing
+          if ($(this).find('.fa-lock').length)
+            return;
+          if ($(this).find('.fa-file-text-o').length)
+            $(this).click();
+          // If folder then first select and then double click to opn folder
+          else if ($(this).find('.fa-folder-open').length) {
+            $(this).click();
+            setTimeout(() => { $(self).trigger('dblclick'); }, 10);
+          }
+        };
+
+        $listing_table.on( 'tablesorter-ready', function() {
+          let wo = this.config.widgetOptions;
+          if($.tablesorter.storage($listing_table[0], 'tablesorter-table-resized-width') === '') {
+            $.tablesorter.resizable.setWidth($listing_table, $('.fileinfo .file_listing').width());
+          }
+          $.tablesorter.resizable.setWidth($listing_table.find('th[data-column="2"]'), wo.resizable_widths[2]);
+          $listing_table.trigger('resizableUpdate');
+
+          // Table Sorter writes table elements randomly so we need to handle some corner cases manually
+          $('#show_hidden').off('keydown').on('keydown', function(event) {
+            if (!isGridView && event.keyCode == 9 && event.shiftKey) {
+              event.preventDefault();
+              $listing_table.find('tbody tr:last').trigger('focus');
+            }
+          });
+
+          $listing_table.find('tbody tr').off('keydown').on('keydown', function(event) {
+            // If key is pressed then we need to trigger click so that it can select file
+            if (event.keyCode == 13 || event.keyCode == 32) {
+              clickOnFileFolderManually.call(this, event);
+            } else if (event.keyCode == 9) {
+              if (event.shiftKey) {
+                // When first tr losses focus and shift + tab > we need to set focus on header
+                if ($(this).prev().length == 0) {
+                  event.preventDefault();
+                  $listing_table.find('th.tablesorter-header:last').trigger('focus');
+                }
+              } else {
+                // When last tr losses focus and Tab was pressed > we need to set focus on checkbox
+                if ($(this).next().length == 0) {
+                  event.preventDefault();
+                  $('#show_hidden').trigger('focus');
+                }
+              }
+            }
+          });
+
+          $listing_table.find('th.tablesorter-header').off('keydown').on('keydown', function(event) {
+            // If key is pressed then we need to trigger click so that it can sort
+            if (event.keyCode == 13 || event.keyCode == 32) {
+              event.preventDefault();
+              event.stopPropagation();
+              $(this).trigger('click');
+            }
+          });
+        });
+
+        if(isGridView) {
+          $('.file_manager').find('#contents li').off('keydown').on('keydown', function(event) {
+            // If key is pressed then we need to trigger click so that it can sort
+            if (event.keyCode == 13 || event.keyCode == 32) {
+              clickOnFileFolderManually.call(this, event);
+            }
+          });
+        }
 
         // rename file/folder
         $('.file_manager button.rename').off().on('click', function(e) {
@@ -720,7 +839,7 @@ define([
           } else if ($('.fileinfo').data('view') == 'list') {
             e.stopPropagation();
             $this = $('.fileinfo').find(
-              'table#contents tbody tr.selected td:first-child div'
+              'table#contents tbody tr.selected td.tbl_file'
             );
             orig_value = decodeURI($this.find('span.less_text').html()),
             newvalue = orig_value.substring(0, orig_value.lastIndexOf('.'));
@@ -729,15 +848,15 @@ define([
               newvalue = decodeURI(orig_value);
             }
 
-            $this.find('input').toggle().val(newvalue).trigger('focus');
-            $this.find('span').toggle();
+            $this.find('.fm_file_rename').toggle().val(newvalue).trigger('focus');
+            $this.find('.fm_file_name').toggle();
 
             // Rename folder/file on pressing enter key
             $('.file_manager').off().on('keyup', function(e) {
               if (e.keyCode == 13) {
                 e.stopPropagation();
-                $('.fileinfo table#contents tr.selected td div').find(
-                  'input'
+                $('.fileinfo table#contents tr.selected td.tbl_file').find(
+                  'fm_file_rename'
                 ).trigger('blur');
               }
             });
@@ -1141,11 +1260,11 @@ define([
           select_box = `<div class='change_file_types d-flex align-items-center p-1'>
           <div>
             ${gettext('Show hidden files and folders')}?
-            <input type='checkbox' id='show_hidden' onclick='pgAdmin.FileUtils.handleClick(this)' tabindex='11'>
+            <input type='checkbox' id='show_hidden' onclick='pgAdmin.FileUtils.handleClick(this)' tabindex='0'>
           </div>
           <div class="ml-auto">
             <label class="my-auto">${gettext('Format')}</label>
-            <select name='type' tabindex='12'>${fileFormats}</select>
+            <select name='type' tabindex='0'>${fileFormats}</select>
           <div>`;
         }
 
@@ -1153,8 +1272,15 @@ define([
 
         $('.allowed_file_types select').on('change', function() {
           var selected_val = $(this).val(),
-            curr_path = $('.currentpath').val();
-          getFolderInfo(curr_path, selected_val);
+            curr_path = $('.currentpath').val(),
+            user_input_file = null,
+            input_path = $('.storage_dialog #uploader .input-path').val();
+          if (curr_path.endsWith('/')) {
+            user_input_file = input_path.substring(curr_path.lastIndexOf('/')+1);
+          } else {
+            user_input_file = input_path.substring(curr_path.lastIndexOf('\\')+1);
+          }
+          getFolderInfo(curr_path, selected_val, user_input_file);
         });
 
         // If user have preference to show hidden files
@@ -1191,9 +1317,10 @@ define([
 
       // Switch to folder view
       $('.file_manager .fileinfo').on('click', function() {
-        $('.file_manager #uploader .input-path').val($('.currentpath').val());
         enable_disable_btn();
       });
+
+
 
       // Refresh current directory
       $('.file_manager .refresh').on('click', function() {
@@ -1416,12 +1543,12 @@ define([
         // we remove simple file upload element
         $('.file-input-container').remove();
         $('.upload').remove();
-        $('.create').before('<button value="Upload" type="button" title="Upload File" name="upload" id="upload" class="btn btn-sm btn-secondary upload" tabindex="6"><span class="fa fa-upload sql-icon-lg"></span></button> ');
+        $('.create').before('<button value="Upload" type="button" title="Upload File" name="upload" id="upload" class="btn btn-sm btn-secondary upload" tabindex="0"><span class="fa fa-upload sql-icon-lg"></span></button> ');
 
         $('#uploader .upload').off().on('click', function() {
           // we create prompt
           var msg = '<div id="dropzone-container" class="d-flex flex-column flex-grow-1">' +
-            '<button class="fa fa-times fa-lg dz_cross_btn ml-auto" tabindex="7"></button>' +
+            '<button class="fa fa-times fa-lg dz_cross_btn ml-auto" tabindex="0"></button>' +
             '<div id="multiple-uploads" class="dropzone flex-grow-1 d-flex p-1">'+
             '<div class="dz-default dz-message d-none"></div>'+
             '</div>' +
@@ -1585,8 +1712,8 @@ define([
 
           // template for creating new folder
           folder_div =
-            '<li class=\'cap_download cap_delete cap_select_file cap_select_folder cap_rename cap_create cap_upload\'>' +
-            '<div class=\'clip\'><span data-alt=\'\' class=\'fa fa-folder-open fm_folder_grid\'></span></div>' +
+            '<li tabIndex="0" class=\'cap_download cap_delete cap_select_file cap_select_folder cap_rename cap_create cap_upload\'>' +
+            '<div class=\'clip\'><span data-alt=\'\' class=\'fa fa-folder-open fm_folder_grid\' role="img"></span></div>' +
             '<div><input type=\'text\' class=\'fm_file_rename\'><span class="less_text" title=\'\'>New_Folder</span></div>' +
             '<span class=\'meta size\'></span><span class=\'meta created\'></span><span class=\'meta modified\'></span></li>';
 
@@ -1623,15 +1750,21 @@ define([
         } else if ($('.fileinfo').data('view') == 'list') {
           // template to create new folder in table view
           folder_div = $(
-            '<tr class=\'cap_download cap_delete cap_select_file cap_select_folder cap_rename cap_create cap_upload\'>' +
-            '<td title=\'\' class=\' tbl_folder\'>' +
-            '<span class="fa fa-folder-open fm_folder_list"></span>' +
-            '<span class="less_text">' + lg.new_folder + '</span>' +
-            '<input type=\'text\' class=\'fm_file_rename\'>'+
-            '</td>'+
-            '<td><span title=\'\'></span></td>' +
-            '<td></td>' +
-            '</tr>'
+            `<tr class=\'cap_download cap_delete cap_select_file cap_select_folder cap_rename cap_create cap_upload\'>
+              <td title=\'\' class=\' tbl_folder\'>
+                <div>
+                  <input type="text" class="fm_file_rename"/>
+                  <div class="fm_file_name">
+                    <div class="d-flex">
+                      <span class="fa fa-folder-open fm_folder_list" role="img"></span>
+                      <span class="less_text ml-2">${lg.new_folder}</span>
+                    </div>
+                  <div>
+                </div>
+              </td>
+              <td><span title=\'\'></span></td>
+              <td></td>
+            </tr>`
           );
 
           $file_element_list = $(folder_div);
@@ -1639,7 +1772,7 @@ define([
           tableEl.removeClass('file_listing_table_no_data');
           tableEl.find('tbody').prepend($file_element_list);
 
-          $file_element_list.find('td span.less_text').toggle();
+          $file_element_list.find('td .fm_file_name').toggle();
           $file_element_list.find('td input').toggle().val(lg.new_folder).select();
 
           // rename folder/file on pressing enter key
@@ -1656,7 +1789,8 @@ define([
             var text_value = $file_element_list.find('td input').val();
             path = $('.currentpath').val();
             $file_element_list.find('td input').toggle();
-            $file_element_list.find('td span.less_text').toggle().html(text_value);
+            $file_element_list.find('td .fm_file_name span.less_text').html(text_value);
+            $file_element_list.find('td .fm_file_name').toggle();
             if (text_value === undefined) {
               text_value = lg.new_folder;
             }

@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -190,7 +190,7 @@ def save(pid):
     # This will execute every time as could not find the better way to know
     # that which preference is getting updated.
 
-    misc_preference = Preferences.module('miscellaneous')
+    misc_preference = Preferences.module('misc')
     user_languages = misc_preference.preference(
         'user_language'
     )

@@ -75,7 +75,7 @@ CACHE {{c.seqcache|int}} {% endif %}
 {% if data.like_relation or data.coll_inherits or data.columns|length > 0 or data.primary_key|length > 0 or data.unique_constraint|length > 0 or data.foreign_key|length > 0 or data.check_constraint|length > 0 or data.exclude_constraint|length > 0 %}
 
 ){% endif %}{% if data.relkind is defined and data.relkind == 'p' %} PARTITION BY {{ data.partition_scheme }} {% endif %}
-{% if not data.coll_inherits and (not data.spcname or (data.spcname and data.is_partitioned)) and not with_clause %};{% endif %}
+{% if not data.coll_inherits and not data.spcname and not with_clause %};{% endif %}
 
 {### If we are inheriting it from another table(s) ###}
 {% if data.coll_inherits %}
@@ -103,11 +103,11 @@ WITH (
     toast.{{opt.name}} = {{opt.value}}{% endif %}
 {% endfor %}{% endif %}
 
-{% if data.spcname and not data.is_partitioned %}){% else %});{% endif %}
+{% if data.spcname %}){% else %});{% endif %}
 
 {% endif %}
 {### SQL for Tablespace ###}
-{% if data.spcname and not data.is_partitioned %}
+{% if data.spcname %}
 TABLESPACE {{ conn|qtIdent(data.spcname) }};
 {% endif %}
 {### Alter SQL for Owner ###}
@@ -153,6 +153,21 @@ COMMENT ON COLUMN {{conn|qtIdent(data.schema, data.name, c.name)}}
 
 ALTER TABLE {{conn|qtIdent(data.schema, data.name)}}
     {{ VARIABLE.SET(conn, 'COLUMN', c.name, c.attoptions) }}
+
+{% endif %}
+{###  Alter column statistics value ###}
+{% if c.attstattarget is defined and c.attstattarget > -1 %}
+ALTER TABLE {{conn|qtIdent(data.schema, data.name)}}
+    ALTER COLUMN {{conn|qtTypeIdent(c.name)}} SET STATISTICS {{c.attstattarget}};
+
+{% endif %}
+{###  Alter column storage value ###}
+{% if c.attstorage is defined and c.attstorage != c.defaultstorage %}
+ALTER TABLE {{conn|qtIdent(data.schema, data.name)}}
+    ALTER COLUMN {{conn|qtTypeIdent(c.name)}} SET STORAGE {%if c.attstorage == 'p' %}
+PLAIN{% elif c.attstorage == 'm'%}MAIN{% elif c.attstorage == 'e'%}
+EXTERNAL{% elif c.attstorage == 'x'%}EXTENDED{% endif %};
+
 {% endif %}
 {###  ACL ###}
 {% if c.attacl and c.attacl|length > 0 %}

@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -17,7 +17,7 @@ define('pgadmin.browser', [
   'pgadmin.browser.preferences', 'pgadmin.browser.messages',
   'pgadmin.browser.menu', 'pgadmin.browser.panel', 'pgadmin.browser.layout',
   'pgadmin.browser.error', 'pgadmin.browser.frame',
-  'pgadmin.browser.node', 'pgadmin.browser.collection',
+  'pgadmin.browser.node', 'pgadmin.browser.collection', 'pgadmin.browser.activity',
   'sources/codemirror/addon/fold/pgadmin-sqlfoldcode',
   'pgadmin.browser.keyboard', 'sources/tree/pgadmin_tree_save_state',
 ], function(
@@ -104,11 +104,14 @@ define('pgadmin.browser', [
       b.treeMenu.register($('#tree'));
 
       b.treeMenu.registerDraggableType({
-        'table partition type sequence package view mview foreign_table edbvar' : (data, item)=>{
+        'collation domain domain_constraints fts_configuration fts_dictionary fts_parser fts_template synonym table partition type sequence package view mview foreign_table edbvar' : (data, item)=>{
           return pgadminUtils.fully_qualify(b, data, item);
         },
-        'schema column' : (data)=>{
+        'schema column database cast event_trigger extension language foreign_data_wrapper foreign_server user_mapping compound_trigger index index_constraint primary_key unique_constraint check_constraint exclusion_constraint foreign_key rule' : (data)=>{
           return pgadminUtils.quote_ident(data._label);
+        },
+        'trigger trigger_function' : (data)=>{
+          return data._label;
         },
         'edbfunc function edbproc procedure' : (data, item)=>{
           let newData = {...data},
@@ -198,7 +201,7 @@ define('pgadmin.browser', [
         isCloseable: false,
         isPrivate: true,
         elContainer: true,
-        content: '<div class="obj_properties container-fluid"><div class="alert alert-info pg-panel-message">' + select_object_msg + '</div></div>',
+        content: '<div class="obj_properties container-fluid"><div role="status" class="alert alert-info pg-panel-message">' + select_object_msg + '</div></div>',
         events: panelEvents,
         onCreate: function(myPanel, $container) {
           $container.addClass('pg-no-overflow');
@@ -212,7 +215,7 @@ define('pgadmin.browser', [
         width: 500,
         isCloseable: false,
         isPrivate: true,
-        content: '<div class="negative-space p-2"><div class="alert alert-info pg-panel-message pg-panel-statistics-message">' + select_object_msg + '</div><div class="pg-panel-statistics-container d-none"></div></div>',
+        content: '<div class="negative-space p-2"><div role="status" class="alert alert-info pg-panel-message pg-panel-statistics-message">' + select_object_msg + '</div><div class="pg-panel-statistics-container d-none"></div></div>',
         events: panelEvents,
       }),
       // Reversed engineered SQL for the object
@@ -223,7 +226,7 @@ define('pgadmin.browser', [
         width: 500,
         isCloseable: false,
         isPrivate: true,
-        content: '<div class="sql_textarea"><textarea id="sql-textarea" name="sql-textarea"></textarea></div>',
+        content: '<label for="sql-textarea" class="sr-only">SQL Code</label><div class="sql_textarea"><textarea id="sql-textarea" name="sql-textarea" title="'+gettext('SQL Code')+'"></textarea></div>',
       }),
       // Dependencies of the object
       'dependencies': new pgAdmin.Browser.Panel({
@@ -233,7 +236,7 @@ define('pgadmin.browser', [
         width: 500,
         isCloseable: false,
         isPrivate: true,
-        content: '<div class="negative-space p-2"><div class="alert alert-info pg-panel-message pg-panel-depends-message">' + select_object_msg + '</div><div class="pg-panel-dependencies-container d-none"></div></div>',
+        content: '<div class="negative-space p-2"><div role="status" class="alert alert-info pg-panel-message pg-panel-depends-message">' + select_object_msg + '</div><div class="pg-panel-dependencies-container d-none"></div></div>',
         events: panelEvents,
       }),
       // Dependents of the object
@@ -244,7 +247,7 @@ define('pgadmin.browser', [
         width: 500,
         isCloseable: false,
         isPrivate: true,
-        content: '<div class="negative-space p-2"><div class="alert alert-info pg-panel-message pg-panel-depends-message">' + select_object_msg + '</div><div class="pg-panel-dependents-container d-none"></div></div>',
+        content: '<div class="negative-space p-2"><div role="status" class="alert alert-info pg-panel-message pg-panel-depends-message">' + select_object_msg + '</div><div class="pg-panel-dependents-container d-none"></div></div>',
         events: panelEvents,
       }),
     },
@@ -354,7 +357,6 @@ define('pgadmin.browser', [
       // enabled/disabled.
       _.each([
         {m: 'file', id: '#mnu_file'},
-        {m: 'edit', id: '#mnu_edit'},
         {m: 'management', id: '#mnu_management'},
         {m: 'tools', id: '#mnu_tools'},
         {m: 'help', id:'#mnu_help'}], function(o) {
@@ -545,6 +547,11 @@ define('pgadmin.browser', [
       obj.Events.on('pgadmin-browser:tree:loadfail', obj.onLoadFailNode, obj);
 
       obj.bind_beforeunload();
+
+      /* User UI activity */
+      obj.log_activity(); /* The starting point */
+      obj.register_to_activity_listener(document);
+      obj.start_inactivity_timeout_daemon();
     },
 
     init_master_password: function() {
@@ -824,7 +831,6 @@ define('pgadmin.browser', [
 
       _.each([
         {menu: 'file', id: '#mnu_file'},
-        {menu: 'edit', id: '#mnu_edit'},
         {menu: 'management', id: '#mnu_management'},
         {menu: 'tools', id: '#mnu_tools'},
         {menu: 'help', id:'#mnu_help'}],

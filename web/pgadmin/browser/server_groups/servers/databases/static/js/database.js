@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -200,6 +200,9 @@ define('pgadmin.node.database', [
                 .done(function(res) {
                   if (res.success == 1) {
                     var prv_i = t.parent(i);
+                    if(res.data.info_prefix) {
+                      res.info = `${_.escape(res.data.info_prefix)} - ${res.info}`;
+                    }
                     Alertify.success(res.info);
                     t.removeIcon(i);
                     data.connected = false;
@@ -314,31 +317,31 @@ define('pgadmin.node.database', [
           control: Backform.NodeListByNameControl, select2: { allowClear: false },
         },{
           id: 'acl', label: gettext('Privileges'), type: 'text',
-          group: gettext('Security'), mode: ['properties'], disabled: true,
+          group: gettext('Security'), mode: ['properties'],
         },{
           id: 'tblacl', label: gettext('Default TABLE privileges'), type: 'text',
-          group: gettext('Security'), mode: ['properties'], disabled: true,
+          group: gettext('Security'), mode: ['properties'],
         },{
           id: 'seqacl', label: gettext('Default SEQUENCE privileges'), type: 'text',
-          group: gettext('Security'), mode: ['properties'], disabled: true,
+          group: gettext('Security'), mode: ['properties'],
         },{
           id: 'funcacl', label: gettext('Default FUNCTION privileges'), type: 'text',
-          group: gettext('Security'), mode: ['properties'], disabled: true,
+          group: gettext('Security'), mode: ['properties'],
         },{
           id: 'typeacl', label: gettext('Default TYPE privileges'), type: 'text',
-          group: gettext('Security'), mode: ['properties'], disabled: true, min_version: 90200,
+          group: gettext('Security'), mode: ['properties'], min_version: 90200,
         },{
           id: 'comments', label: gettext('Comment'),
           editable: false, type: 'multiline',
         },{
           id: 'encoding', label: gettext('Encoding'),
           editable: false, type: 'text', group: gettext('Definition'),
-          disabled: function(m) { return !m.isNew(); }, url: 'get_encodings',
+          readonly: function(m) { return !m.isNew(); }, url: 'get_encodings',
           control: 'node-ajax-options', cache_level: 'server',
         },{
           id: 'template', label: gettext('Template'),
           editable: false, type: 'text', group: gettext('Definition'),
-          disabled: function(m) { return !m.isNew(); },
+          readonly: function(m) { return !m.isNew(); },
           control: 'node-list-by-name', url: 'get_databases', cache_level: 'server',
           select2: { allowClear: false }, mode: ['create'],
           transform: function(data, cell) {
@@ -371,12 +374,12 @@ define('pgadmin.node.database', [
         },{
           id: 'datcollate', label: gettext('Collation'),
           editable: false, type: 'text', group: gettext('Definition'),
-          disabled: function(m) { return !m.isNew(); }, url: 'get_ctypes',
+          readonly: function(m) { return !m.isNew(); }, url: 'get_ctypes',
           control: 'node-ajax-options', cache_level: 'server',
         },{
           id: 'datctype', label: gettext('Character type'),
           editable: false, type: 'text', group: gettext('Definition'),
-          disabled: function(m) { return !m.isNew(); }, url: 'get_ctypes',
+          readonly: function(m) { return !m.isNew(); }, url: 'get_ctypes',
           control: 'node-ajax-options', cache_level: 'server',
         },{
           id: 'datconnlimit', label: gettext('Connection limit'),
@@ -384,11 +387,11 @@ define('pgadmin.node.database', [
         },{
           id: 'is_template', label: gettext('Template?'),
           editable: false, type: 'switch', group: gettext('Definition'),
-          disabled: true,  mode: ['properties', 'edit'],
+          readonly: true,  mode: ['properties', 'edit'],
         },{
           id: 'datallowconn', label: gettext('Allow connections?'),
           editable: false, type: 'switch', group: gettext('Definition'),
-          mode: ['properties'], disabled: true,
+          mode: ['properties'],
         },{
           id: 'datacl', label: gettext('Privileges'), type: 'collection',
           model: pgBrowser.Node.PrivilegeRoleModel.extend({
@@ -518,6 +521,9 @@ define('pgadmin.node.database', [
                 tree.removeIcon(item);
                 data.icon = res.data.icon;
                 tree.addIcon(item, {icon: data.icon});
+              }
+              if(res.data.info_prefix) {
+                res.info = `${_.escape(res.data.info_prefix)} - ${res.info}`;
               }
 
               Alertify.success(res.info);

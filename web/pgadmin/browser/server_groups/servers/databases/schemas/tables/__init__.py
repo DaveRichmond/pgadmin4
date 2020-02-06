@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -11,9 +11,11 @@
 
 import simplejson as json
 import re
+import copy
+import random
 
 import pgadmin.browser.server_groups.servers.databases as database
-from flask import render_template, request, jsonify, url_for
+from flask import render_template, request, jsonify, url_for, current_app
 from flask_babelex import gettext
 from pgadmin.browser.server_groups.servers.databases.schemas.utils \
     import SchemaChildModule, DataTypeReader, VacuumSettings
@@ -22,6 +24,19 @@ from pgadmin.utils.ajax import make_json_response, internal_server_error, \
     make_response as ajax_response, gone
 from .utils import BaseTableView
 from pgadmin.utils.preferences import Preferences
+from pgadmin.tools.schema_diff.node_registry import SchemaDiffRegistry
+from pgadmin.tools.schema_diff.directory_compare import compare_dictionaries,\
+    directory_diff
+from pgadmin.tools.schema_diff.model import SchemaDiffModel
+from pgadmin.utils.driver import get_driver
+from config import PG_DEFAULT_DRIVER
+from pgadmin.browser.server_groups.servers.databases.schemas.tables.\
+    constraints.foreign_key import utils as fkey_utils
+from .schema_diff_utils import SchemaDiffTableCompare
+from pgadmin.browser.server_groups.servers.databases.schemas.tables.\
+    columns import utils as column_utils
+from pgadmin.browser.server_groups.servers.databases.schemas.tables.\
+    constraints.exclusion_constraint import utils as exclusion_utils
 
 
 class TableModule(SchemaChildModule):
@@ -126,7 +141,8 @@ class TableModule(SchemaChildModule):
 blueprint = TableModule(__name__)
 
 
-class TableView(BaseTableView, DataTypeReader, VacuumSettings):
+class TableView(BaseTableView, DataTypeReader, VacuumSettings,
+                SchemaDiffTableCompare):
     """
     This class is responsible for generating routes for Table node
 
@@ -208,10 +224,6 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
     * get_toast_table_vacuum(gid, sid, did, scid=None, tid=None)
       - Fetch the default values for toast table auto-vacuum
 
-    * _parse_format_columns(self, data, mode=None):
-       - This function will parse and return formatted list of columns
-         added by user
-
     * get_index_constraint_sql(self, did, tid, data):
       - This function will generate modified sql for index constraints
         (Primary Key & Unique)
@@ -227,6 +239,10 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
 
     * delete_sql(gid, sid, did, scid, foid):
       - Returns sql for Script
+
+    * compare(**kwargs):
+      - This function will compare the table nodes from two
+        different schemas.
 """
 
     node_type = blueprint.node_type
@@ -275,7 +291,8 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
         'insert_sql': [{'get': 'insert_sql'}],
         'update_sql': [{'get': 'update_sql'}],
         'delete_sql': [{'get': 'delete_sql'}],
-        'count_rows': [{'get': 'count_rows'}]
+        'count_rows': [{'get': 'count_rows'}],
+        'compare': [{'get': 'compare'}, {'get': 'compare'}]
     })
 
     @BaseTableView.check_precondition
@@ -462,9 +479,9 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
           - setting
         values
         """
-        res = self.get_vacuum_table_settings(self.conn)
+        res = self.get_vacuum_table_settings(self.conn, sid)
         return ajax_response(
-            response=res['rows'],
+            response=res,
             status=200
         )
 
@@ -478,9 +495,9 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
           - setting
         values
         """
-        res = self.get_vacuum_toast_settings(self.conn)
+        res = self.get_vacuum_toast_settings(self.conn, sid)
         return ajax_response(
-            response=res['rows'],
+            response=res,
             status=200
         )
 
@@ -500,20 +517,8 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
         Returns:
 
         """
-        res = [{'label': '', 'value': ''}]
-        sql = render_template("/".join([
-            self.exclusion_constraint_template_path, 'get_access_methods.sql'
-        ]))
+        res = exclusion_utils.get_access_methods(self.conn)
 
-        status, rest = self.conn.execute_2darray(sql)
-
-        if not status:
-            return internal_server_error(errormsg=rest)
-
-        for row in rest['rows']:
-            res.append(
-                {'label': row['amname'], 'value': row['amname']}
-            )
         return make_json_response(
             data=res,
             status=200
@@ -537,21 +542,9 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
         data = request.args if request.args else None
         try:
             if data and 'indextype' in data:
-                SQL = render_template(
-                    "/".join([
-                        self.exclusion_constraint_template_path,
-                        'get_oper_class.sql'
-                    ]),
-                    indextype=data['indextype']
-                )
+                result = exclusion_utils.get_oper_class(
+                    self.conn, data['indextype'])
 
-                status, res = self.conn.execute_2darray(SQL)
-
-                if not status:
-                    return internal_server_error(errormsg=res)
-                result = []
-                for row in res['rows']:
-                    result.append([row['opcname'], row['opcname']])
                 return make_json_response(
                     data=result,
                     status=200
@@ -577,22 +570,10 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
         data = request.args if request.args else None
         try:
             if data and 'col_type' in data:
-                SQL = render_template(
-                    "/".join([
-                        self.exclusion_constraint_template_path,
-                        'get_operator.sql'
-                    ]),
-                    type=data['col_type'],
-                    show_sysobj=self.blueprint.show_system_objects
-                )
+                result = exclusion_utils.get_operator(
+                    self.conn, data['col_type'],
+                    self.blueprint.show_system_objects)
 
-                status, res = self.conn.execute_2darray(SQL)
-
-                if not status:
-                    return internal_server_error(errormsg=res)
-                result = []
-                for row in res['rows']:
-                    result.append([row['oprname'], row['oprname']])
                 return make_json_response(
                     data=result,
                     status=200
@@ -616,7 +597,22 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
         Returns:
             JSON of selected table node
         """
+        status, res = self._fetch_properties(did, scid, tid)
+        if not status:
+            return res
 
+        return super(TableView, self).properties(
+            gid, sid, did, scid, tid, res
+        )
+
+    def _fetch_properties(self, did, scid, tid):
+        """
+        This function is used to fetch the properties of the specified object
+        :param did:
+        :param scid:
+        :param tid:
+        :return:
+        """
         SQL = render_template(
             "/".join([self.table_template_path, 'properties.sql']),
             did=did, scid=scid, tid=tid,
@@ -624,10 +620,11 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
         )
         status, res = self.conn.execute_dict(SQL)
         if not status:
-            return internal_server_error(errormsg=res)
+            return False, internal_server_error(errormsg=res)
 
         if len(res['rows']) == 0:
-            return gone(gettext("The specified table could not be found."))
+            return False, gone(
+                gettext("The specified table could not be found."))
 
         # We will check the threshold set by user before executing
         # the query because that can cause performance issues
@@ -654,7 +651,7 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
             status, count = self.conn.execute_scalar(SQL)
 
             if not status:
-                return internal_server_error(errormsg=count)
+                return False, internal_server_error(errormsg=count)
 
             res['rows'][0]['rows_cnt'] = count
 
@@ -662,9 +659,7 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
         elif not estimated_row_count:
             res['rows'][0]['rows_cnt'] = estimated_row_count
 
-        return super(TableView, self).properties(
-            gid, sid, did, scid, tid, res
-        )
+        return True, res
 
     @BaseTableView.check_precondition
     def types(self, gid, sid, did, scid, tid=None, clid=None):
@@ -884,75 +879,6 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
         except Exception as e:
             return internal_server_error(errormsg=str(e))
 
-    def _parse_format_columns(self, data, mode=None):
-        """
-        data:
-            Data coming from client side
-
-        Returns:
-            This function will parse and return formatted list of columns
-            added by user
-        """
-        columns = data['columns']
-        # 'EDIT' mode
-        if mode is not None:
-            for action in ['added', 'changed']:
-                if action in columns:
-                    final_columns = []
-                    for c in columns[action]:
-                        if 'inheritedfrom' not in c:
-                            final_columns.append(c)
-
-                    for c in final_columns:
-                        if 'attacl' in c:
-                            if 'added' in c['attacl']:
-                                c['attacl']['added'] = parse_priv_to_db(
-                                    c['attacl']['added'], self.column_acl
-                                )
-                            elif 'changed' in c['attacl']:
-                                c['attacl']['changed'] = parse_priv_to_db(
-                                    c['attacl']['changed'], self.column_acl
-                                )
-                            elif 'deleted' in c['attacl']:
-                                c['attacl']['deleted'] = parse_priv_to_db(
-                                    c['attacl']['deleted'], self.column_acl
-                                )
-                        if 'cltype' in c:
-                            # check type for '[]' in it
-                            c['cltype'], c['hasSqrBracket'] = \
-                                self._cltype_formatter(c['cltype'])
-
-                        c = TableView.convert_length_precision_to_string(c)
-
-                    data['columns'][action] = final_columns
-        else:
-            # We need to exclude all the columns which are inherited from other
-            # tables 'CREATE' mode
-            final_columns = []
-
-            for c in columns:
-                if 'inheritedfrom' not in c:
-                    final_columns.append(c)
-
-            # Now we have all lis of columns which we need
-            # to include in our create definition, Let's format them
-            for c in final_columns:
-                if 'attacl' in c:
-                    c['attacl'] = parse_priv_to_db(
-                        c['attacl'], self.column_acl
-                    )
-
-                if 'cltype' in c:
-                    # check type for '[]' in it
-                    c['cltype'], c['hasSqrBracket'] = \
-                        self._cltype_formatter(c['cltype'])
-
-                c = TableView.convert_length_precision_to_string(c)
-
-            data['columns'] = final_columns
-
-        return data
-
     @BaseTableView.check_precondition
     def create(self, gid, sid, did, scid):
         """
@@ -998,7 +924,7 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
             data['relacl'] = parse_priv_to_db(data['relacl'], self.acl)
 
         # Parse & format columns
-        data = self._parse_format_columns(data)
+        data = column_utils.parse_format_columns(data)
         data = TableView.check_and_convert_name_to_string(data)
 
         # 'coll_inherits' is Array but it comes as string from browser
@@ -1011,18 +937,10 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
 
         if 'foreign_key' in data:
             for c in data['foreign_key']:
-                SQL = render_template(
-                    "/".join([
-                        self.foreign_key_template_path, 'get_parent.sql'
-                    ]),
-                    tid=c['columns'][0]['references']
-                )
-                status, rset = self.conn.execute_2darray(SQL)
-                if not status:
-                    return internal_server_error(errormsg=rset)
-
-                c['remote_schema'] = rset['rows'][0]['schema']
-                c['remote_table'] = rset['rows'][0]['table']
+                schema, table = fkey_utils.get_parent(
+                    self.conn, c['columns'][0]['references'])
+                c['remote_schema'] = schema
+                c['remote_table'] = table
 
         try:
             partitions_sql = ''
@@ -1280,6 +1198,69 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
         return BaseTableView.reset_statistics(self, scid, tid)
 
     @BaseTableView.check_precondition
+    def get_sql_from_table_diff(self, **kwargs):
+        """
+        This function will create sql on the basis the difference of 2 tables
+        """
+        data = dict()
+        res = None
+        sid = kwargs['sid']
+        did = kwargs['did']
+        scid = kwargs['scid']
+        tid = kwargs['tid']
+        diff_data = kwargs['diff_data'] if 'diff_data' in kwargs else None
+        json_resp = kwargs['json_resp'] if 'json_resp' in kwargs else True
+        diff_schema = kwargs['diff_schema'] if 'diff_schema' in kwargs else\
+            None
+        schema_diff_table = kwargs['schema_diff_table'] if\
+            'schema_diff_table' in kwargs else None
+
+        if diff_data:
+            return self._fetch_sql(did, scid, tid, diff_data, json_resp)
+        else:
+            main_sql = []
+
+            SQL = render_template(
+                "/".join([self.table_template_path, 'properties.sql']),
+                did=did, scid=scid, tid=tid,
+                datlastsysoid=self.datlastsysoid
+            )
+            status, res = self.conn.execute_dict(SQL)
+            if not status:
+                return internal_server_error(errormsg=res)
+
+            if len(res['rows']) == 0:
+                return gone(gettext("The specified table could not be found."
+                                    ))
+
+            if status:
+                data = res['rows'][0]
+
+            if diff_schema:
+                data['schema'] = diff_schema
+
+            if schema_diff_table:
+                data['orig_name'] = data['name']
+                data['name'] = 'schema_diff_temp_{0}'.format(
+                    random.randint(1, 9999999))
+
+                sql, partition_sql = BaseTableView.get_reverse_engineered_sql(
+                    self, did, scid, tid, main_sql, data, json_resp,
+                    diff_partition_sql=True)
+            else:
+                sql, partition_sql = BaseTableView.get_reverse_engineered_sql(
+                    self, did, scid, tid, main_sql, data, json_resp)
+
+            if schema_diff_table:
+                # If partition tables have different partitions
+                sql += render_template(
+                    "/".join([self.table_template_path, 'schema_diff.sql']),
+                    conn=self.conn, data=data, partition_sql=partition_sql
+                )
+
+            return sql
+
+    @BaseTableView.check_precondition
     def msql(self, gid, sid, did, scid, tid=None):
         """
         This function will create modified sql for table object
@@ -1292,7 +1273,7 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
            tid: Table ID
         """
         data = dict()
-        res = None
+        SQL = ''
         for k, v in request.args.items():
             try:
                 # comments should be taken as is because if user enters a
@@ -1304,6 +1285,11 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
             except (ValueError, TypeError, KeyError):
                 data[k] = v
 
+        return self._fetch_sql(did, scid, tid, data)
+
+    def _fetch_sql(self, did, scid, tid, data, json_resp=True):
+        res = None
+
         if tid is not None:
             SQL = render_template(
                 "/".join([self.table_template_path, 'properties.sql']),
@@ -1312,13 +1298,18 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
             )
             status, res = self.conn.execute_dict(SQL)
             if not status:
-                return internal_server_error(errormsg=res)
+                return internal_server_error(errormsg=SQL)
 
         SQL, name = self.get_sql(did, scid, tid, data, res)
         SQL = re.sub('\n{2,}', '\n\n', SQL)
         SQL = SQL.strip('\n')
+
+        if not json_resp:
+            return SQL
+
         if SQL == '':
             SQL = "--modified SQL"
+
         return make_json_response(
             data=SQL,
             status=200
@@ -1418,7 +1409,7 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
         # Now we have all list of columns which we need
         if 'columns' in data:
             for c in data['columns']:
-                columns.append(self.qtIdent(self.conn, c['attname']))
+                columns.append(self.qtIdent(self.conn, c['name']))
 
         if len(columns) > 0:
             columns = ", ".join(columns)
@@ -1464,7 +1455,7 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
         # Now we have all list of columns which we need
         if 'columns' in data:
             for c in data['columns']:
-                columns.append(self.qtIdent(self.conn, c['attname']))
+                columns.append(self.qtIdent(self.conn, c['name']))
                 values.append('?')
 
         if len(columns) > 0:
@@ -1511,7 +1502,7 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
         # Now we have all list of columns which we need
         if 'columns' in data:
             for c in data['columns']:
-                columns.append(self.qtIdent(self.conn, c['attname']))
+                columns.append(self.qtIdent(self.conn, c['name']))
 
         if len(columns) > 0:
             if len(columns) == 1:
@@ -1530,7 +1521,7 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
         return ajax_response(response=sql)
 
     @BaseTableView.check_precondition
-    def delete_sql(self, gid, sid, did, scid, tid):
+    def delete_sql(self, gid, sid, did, scid, tid, json_resp=True):
         """
         DELETE script sql for the object
 
@@ -1558,6 +1549,9 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
         sql = u"DELETE FROM {0}\n\tWHERE <condition>;".format(
             self.qtIdent(self.conn, data['schema'], data['name'])
         )
+
+        if not json_resp:
+            return sql
 
         return ajax_response(response=sql)
 
@@ -1613,5 +1607,71 @@ class TableView(BaseTableView, DataTypeReader, VacuumSettings):
             data={'total_rows': count}
         )
 
+    @BaseTableView.check_precondition
+    def get_drop_sql(self, sid, did, scid, tid):
+        SQL = render_template("/".join(
+            [self.table_template_path, 'properties.sql']),
+            did=did, scid=scid, tid=tid,
+            datlastsysoid=self.datlastsysoid
+        )
+        status, res = self.conn.execute_dict(SQL)
+        sql = ''
 
+        if status:
+            self.cmd = 'delete'
+            sql = super(TableView, self).get_delete_sql(res)
+            self.cmd = None
+
+        return sql
+
+    @BaseTableView.check_precondition
+    def fetch_tables(self, sid, did, scid, tid=None, keys_to_remove=None):
+        """
+        This function will fetch the list of all the tables
+        and will be used by schema diff.
+
+        :param sid: Server Id
+        :param did: Database Id
+        :param scid: Schema Id
+        :param tid: Table Id
+        :param keys_to_remove: Table columns to be removed from the dataset
+        :return: Table dataset
+        """
+        if tid:
+            status, data = self._fetch_properties(did, scid, tid)
+
+            if not status:
+                current_app.logger.error(data)
+                return False
+
+            data = super(TableView, self).properties(
+                0, sid, did, scid, tid, data, False
+            )
+            self.remove_keys_for_comparision(data, keys_to_remove)
+            return data
+
+        else:
+            res = dict()
+            SQL = render_template("/".join([self.table_template_path,
+                                            'nodes.sql']), scid=scid)
+            status, tables = self.conn.execute_2darray(SQL)
+            if not status:
+                current_app.logger.error(tables)
+                return False
+
+            for row in tables['rows']:
+                status, data = self._fetch_properties(did, scid, row['oid'])
+
+                if status:
+                    data = super(TableView, self).properties(
+                        0, sid, did, scid, row['oid'], data, False
+                    )
+
+                    self.remove_keys_for_comparision(data, keys_to_remove)
+                    res[row['name']] = data
+
+            return res
+
+
+SchemaDiffRegistry(blueprint.node_type, TableView)
 TableView.register_node_view(blueprint)

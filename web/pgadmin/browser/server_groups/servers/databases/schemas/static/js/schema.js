@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -71,7 +71,7 @@ define('pgadmin.node.schema', [
 
         var gridHeader = _.template([
             '<div class="subnode-header">',
-            '  <label class="control-label col-sm-4"><%-label%></label>',
+            '  <span class="control-label col-sm-4"><%-label%></span>',
             '</div>'].join('\n')),
           gridBody = $('<div class="pgadmin-control-group backgrid form-group col-12 object subnode"></div>').append(
             gridHeader(attributes)
@@ -391,32 +391,32 @@ define('pgadmin.node.schema', [
           type: 'text',
         },{
           id: 'oid', label: gettext('OID'), cell: 'string',
-          type: 'text', disabled: true, mode: ['properties'],
+          type: 'text', mode: ['properties'],
         },{
           id: 'namespaceowner', label: gettext('Owner'), cell: 'string',
           type: 'text', control: 'node-list-by-name', node: 'role',
           select2: { allowClear: false },
         },{
           id: 'is_sys_object', label: gettext('System schema?'),
-          cell: 'switch', type: 'switch', mode: ['properties'], disabled: true,
+          cell: 'switch', type: 'switch', mode: ['properties'],
         },{
           id: 'description', label: gettext('Comment'), cell: 'string',
           type: 'multiline',
         },{
           id: 'acl', label: gettext('Privileges'), type: 'text',
-          group: gettext('Security'), mode: ['properties'], disabled: true,
+          group: gettext('Security'), mode: ['properties'],
         },{
           id: 'tblacl', label: gettext('Default TABLE privileges'), type: 'text',
-          group: gettext('Security'), mode: ['properties'], disabled: true,
+          group: gettext('Security'), mode: ['properties'],
         },{
           id: 'seqacl', label: gettext('Default SEQUENCE privileges'), type: 'text',
-          group: gettext('Security'), mode: ['properties'], disabled: true,
+          group: gettext('Security'), mode: ['properties'],
         },{
           id: 'funcacl', label: gettext('Default FUNCTION privileges'),
-          group: gettext('Security'), type: 'text', mode: ['properties'], disabled: true,
+          group: gettext('Security'), type: 'text', mode: ['properties'],
         },{
           id: 'typeacl', label: gettext('Default TYPE privileges'), type: 'text',
-          group: gettext('Security'), mode: ['properties'], disabled: true, min_version: 90200,
+          group: gettext('Security'), mode: ['properties'], min_version: 90200,
           visible: function() {
             return this.version_compatible;
           },

@@ -1,7 +1,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -13,7 +13,8 @@ class BrowserToolBarLocators():
     open_query_tool_button_css = \
         ".wcFrameButton[title='Query Tool']:not(.disabled)"
 
-    query_tool_panel_css = ".wcPanelTab .wcTabIcon.fa.fa-bolt"
+    query_tool_panel_css = \
+        ".wcPanelTab .wcTabIcon.pg-font-icon.icon-query-tool"
 
     view_table_data_button_css = \
         ".wcFrameButton[title='View Data']:not(.disabled)"
@@ -64,7 +65,7 @@ class NavMenuLocators:
         "//span[text()='{0}']//following::span[text()='{1}']"
 
     insert_bracket_pair_switch_btn = \
-        "//div[label[normalize-space(text())='Insert bracket pairs?']]" \
+        "//div[span[normalize-space(text())='Insert bracket pairs?']]" \
         "//div[contains(@class,'toggle btn')]"
 
     backup_filename_txt_box_name = "file"
@@ -87,7 +88,7 @@ class NavMenuLocators:
         ".bg-process-details .bg-detailed-desc"
 
     process_watcher_close_button_xpath = \
-        "//div[contains(@class,'wcFloatingFocus')]//" \
+        "//div[contains(@class,'wcFloating')]//" \
         "div[contains(@class,'fa-close')]"
 
     restore_file_name_xpath = "//div[contains(text(),'Restore')]" \
@@ -205,7 +206,7 @@ class QueryToolLocators:
 
     commit_icon = "icon-commit"
 
-    execute_icon = "fa-bolt"
+    execute_icon = "fa-play"
 
     explain_icon = "fa-hand-pointer-o"
 
@@ -227,3 +228,20 @@ class QueryToolLocators:
     read_only_column_icon_xpath = "//div[contains(@class," \
                                   " 'editable-column-header-icon')]" \
                                   "/i[contains(@class, 'fa-lock')]"
+
+
+class ConnectToServerDiv:
+    # This will contain xpaths for element relating to Connect to server div
+
+    password_field = "//input[@id='password']"
+
+    ok_button = \
+        "//div [@class='alertify  ajs-modeless ajs-movable ajs-zoom']" \
+        "//button[text()='OK']"
+
+    error_message = \
+        "//form[@id='frmPassword']/div/div//div[@class='alert-text']"
+
+    cancel_button = \
+        "//div [@class='alertify  ajs-modeless ajs-movable ajs-zoom']" \
+        "//button[text()='Cancel']"

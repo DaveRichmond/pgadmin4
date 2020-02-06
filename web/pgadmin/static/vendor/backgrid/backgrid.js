@@ -718,6 +718,7 @@ var InputCellEditor = Backgrid.InputCellEditor = CellEditor.extend({
   */
   render: function () {
     var model = this.model;
+    this.$el.attr('aria-label', this.column.get("label"));
     this.$el.val(this.formatter.fromRaw(model.get(this.column.get("name")), model));
     return this;
   },
@@ -2184,10 +2185,44 @@ var HeaderCell = Backgrid.HeaderCell = Backbone.View.extend({
     this.$el.append(label);
     this.$el.addClass(column.get("name"));
     this.$el.addClass(column.get("direction"));
+    this.$el.attr("role", "columnheader");
     this.delegateEvents();
     return this;
   }
 
+});
+
+/**
+   EmptyHeaderCell is a special cell class that renders a column header cell.
+   The text is empty here and it is not sortable.
+
+   @class Backgrid.EmptyHeaderCell
+   @extends Backbone.View
+ */
+var EmptyHeaderCell = Backgrid.EmptyHeaderCell = Backbone.View.extend({
+
+  /** @property */
+  tagName: "td",
+
+  /**
+     Initializer.
+
+     @param {Object} options
+     @param {Backgrid.Column|Object} options.column
+   */
+  initialize: function (options) {
+    this.column = options.column;
+  },
+
+  /**
+     Renders a empty header cell with no events
+   */
+  render: function () {
+    this.$el.empty();
+    this.$el.addClass(this.column.get("name"));
+    this.$el.addClass("renderable");
+    return this;
+  }
 });
 
 /**
@@ -2215,7 +2250,13 @@ var HeaderRow = Backgrid.HeaderRow = Backgrid.Row.extend({
   },
 
   makeCell: function (column, options) {
-    var headerCell = column.get("headerCell") || options.headerCell || HeaderCell;
+    var headerCell = null;
+    if(column.get("label") === "" || !column.get("label")) {
+      headerCell = column.get("headerCell") || options.headerCell || EmptyHeaderCell;
+    } else {
+      headerCell = column.get("headerCell") || options.headerCell || HeaderCell;
+    }
+
     headerCell = new headerCell({
       column: column,
       collection: this.collection
@@ -2801,6 +2842,9 @@ var Grid = Backgrid.Grid = Backbone.View.extend({
   /** @property */
   footer: null,
 
+  /** @property */
+  attr: null,
+
   /**
      Initializes a Grid instance.
 
@@ -2812,6 +2856,7 @@ var Grid = Backgrid.Grid = Backbone.View.extend({
      @param {Backgrid.Body} [options.body=Backgrid.Body] An optional Body class to override the default.
      @param {Backgrid.Row} [options.row=Backgrid.Row] An optional Row class to override the default.
      @param {Backgrid.Footer} [options.footer=Backgrid.Footer] An optional Footer class.
+
    */
   initialize: function (options) {
     // Convert the list of column objects here first so the subviews don't have
@@ -2839,6 +2884,8 @@ var Grid = Backgrid.Grid = Backbone.View.extend({
     if (this.footer) {
       this.footer = new this.footer(filteredOptions);
     }
+
+    this.attr = options.attr || {};
 
     this.listenTo(this.columns, "reset", function () {
       if (this.header) {
@@ -2921,6 +2968,8 @@ var Grid = Backgrid.Grid = Backbone.View.extend({
     }
 
     this.$el.append(this.body.render().$el);
+    this.$el.attr("role", "table");
+    this.$el.attr(this.attr);
 
     this.delegateEvents();
 

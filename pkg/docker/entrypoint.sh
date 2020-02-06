@@ -1,9 +1,10 @@
 #!/bin/sh
 
-# Create config_distro.py. This has some default config, as well as anything
+# Populate config_distro.py. This has some default config, as well as anything
 # provided by the user through the PGADMIN_CONFIG_* environment variables.
-# Only write the file on first launch.
-if [ ! -f /pgadmin4/config_distro.py ]; then
+# Only update the file on first launch. The empty file is created during the
+# container build so it can have the required ownership.
+if [ `wc -m /pgadmin4/config_distro.py | awk '{ print $1 }'` = "0" ]; then
     cat << EOF > /pgadmin4/config_distro.py
 HELP_PATH = '../../docs'
 DEFAULT_BINARY_PATHS = {
@@ -36,12 +37,18 @@ if [ ! -f /var/lib/pgadmin/pgadmin4.db ]; then
     export PGADMIN_SERVER_JSON_FILE=${PGADMIN_SERVER_JSON_FILE:-/pgadmin4/servers.json}
     # Pre-load any required servers
     if [ -f "${PGADMIN_SERVER_JSON_FILE}" ]; then
-        /usr/local/bin/python /pgadmin4/setup.py --load-servers "${PGADMIN_SERVER_JSON_FILE}" --user ${PGADMIN_DEFAULT_EMAIL}
+        # When running in Desktop mode, no user is created
+        # so we have to import servers anonymously
+        if [ "${PGADMIN_CONFIG_SERVER_MODE}" = "False" ]; then
+            /usr/local/bin/python /pgadmin4/setup.py --load-servers "${PGADMIN_SERVER_JSON_FILE}"
+        else
+            /usr/local/bin/python /pgadmin4/setup.py --load-servers "${PGADMIN_SERVER_JSON_FILE}" --user ${PGADMIN_DEFAULT_EMAIL}
+        fi
     fi
 fi
 
 # Start Postfix to handle password resets etc.
-/usr/sbin/postfix start
+sudo /usr/sbin/postfix start
 
 # Get the session timeout from the pgAdmin config. We'll use this (in seconds)
 # to define the Gunicorn worker timeout
@@ -51,7 +58,7 @@ TIMEOUT=$(cd /pgadmin4 && python -c 'import config; print(config.SESSION_EXPIRAT
 # Using --threads to have multi-threaded single-process worker
 
 if [ ! -z ${PGADMIN_ENABLE_TLS} ]; then
-    exec gunicorn --timeout ${TIMEOUT} --bind ${PGADMIN_LISTEN_ADDRESS:-[::]}:${PGADMIN_LISTEN_PORT:-443} -w 1 --threads ${GUNICORN_THREADS:-25} --access-logfile - --keyfile /certs/server.key --certfile /certs/server.cert run_pgadmin:app
+    exec gunicorn --timeout ${TIMEOUT} --bind ${PGADMIN_LISTEN_ADDRESS:-[::]}:${PGADMIN_LISTEN_PORT:-443} -w 1 --threads ${GUNICORN_THREADS:-25} --access-logfile ${GUNICORN_ACCESS_LOGFILE:--} --keyfile /certs/server.key --certfile /certs/server.cert run_pgadmin:app
 else
-    exec gunicorn --timeout ${TIMEOUT} --bind ${PGADMIN_LISTEN_ADDRESS:-[::]}:${PGADMIN_LISTEN_PORT:-80} -w 1 --threads ${GUNICORN_THREADS:-25} --access-logfile - run_pgadmin:app
+    exec gunicorn --timeout ${TIMEOUT} --bind ${PGADMIN_LISTEN_ADDRESS:-[::]}:${PGADMIN_LISTEN_PORT:-80} -w 1 --threads ${GUNICORN_THREADS:-25} --access-logfile ${GUNICORN_ACCESS_LOGFILE:--} run_pgadmin:app
 fi

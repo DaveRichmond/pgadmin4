@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -492,7 +492,8 @@ WHERE db.datname = current_database()""")
         status = _execute(cur, """
 SELECT
     oid as id, rolname as name, rolsuper as is_superuser,
-    rolcreaterole as can_create_role, rolcreatedb as can_create_db
+    CASE WHEN rolsuper THEN true ELSE rolcreaterole END as can_create_role,
+    CASE WHEN rolsuper THEN true ELSE rolcreatedb END as can_create_db
 FROM
     pg_catalog.pg_roles
 WHERE

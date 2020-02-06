@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -13,7 +13,7 @@ import simplejson as json
 from functools import wraps
 
 import pgadmin.browser.server_groups.servers.databases as database
-from flask import render_template, request, jsonify
+from flask import render_template, request, jsonify, current_app
 from flask_babelex import gettext
 from pgadmin.browser.collection import CollectionNodeModule
 from pgadmin.browser.server_groups.servers.databases.schemas.tables.\
@@ -25,6 +25,14 @@ from pgadmin.utils.compile_template_name import compile_template_path
 from pgadmin.utils.driver import get_driver
 from config import PG_DEFAULT_DRIVER
 from pgadmin.utils import IS_PY2
+from pgadmin.tools.schema_diff.node_registry import SchemaDiffRegistry
+from pgadmin.tools.schema_diff.directory_compare import compare_dictionaries,\
+    directory_diff
+from pgadmin.tools.schema_diff.model import SchemaDiffModel
+from pgadmin.tools.schema_diff.compare import SchemaDiffObjectCompare
+from pgadmin.browser.server_groups.servers.databases.schemas. \
+    tables.indexes import utils as index_utils
+
 # If we are in Python3
 if not IS_PY2:
     unicode = str
@@ -133,7 +141,7 @@ class IndexesModule(CollectionNodeModule):
 blueprint = IndexesModule(__name__)
 
 
-class IndexesView(PGChildNodeView):
+class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
     """
     This class is responsible for generating routes for Index node
 
@@ -225,6 +233,11 @@ class IndexesView(PGChildNodeView):
                          {'get': 'get_op_class'}]
     })
 
+    # Schema Diff: Keys to ignore while comparing
+    keys_to_ignore = ['oid', 'relowner', 'schema',
+                      'indrelid', 'nspname'
+                      ]
+
     def check_precondition(f):
         """
         This function will behave as a decorator which will checks
@@ -246,6 +259,12 @@ class IndexesView(PGChildNodeView):
             ]['datlastsysoid'] if self.manager.db_info is not None and \
                 kwargs['did'] in self.manager.db_info else 0
 
+            self.table_template_path = compile_template_path(
+                'tables/sql',
+                self.manager.server_type,
+                self.manager.version
+            )
+
             # we will set template path for sql scripts
             self.template_path = compile_template_path(
                 'indexes/sql/',
@@ -256,17 +275,9 @@ class IndexesView(PGChildNodeView):
             # We need parent's name eg table name and schema name
             # when we create new index in update we can fetch it using
             # property sql
-            SQL = render_template(
-                "/".join([self.template_path, 'get_parent.sql']),
-                tid=kwargs['tid']
-            )
-            status, rset = self.conn.execute_2darray(SQL)
-            if not status:
-                return internal_server_error(errormsg=rset)
-
-            for row in rset['rows']:
-                self.schema = row['schema']
-                self.table = row['table']
+            schema, table = index_utils.get_parent(self.conn, kwargs['tid'])
+            self.schema = schema
+            self.table = table
 
             return f(*args, **kwargs)
 
@@ -474,99 +485,6 @@ class IndexesView(PGChildNodeView):
             status=200
         )
 
-    def _column_details(self, idx, data, mode='properties'):
-        """
-        This functional will fetch list of column details for index
-
-        Args:
-            idx: Index OID
-            data: Properties data
-
-        Returns:
-            Updated properties data with column details
-        """
-
-        SQL = render_template(
-            "/".join([self.template_path, 'column_details.sql']), idx=idx
-        )
-        status, rset = self.conn.execute_2darray(SQL)
-        if not status:
-            return internal_server_error(errormsg=rset)
-        # 'attdef' comes with quotes from query so we need to strip them
-        # 'options' we need true/false to render switch ASC(false)/DESC(true)
-        columns = []
-        cols = []
-        for row in rset['rows']:
-            # We need all data as collection for ColumnsModel
-            # we will not strip down colname when using in SQL to display
-            cols_data = {
-                'colname': row['attdef'] if mode == 'create' else
-                row['attdef'].strip('"'),
-                'collspcname': row['collnspname'],
-                'op_class': row['opcname'],
-            }
-
-            # ASC/DESC and NULLS works only with btree indexes
-            if 'amname' in data and data['amname'] == 'btree':
-                cols_data['sort_order'] = False
-                if row['options'][0] == 'DESC':
-                    cols_data['sort_order'] = True
-
-                cols_data['nulls'] = False
-                if row['options'][1].split(" ")[1] == 'FIRST':
-                    cols_data['nulls'] = True
-
-            columns.append(cols_data)
-
-            # We need same data as string to display in properties window
-            # If multiple column then separate it by colon
-            cols_str = row['attdef']
-            if row['collnspname']:
-                cols_str += ' COLLATE ' + row['collnspname']
-            if row['opcname']:
-                cols_str += ' ' + row['opcname']
-
-            # ASC/DESC and NULLS works only with btree indexes
-            if 'amname' in data and data['amname'] == 'btree':
-                # Append sort order
-                cols_str += ' ' + row['options'][0]
-                # Append nulls value
-                cols_str += ' ' + row['options'][1]
-
-            cols.append(cols_str)
-
-        # Push as collection
-        data['columns'] = columns
-        # Push as string
-        data['columns_csv'] = ', '.join(cols)
-
-        return data
-
-    def _include_details(self, idx, data, mode='properties'):
-        """
-        This functional will fetch list of include details for index
-        supported with Postgres 11+
-
-        Args:
-            idx: Index OID
-            data: Properties data
-
-        Returns:
-            Updated properties data with include details
-        """
-
-        SQL = render_template(
-            "/".join([self.template_path, 'include_details.sql']), idx=idx
-        )
-        status, rset = self.conn.execute_2darray(SQL)
-
-        if not status:
-            return internal_server_error(errormsg=rset)
-
-        # Push as collection
-        data['include'] = [col['colname'] for col in rset['rows']]
-        return data
-
     @check_precondition
     def properties(self, gid, sid, did, scid, tid, idx):
         """
@@ -584,34 +502,47 @@ class IndexesView(PGChildNodeView):
         Returns:
             JSON of selected schema node
         """
+        status, data = self._fetch_properties(did, tid, idx)
+        if not status:
+            return data
 
+        return ajax_response(
+            response=data,
+            status=200
+        )
+
+    def _fetch_properties(self, did, tid, idx):
+        """
+        This function is used to fetch the properties of specified object.
+        :param did:
+        :param tid:
+        :param idx:
+        :return:
+        """
         SQL = render_template(
             "/".join([self.template_path, 'properties.sql']),
             did=did, tid=tid, idx=idx, datlastsysoid=self.datlastsysoid
         )
 
         status, res = self.conn.execute_dict(SQL)
-
         if not status:
-            return internal_server_error(errormsg=res)
+            return False, internal_server_error(errormsg=res)
 
         if len(res['rows']) == 0:
-            return gone(gettext("""Could not find the index in the table."""))
+            return False, gone(
+                gettext("""Could not find the index in the table."""))
 
         # Making copy of output for future use
         data = dict(res['rows'][0])
 
         # Add column details for current index
-        data = self._column_details(idx, data)
+        data = index_utils.get_column_details(self.conn, idx, data)
 
         # Add Include details of the index
         if self.manager.version >= 110000:
-            data = self._include_details(idx, data)
+            data = index_utils.get_include_details(self.conn, idx, data)
 
-        return ajax_response(
-            response=data,
-            status=200
-        )
+        return True, data
 
     @check_precondition
     def create(self, gid, sid, did, scid, tid):
@@ -719,7 +650,8 @@ class IndexesView(PGChildNodeView):
             return internal_server_error(errormsg=str(e))
 
     @check_precondition
-    def delete(self, gid, sid, did, scid, tid, idx=None):
+    def delete(self, gid, sid, did, scid, tid, idx=None,
+               only_sql=False):
         """
         This function will updates existing the schema object
 
@@ -775,6 +707,9 @@ class IndexesView(PGChildNodeView):
                     "/".join([self.template_path, 'delete.sql']),
                     data=data, conn=self.conn, cascade=cascade
                 )
+
+                if only_sql:
+                    return SQL
                 status, res = self.conn.execute_scalar(SQL)
                 if not status:
                     return internal_server_error(errormsg=res)
@@ -806,7 +741,8 @@ class IndexesView(PGChildNodeView):
         data['schema'] = self.schema
         data['table'] = self.table
         try:
-            SQL, name = self.get_sql(did, scid, tid, idx, data)
+            SQL, name = index_utils.get_sql(
+                self.conn, data, did, tid, idx, self.datlastsysoid)
             if not isinstance(SQL, (str, unicode)):
                 return SQL
             SQL = SQL.strip('\n').strip(' ')
@@ -855,7 +791,9 @@ class IndexesView(PGChildNodeView):
         data['table'] = self.table
 
         try:
-            sql, name = self.get_sql(did, scid, tid, idx, data, mode='create')
+            sql, name = index_utils.get_sql(
+                self.conn, data, did, tid, idx, self.datlastsysoid,
+                mode='create')
             if not isinstance(sql, (str, unicode)):
                 return sql
             sql = sql.strip('\n').strip(' ')
@@ -867,64 +805,6 @@ class IndexesView(PGChildNodeView):
             )
         except Exception as e:
             return internal_server_error(errormsg=str(e))
-
-    def get_sql(self, did, scid, tid, idx, data, mode=None):
-        """
-        This function will genrate sql from model data
-        """
-        if idx is not None:
-            SQL = render_template(
-                "/".join([self.template_path, 'properties.sql']),
-                did=did, tid=tid, idx=idx, datlastsysoid=self.datlastsysoid
-            )
-
-            status, res = self.conn.execute_dict(SQL)
-            if not status:
-                return internal_server_error(errormsg=res)
-            if len(res['rows']) == 0:
-                return gone(
-                    gettext("""Could not find the index in the table.""")
-                )
-
-            old_data = dict(res['rows'][0])
-
-            # If name is not present in data then
-            # we will fetch it from old data, we also need schema & table name
-            if 'name' not in data:
-                data['name'] = old_data['name']
-
-            SQL = render_template(
-                "/".join([self.template_path, 'update.sql']),
-                data=data, o_data=old_data, conn=self.conn
-            )
-        else:
-            required_args = {
-                'name': 'Name',
-                'columns': 'Columns'
-            }
-            for arg in required_args:
-                err = False
-                if arg == 'columns' and len(data['columns']) < 1:
-                    err = True
-
-                if arg not in data:
-                    err = True
-                    # Check if we have at least one column
-                if err:
-                    return gettext('-- definition incomplete')
-
-            # If the request for new object which do not have did
-            SQL = render_template(
-                "/".join([self.template_path, 'create.sql']),
-                data=data, conn=self.conn, mode=mode
-            )
-            SQL += "\n"
-            SQL += render_template(
-                "/".join([self.template_path, 'alter.sql']),
-                data=data, conn=self.conn
-            )
-
-        return SQL, data['name'] if 'name' in data else old_data['name']
 
     @check_precondition
     def sql(self, gid, sid, did, scid, tid, idx):
@@ -940,42 +820,49 @@ class IndexesView(PGChildNodeView):
            idx: Index ID
         """
 
-        SQL = render_template(
-            "/".join([self.template_path, 'properties.sql']),
-            did=did, tid=tid, idx=idx, datlastsysoid=self.datlastsysoid
-        )
-
-        status, res = self.conn.execute_dict(SQL)
-        if not status:
-            return internal_server_error(errormsg=res)
-        if len(res['rows']) == 0:
-            return gone(gettext("""Could not find the index in the table."""))
-
-        data = dict(res['rows'][0])
-        # Adding parent into data dict, will be using it while creating sql
-        data['schema'] = self.schema
-        data['table'] = self.table
-
-        # Add column details for current index
-        data = self._column_details(idx, data, 'create')
-
-        # Add Include details of the index
-        if self.manager.version >= 110000:
-            data = self._include_details(idx, data, 'create')
-
-        SQL, name = self.get_sql(did, scid, tid, None, data)
-        if not isinstance(SQL, (str, unicode)):
-            return SQL
-        sql_header = u"-- Index: {0}\n\n-- ".format(data['name'])
-
-        sql_header += render_template(
-            "/".join([self.template_path, 'delete.sql']),
-            data=data, conn=self.conn
-        )
-
-        SQL = sql_header + '\n\n' + SQL
+        SQL = index_utils.get_reverse_engineered_sql(
+            self.conn, self.schema, self.table, did, tid, idx,
+            self.datlastsysoid)
 
         return ajax_response(response=SQL)
+
+    @check_precondition
+    def get_sql_from_index_diff(self, sid, did, scid, tid, idx, data=None,
+                                diff_schema=None, drop_req=False):
+
+        tmp_idx = idx
+        schema = ''
+        if data:
+            schema = self.schema
+
+            data['schema'] = self.schema
+            data['nspname'] = self.schema
+            data['table'] = self.table
+
+            sql, name = index_utils.get_sql(
+                self.conn, data, did, tid, idx, self.datlastsysoid,
+                mode='create')
+
+            sql = sql.strip('\n').strip(' ')
+
+        elif diff_schema:
+            schema = diff_schema
+
+            sql = index_utils.get_reverse_engineered_sql(
+                self.conn, schema,
+                self.table, did, tid, idx,
+                self.datlastsysoid,
+                template_path=None, with_header=False)
+
+        drop_sql = ''
+        if drop_req:
+            drop_sql = '\n' + self.delete(gid=1, sid=sid, did=did,
+                                          scid=scid, tid=tid,
+                                          idx=idx, only_sql=True)
+
+        if drop_sql != '':
+            sql = drop_sql + '\n\n' + sql
+        return sql
 
     @check_precondition
     def dependents(self, gid, sid, did, scid, tid, idx):
@@ -1099,5 +986,139 @@ class IndexesView(PGChildNodeView):
             status=200
         )
 
+    @check_precondition
+    def fetch_objects_to_compare(self, sid, did, scid, tid, oid=None,
+                                 ignore_keys=False):
+        """
+        This function will fetch the list of all the indexes for
+        specified schema id.
 
+        :param sid: Server Id
+        :param did: Database Id
+        :param scid: Schema Id
+        :return:
+        """
+
+        res = dict()
+
+        if not oid:
+            SQL = render_template("/".join([self.template_path,
+                                            'nodes.sql']), tid=tid)
+            status, indexes = self.conn.execute_2darray(SQL)
+            if not status:
+                current_app.logger.error(indexes)
+                return False
+
+            for row in indexes['rows']:
+                status, data = self._fetch_properties(did, tid,
+                                                      row['oid'])
+                if status:
+                    if ignore_keys:
+                        for key in self.keys_to_ignore:
+                            if key in data:
+                                del data[key]
+                    res[row['name']] = data
+        else:
+            status, data = self._fetch_properties(did, tid,
+                                                  oid)
+            if not status:
+                current_app.logger.error(data)
+                return False
+            res = data
+
+        return res
+
+    def ddl_compare(self, **kwargs):
+        """
+        This function will compare index properties and
+         return the difference of SQL
+        """
+
+        src_sid = kwargs.get('source_sid')
+        src_did = kwargs.get('source_did')
+        src_scid = kwargs.get('source_scid')
+        src_tid = kwargs.get('source_tid')
+        src_oid = kwargs.get('source_oid')
+        tar_sid = kwargs.get('target_sid')
+        tar_did = kwargs.get('target_did')
+        tar_scid = kwargs.get('target_scid')
+        tar_tid = kwargs.get('target_tid')
+        tar_oid = kwargs.get('target_oid')
+        comp_status = kwargs.get('comp_status')
+
+        source = ''
+        target = ''
+        diff = ''
+
+        status, target_schema = self.get_schema(tar_sid,
+                                                tar_did,
+                                                tar_scid
+                                                )
+        if not status:
+            return internal_server_error(errormsg=target_schema)
+
+        if comp_status == SchemaDiffModel.COMPARISON_STATUS['source_only']:
+            diff = self.get_sql_from_index_diff(sid=src_sid,
+                                                did=src_did, scid=src_scid,
+                                                tid=src_tid, idx=src_oid,
+                                                diff_schema=target_schema)
+
+        elif comp_status == SchemaDiffModel.COMPARISON_STATUS['target_only']:
+            diff = self.delete(gid=1, sid=tar_sid, did=tar_did,
+                               scid=tar_scid, tid=tar_tid,
+                               idx=tar_oid, only_sql=True)
+
+        else:
+            source = self.fetch_objects_to_compare(sid=src_sid, did=src_did,
+                                                   scid=src_scid, tid=src_tid,
+                                                   oid=src_oid)
+            target = self.fetch_objects_to_compare(sid=tar_sid, did=tar_did,
+                                                   scid=tar_scid, tid=tar_tid,
+                                                   oid=tar_oid)
+
+            if not (source or target):
+                return None
+
+            diff_dict = directory_diff(
+                source, target, ignore_keys=self.keys_to_ignore,
+                difference={}
+            )
+
+            required_create_keys = ['columns']
+            create_req = False
+
+            for key in required_create_keys:
+                if key in diff_dict:
+                    if key == 'columns' and ((
+                            'added' in diff_dict[key] and
+                            len(diff_dict[key]['added']) > 0
+                    ) or ('changed' in diff_dict[key] and
+                          len(diff_dict[key]['changed']) > 0) or (
+                            'deleted' in diff_dict[key] and
+                            len(diff_dict[key]['deleted']) > 0)
+                    ):
+                        create_req = True
+                    elif key != 'columns':
+                        create_req = True
+
+            if create_req:
+                diff = self.get_sql_from_index_diff(sid=tar_sid,
+                                                    did=tar_did,
+                                                    scid=tar_scid,
+                                                    tid=tar_tid,
+                                                    idx=tar_oid,
+                                                    diff_schema=target_schema,
+                                                    drop_req=True)
+            else:
+                diff = self.get_sql_from_index_diff(sid=tar_sid,
+                                                    did=tar_did,
+                                                    scid=tar_scid,
+                                                    tid=tar_tid,
+                                                    idx=tar_oid,
+                                                    data=diff_dict)
+
+        return diff
+
+
+SchemaDiffRegistry(blueprint.node_type, IndexesView, 'table')
 IndexesView.register_node_view(blueprint)

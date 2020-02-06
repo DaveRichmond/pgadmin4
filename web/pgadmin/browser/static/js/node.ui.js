@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -32,7 +32,7 @@ define([
       let $selectAll = $([
         '<button class="btn btn-secondary btn-sm" type="button"',
         ' style="width: 49%;margin: 0 0.5%;">',
-        '<i class="fa fa-check-square-o"></i>',
+        '<i class="fa fa-check-square-o" role="img"></i>',
         '<span style="padding: 0px 5px;">',
         gettext('Select All'),
         '</span></button>',
@@ -41,7 +41,7 @@ define([
       let $unselectAll = $([
         '<button class="btn btn-secondary btn-sm" type="button"',
         ' style="width: 49%;margin: 0 0.5%;">',
-        '<i class="fa fa-square-o"></i><span style="padding: 0px 5px;">',
+        '<i class="fa fa-square-o"></i><span style="padding: 0px 5px;" role="img">',
         gettext('Unselect All'),
         '</span></button>',
       ].join(''));
@@ -128,7 +128,8 @@ define([
          */
         var self = this,
           url = self.field.get('url') || self.defaults.url,
-          m = self.model.top || self.model;
+          m = self.model.top || self.model,
+          url_jump_after_node = self.field.get('url_jump_after_node') || null;
 
         // Hmm - we found the url option.
         // That means - we needs to fetch the options from that node.
@@ -138,7 +139,7 @@ define([
             with_id = this.field.get('url_with_id') || false,
             full_url = node.generate_url.apply(
               node, [
-                null, url, this.field.get('node_data'), with_id, node_info,
+                null, url, this.field.get('node_data'), with_id, node_info, url_jump_after_node,
               ]),
             cache_level,
             cache_node = this.field.get('cache_node');
@@ -340,13 +341,18 @@ define([
         backgridDivTop = backgridDiv.offset().top,
         backgridDivHeight = backgridDiv.height(),
         backformTab = $(this).closest(cls), // Backform-tab
-        gridScroll = backformTab[0].offsetHeight - backgridDivTop;
+        gridScroll = null;
+
+      if(backformTab.length == 0) {
+        return false;
+      }
+      gridScroll = backformTab[0].offsetHeight - backgridDivTop;
 
       if (backgridDivHeight > gridScroll) {
         var top = elem.get(0).offsetTop + elem.height();
         backformTab.find('.tab-content').scrollTop(top);
       }
-      return;
+      return true;
     });
   };
 
@@ -399,9 +405,10 @@ define([
           node = column.get('schema_node'),
           node_info = column.get('node_info'),
           with_id = column.get('url_with_id') || false,
+          url_jump_after_node = this.column.get('url_jump_after_node') || null,
           full_url = node.generate_url.apply(
             node, [
-              null, url, column.get('node_data'), with_id, node_info,
+              null, url, column.get('node_data'), with_id, node_info, url_jump_after_node,
             ]),
           cache_level,
           cache_node = column.get('cache_node');

@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -70,6 +70,7 @@ let FilterDialog = {
                     name: 'dialog_help',
                     type: 'button',
                     label: gettext('Help'),
+                    'aria-label': gettext('Help'),
                     url: url_for('help.static', {
                       'filename': 'editgrid.html',
                     }),
@@ -128,7 +129,7 @@ let FilterDialog = {
               '      <div class="pr-2"> ' +
               '        <i class="fa fa-exclamation-triangle text-danger" aria-hidden="true"></i> ' +
               '      </div> ' +
-              '      <div class="alert-text"></div> ' +
+              '      <div class="alert-text" role="alert"></div> ' +
               '    </div> ' +
               '  </div> ' +
               '</div>').appendTo($container);

@@ -2,18 +2,18 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
 
 define([
   'sources/gettext', 'underscore', 'jquery', 'backbone', 'backform', 'backgrid', 'alertify',
-  'moment', 'bignumber', 'sources/utils', 'sources/keyboard_shortcuts',
+  'moment', 'bignumber', 'sources/utils', 'sources/keyboard_shortcuts', 'sources/select2/configure_show_on_scroll',
   'bootstrap.datetimepicker', 'backgrid.filter', 'bootstrap.toggle',
 ], function(
   gettext, _, $, Backbone, Backform, Backgrid, Alertify, moment, BigNumber,
-  commonUtils, keyboardShortcuts
+  commonUtils, keyboardShortcuts, configure_show_on_scroll
 ) {
   /*
    * Add mechanism in backgrid to render different types of cells in
@@ -555,7 +555,7 @@ define([
       var self = this;
       this.$el.empty();
       $(this.$el).attr('tabindex', 0);
-      this.$el.html('<i class=\'fa fa-trash\' title=\'' + _('Delete row') + '\'></i>');
+      this.$el.html('<i aria-label="' + _('Delete row') + '" class=\'fa fa-trash\' title=\'' + _('Delete row') + '\'></i>');
       // Listen for Tab/Shift-Tab key
       this.$el.on('keydown', function(e) {
         // with keyboard navigation on space key, mark row for deletion
@@ -781,6 +781,7 @@ define([
       this.$select.off('blur', this.exitEditMode);
       this.$select.select2('close');
       this.$el.removeClass('editor');
+      this.$el.find('.select2-selection').trigger('focus');
     },
 
     saveOrCancel: function (e) {
@@ -794,7 +795,9 @@ define([
 
         let gotoCell;
         // go to Next Cell & if Shift is also pressed go to Previous Cell
-        gotoCell = e.shiftKey ? self.$el.prev() : self.$el.next();
+        if (e.keyCode == 9 || e.keyCode == 16) {
+          gotoCell = e.shiftKey ? self.$el.prev() : self.$el.next();
+        }
 
         if (gotoCell) {
           let command = new Backgrid.Command({
@@ -883,6 +886,7 @@ define([
         select2_opts = _.extend({
           openOnEnter: false,
           multiple: false,
+          showOnScroll: true,
         }, self.defaults.select2,
         (col.select2 || {})
         ),
@@ -942,6 +946,9 @@ define([
       if (!editable || col.mode === 'properties') {
         select2_opts['placeholder'] = '';
       }
+
+      /* Configure show on scroll if required */
+      select2_opts = configure_show_on_scroll.default(select2_opts);
 
       // Initialize select2 control.
       this.$sel = this.$select.select2(select2_opts);

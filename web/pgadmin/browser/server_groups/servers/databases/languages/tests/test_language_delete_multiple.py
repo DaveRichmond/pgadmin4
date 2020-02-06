@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -21,9 +21,8 @@ from . import utils as language_utils
 
 
 class LanguagesDeleteMultipleTestCase(BaseTestGenerator):
-    scenarios = [
-        ('Language delete test case', dict(url='/browser/language/obj/'))
-    ]
+    scenarios = utils.generate_scenarios('delete_multiple',
+                                         language_utils.test_cases)
 
     def setUp(self):
         self.server_data = parent_node_dict["database"][-1]

@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -25,5 +25,17 @@ import 'codemirror/addon/edit/closebrackets';
 import 'codemirror/addon/comment/comment';
 import 'sources/codemirror/addon/fold/pgadmin-sqlfoldcode';
 import 'sources/codemirror/extension/centre_on_line';
+
+var cmds = CodeMirror.commands;
+cmds.focusOut = function(){
+  event.stopPropagation();
+  document.activeElement.blur();
+  if(event.currentTarget.hasOwnProperty('parents') && event.currentTarget.parents().find('.sql-code-control')) {
+    // for code mirror in dialogs
+    event.currentTarget.parents().find('.sql-code-control').focus();
+  }
+};
+
+CodeMirror.keyMap.default['Esc'] = 'focusOut';
 
 export default CodeMirror;

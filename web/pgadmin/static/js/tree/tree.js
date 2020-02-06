@@ -2,13 +2,14 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////////////////
 
 import {isValidData} from 'sources/utils';
 import $ from 'jquery';
+import Alertify from 'pgadmin.alertifyjs';
 
 export class TreeNode {
   constructor(id, data, domNode, parent) {
@@ -261,6 +262,9 @@ export class Tree {
 
           const parentId = this.translateTreeNodeIdFromACITree(api.parent(item));
           this.addNewNode(id, data, item, parentId);
+          if(data.errmsg) {
+            Alertify.error(data.errmsg);
+          }
         }
       }
     }.bind(this));

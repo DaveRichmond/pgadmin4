@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -36,6 +36,7 @@ define('tools.querytool', [
   'sources/sqleditor/calculate_query_run_time',
   'sources/sqleditor/call_render_after_poll',
   'sources/sqleditor/query_tool_preferences',
+  'sources/sqleditor/query_txn_status_constants',
   'sources/csrf',
   'tools/datagrid/static/js/datagrid_panel_title',
   'sources/window',
@@ -52,7 +53,7 @@ define('tools.querytool', [
   XCellSelectionModel, setStagedRows, SqlEditorUtils, ExecuteQuery, httpErrorHandler, FilterHandler,
   GeometryViewer, historyColl, queryHist, querySources,
   keyboardShortcuts, queryToolActions, queryToolNotifications, Datagrid,
-  modifyAnimation, calculateQueryRunTime, callRenderAfterPoll, queryToolPref, csrfToken, panelTitleFunc,
+  modifyAnimation, calculateQueryRunTime, callRenderAfterPoll, queryToolPref, queryTxnStatus, csrfToken, panelTitleFunc,
   pgWindow) {
   /* Return back, this has been called more than once */
   if (pgAdmin.SqlEditor)
@@ -83,6 +84,8 @@ define('tools.querytool', [
       this.handler.preferences = this.preferences;
       this.connIntervalId = null;
       this.layout = opts.layout;
+      this.set_server_version(opts.server_ver);
+      this.trigger('pgadmin-sqleditor:view:initialised');
     },
 
     // Bind all the events
@@ -259,7 +262,7 @@ define('tools.querytool', [
         height: '100%',
         isCloseable: false,
         isPrivate: true,
-        content: '<div class="sql-editor-message" tabindex="0"></div>',
+        content: '<div role="status" class="sql-editor-message" tabindex="0"></div>',
       });
 
       var history = new pgAdmin.Browser.Panel({
@@ -401,6 +404,12 @@ define('tools.querytool', [
 
       pgBrowser.Events.on('pgadmin:query_tool:sql_panel:focus', ()=>{
         self.query_tool_obj.focus();
+      });
+
+      pgBrowser.Events.on('pgadmin:query_tool:explain:focus', ()=>{
+        setTimeout(function () {
+          $('.sql-editor-explain .backform-tab .nav-link.active').focus();
+        }, 200);
       });
 
       if (!self.preferences.new_browser_tab) {
@@ -650,6 +659,11 @@ define('tools.querytool', [
           }
         }, 1000);
       }
+
+      /* Register to log the activity */
+      pgBrowser.register_to_activity_listener(document, ()=>{
+        alertify.alert(gettext('Timeout'), gettext('Your session has timed out due to inactivity. Please close the window and login again.'));
+      });
     },
 
     /* Regarding SlickGrid usage in render_grid function.
@@ -1653,6 +1667,10 @@ define('tools.querytool', [
 
     // Callback function for the flash button click.
     on_flash: function() {
+      let data_click_counter = $('#btn-flash').attr('data-click-counter');
+      data_click_counter = (parseInt(data_click_counter) + 1)%10;
+      $('#btn-flash').attr('data-click-counter', data_click_counter);
+
       this.handler.history_query_source = QuerySources.EXECUTE;
 
       queryToolActions.executeQuery(this.handler);
@@ -2113,7 +2131,7 @@ define('tools.querytool', [
         alertify.confirm(
           gettext('Connection Warning'),
           '<p style="float:left">'+
-            '<span class="fa fa-exclamation-triangle warn-icon" aria-hidden="true">'+
+            '<span class="fa fa-exclamation-triangle warn-icon" aria-hidden="true" role="img">'+
             '</span>'+
           '</p>'+
           '<p style="display: inline-block;">'+
@@ -2307,6 +2325,12 @@ define('tools.querytool', [
         }
       },
 
+      set_value_to_editor: function(query) {
+        if (this.gridView && this.gridView.query_tool_obj && !_.isUndefined(query)) {
+          this.gridView.query_tool_obj.setValue(query);
+        }
+      },
+
       init_events: function() {
         var self = this;
         // Listen to the file manager button events
@@ -2489,6 +2513,7 @@ define('tools.querytool', [
         }
 
         const executeQuery = new ExecuteQuery.ExecuteQuery(this, pgAdmin.Browser.UserManagement);
+        executeQuery.poll = pgBrowser.override_activity_event_decorator(executeQuery.poll).bind(executeQuery);
         executeQuery.execute(sql, explain_prefix, shouldReconnect);
       },
 
@@ -4178,8 +4203,9 @@ define('tools.querytool', [
           self.unsaved_changes_user_confirmation(msg, false);
         } // If a transaction is currently ongoing
         else if (self.preferences.prompt_commit_transaction
-                 && self.last_transaction_status > 0) { // 0 -> idle (no transaction)
-          var is_commit_disabled = self.last_transaction_status == 3;  // 3 -> Failed transaction
+                 && (self.last_transaction_status === queryTxnStatus.TRANSACTION_STATUS_INTRANS
+                    || self.last_transaction_status === queryTxnStatus.TRANSACTION_STATUS_INERROR)) {
+          var is_commit_disabled = self.last_transaction_status == queryTxnStatus.TRANSACTION_STATUS_INERROR;
           self.uncommitted_transaction_user_confirmation(is_commit_disabled);
         }
         else {

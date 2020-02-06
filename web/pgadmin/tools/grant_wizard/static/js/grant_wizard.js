@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -1012,9 +1012,9 @@ define([
                       // Fetches modified SQL
                       $.ajax({
                         url: this.msql_url,
-                        type: 'GET',
+                        type: 'POST',
                         cache: false,
-                        data: self.model.toJSON(true, 'GET'),
+                        data: JSON.stringify(self.model.toJSON(true)),
                         dataType: 'json',
                         contentType: 'application/json',
                       }).done(function(res) {

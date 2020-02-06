@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -193,6 +193,11 @@
       // (Optional - true/false/function returning boolean)
       // (Default Value: false)
       disabled: false,
+      // Make the input control readonly
+      // readonly control can receive focus whereas disabled cannot
+      // (Optional - true/false/function returning boolean)
+      // (Default Value: false)
+      readonly: false,
       // Visible
       // (Optional - true/false/function returning boolean)
       // (Default Value: true)
@@ -306,6 +311,7 @@
       // Evaluate the disabled, visible, and required option
       _.extend(data, {
         disabled: evalF(data.disabled, this.model),
+        readonly: evalF(data.readonly, this.model),
         visible:  evalF(data.visible, this.model),
         required: evalF(data.required, this.model)
       });
@@ -427,7 +433,7 @@
     template: _.template([
       '<label class="<%=Backform.controlLabelClassName%>"><%=label%></label>',
       '<div class="<%=Backform.controlContainerClassName%>">',
-      '  <textarea class="<%=Backform.controlClassName%> <%=extraClasses.join(\' \')%>" name="<%=name%>" maxlength="<%=maxlength%>" placeholder="<%-placeholder%>" <%=disabled ? "disabled" : ""%> <%=required ? "required" : ""%>><%-value%></textarea>',
+      '  <textarea class="<%=Backform.controlClassName%> <%=extraClasses.join(\' \')%>" name="<%=name%>" maxlength="<%=maxlength%>" placeholder="<%-placeholder%>" <%=disabled ? "disabled" : ""%> <%=readonly ? "readonly" : ""%> <%=required ? "required" : ""%>><%-value%></textarea>',
       '  <% if (helpMessage && helpMessage.length) { %>',
       '    <span class="<%=Backform.helpMessageClassName%>"><%=helpMessage%></span>',
       '  <% } %>',
@@ -517,7 +523,7 @@
     template: _.template([
       '<label class="<%=Backform.controlLabelClassName%>"><%=label%></label>',
       '<div class="<%=Backform.controlContainerClassName%>">',
-      '  <input type="<%=type%>" class="<%=Backform.controlClassName%> <%=extraClasses.join(\' \')%>" name="<%=name%>" maxlength="<%=maxlength%>" value="<%-value%>" placeholder="<%-placeholder%>" <%=disabled ? "disabled" : ""%> <%=required ? "required" : ""%> />',
+      '  <input type="<%=type%>" class="<%=Backform.controlClassName%> <%=extraClasses.join(\' \')%>" name="<%=name%>" maxlength="<%=maxlength%>" value="<%-value%>" placeholder="<%-placeholder%>" <%=disabled ? "disabled" : ""%> <%=readonly ? "readonly aria-readonly=true" : ""%> <%=required ? "required" : ""%> />',
       '  <% if (helpMessage && helpMessage.length) { %>',
       '    <span class="<%=Backform.helpMessageClassName%>"><%=helpMessage%></span>',
       '  <% } %>',
@@ -541,11 +547,13 @@
       id: _.uniqueId('bf_')
     },
     template: _.template([
-      '<label class="<%=Backform.controlLabelClassName%>"><%=controlLabel%></label>',
+      '<label class="<%=Backform.controlLabelClassName%>" for="<%=cId%>"><%=controlLabel%></label>',
       '<div class="<%=Backform.controlContainerClassName%>">',
       '  <div class="form-check">',
-      '    <input type="<%=type%>" class="form-check-input <%=extraClasses.join(\' \')%>" id="<%=id%>" name="<%=name%>" <%=value ? "checked=\'checked\'" : ""%> <%=disabled ? "disabled" : ""%> <%=required ? "required" : ""%> />',
-      '    <label class="form-check-label" for="<%=id%>"><%=label%></label>',
+      '    <input type="<%=type%>" class="form-check-input <%=extraClasses.join(\' \')%>" id="<%=cId%>" name="<%=name%>" <%=value ? "checked=\'checked\'" : ""%> <%=disabled ? "disabled" : ""%> <%=readonly ? "readonly" : ""%> <%=required ? "required" : ""%> />',
+      '    <% if (label && label.length) { %>',
+      '       <label class="form-check-label" for="<%=cId%>"><%=label%></label>',
+      '    <% } %>',
       '  </div>',
       '</div>'
     ].join("\n")),
@@ -571,8 +579,8 @@
       '    <% var option = options[i]; %>',
       '    <% var id = _.uniqueId("bf_"); %>',
       '  <div class="form-check">',
-      '    <input type="<%=type%>" class="<%=extraClasses.join(\' \')%>" id="<%=id%>" name="<%=name%>" value="<%-formatter.fromRaw(option.value)%>" <%=rawValue == option.value ? "checked=\'checked\'" : ""%> <%=disabled ? "disabled" : ""%> <%=required ? "required" : ""%> />',
-      '    <label class="form-check-label" for="<%=id%>"><%-option.label%></label>',
+      '    <input type="<%=type%>" class="<%=extraClasses.join(\' \')%>" id="<%=cId%>" name="<%=name%>" value="<%-formatter.fromRaw(option.value)%>" <%=rawValue == option.value ? "checked=\'checked\'" : ""%> <%=disabled ? "disabled" : ""%> <%=readonly ? "disabled" : ""%> <%=required ? "required" : ""%> />',
+      '    <label class="form-check-label" for="<%=cId%>"><%-option.label%></label>',
       '  </div>',
       '  <% } %>',
       '  <% if (helpMessage && helpMessage.length) { %>',

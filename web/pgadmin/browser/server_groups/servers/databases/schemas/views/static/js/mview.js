@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -142,13 +142,14 @@ define('pgadmin.node.mview', [
           spcname: undefined,
           toast_autovacuum_enabled: false,
           autovacuum_enabled: false,
+          warn_text: undefined,
         },
         schema: [{
           id: 'name', label: gettext('Name'), cell: 'string',
           type: 'text', disabled: 'inSchema',
         },{
           id: 'oid', label: gettext('OID'), cell: 'string',
-          type: 'text', disabled: true, mode: ['properties'],
+          type: 'text', mode: ['properties'],
         },{
           id: 'owner', label: gettext('Owner'), cell: 'string',
           control: 'node-list-by-name', select2: { allowClear: false },
@@ -160,7 +161,7 @@ define('pgadmin.node.mview', [
           disabled: 'inSchema', select2: { allowClear: false },
         },{
           id: 'system_view', label: gettext('System view?'), cell: 'string',
-          type: 'switch', disabled: true, mode: ['properties'],
+          type: 'switch', mode: ['properties'],
         }, pgBrowser.SecurityGroupSchema, {
           id: 'acl', label: gettext('Privileges'),
           mode: ['properties'], type: 'text', group: gettext('Security'),
@@ -171,7 +172,22 @@ define('pgadmin.node.mview', [
           id: 'definition', label: gettext('Definition'), cell: 'string',
           type: 'text', mode: ['create', 'edit'], group: gettext('Definition'),
           tabPanelCodeClass: 'sql-code-control',
-          control: Backform.SqlCodeControl,
+          control: Backform.SqlCodeControl.extend({
+            onChange: function() {
+              Backform.SqlCodeControl.prototype.onChange.apply(this, arguments);
+              if(this.model && this.model.changed) {
+                if(this.model.origSessAttrs && (this.model.changed.definition != this.model.origSessAttrs.definition)) {
+                  this.model.warn_text = gettext('Updating the definition will drop and re-create the materialized view. It may result in loss of information about its dependent objects. Do you want to continue?');
+                }
+                else {
+                  this.model.warn_text = undefined;
+                }
+              }
+              else {
+                this.model.warn_text = undefined;
+              }
+            },
+          }),
         },{
           id: 'with_data', label: gettext('With data?'),
           group: gettext('Storage'), mode: ['edit', 'create'],
@@ -187,7 +203,7 @@ define('pgadmin.node.mview', [
         },{
           id: 'fillfactor', label: gettext('Fill factor'),
           group: gettext('Storage'), mode: ['edit', 'create'],
-          type: 'int',
+          type: 'int', min: 10, max: 100,
         },{
           type: 'nested', control: 'tab', id: 'materialization',
           label: gettext('Parameter'), mode: ['edit', 'create'],

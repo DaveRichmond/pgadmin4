@@ -6,10 +6,15 @@
 {% if data.name and data.name != o_data.name %}
 ALTER TABLE {{conn|qtIdent(data.schema, data.table)}}
     RENAME {{conn|qtIdent(o_data.name)}} TO {{conn|qtIdent(data.name)}};
+{% endif %}
+{% if data.col_type_conversion is defined and data.col_type_conversion == False %}
+-- WARNING:
+-- The SQL statement below would normally be used to alter the datatype for the {{o_data.name}} column, however,
+-- the current datatype cannot be cast to the target datatype so this conversion cannot be made automatically.
 
 {% endif %}
 {###  Alter column type and collation ###}
-{% if (data.cltype and data.cltype != o_data.cltype) or (data.attlen is defined and data.attlen is not none and data.attlen != o_data.attlen) or (data.attprecision is defined and data.attprecision != o_data.attprecision) or (data.collspcname and data.collspcname != o_data.collspcname)%}
+{% if (data.cltype and data.cltype != o_data.cltype) or (data.attlen is defined and data.attlen != o_data.attlen) or (data.attprecision is defined and data.attprecision != o_data.attprecision) or (data.collspcname and data.collspcname != o_data.collspcname)%}
 ALTER TABLE {{conn|qtIdent(data.schema, data.table)}}
     ALTER COLUMN {% if data.name %}{{conn|qtTypeIdent(data.name)}}{% else %}{{conn|qtTypeIdent(o_data.name)}}{% endif %} TYPE {{ GET_TYPE.UPDATE_TYPE_SQL(conn, data, o_data) }}{% if data.collspcname and data.collspcname != o_data.collspcname %}
  COLLATE {{data.collspcname}}{% elif o_data.collspcname %} COLLATE {{o_data.collspcname}}{% endif %};
@@ -33,20 +38,20 @@ ALTER TABLE {{conn|qtIdent(data.schema, data.table)}}
 
 {% endif %}
 {###  Alter column statistics value ###}
-{% if data.attstattarget and data.attstattarget != o_data.attstattarget %}
+{% if data.attstattarget is defined and data.attstattarget != o_data.attstattarget %}
 ALTER TABLE {{conn|qtIdent(data.schema, data.table)}}
     ALTER COLUMN {% if data.name %}{{conn|qtTypeIdent(data.name)}}{% else %}{{conn|qtTypeIdent(o_data.name)}}{% endif %} SET STATISTICS {{data.attstattarget}};
 
 {% endif %}
 {###  Alter column storage value ###}
-{% if data.attstorage and data.attstorage != o_data.attstorage %}
+{% if data.attstorage is defined and data.attstorage != o_data.attstorage %}
 ALTER TABLE {{conn|qtIdent(data.schema, data.table)}}
     ALTER COLUMN {% if data.name %}{{conn|qtTypeIdent(data.name)}}{% else %}{{conn|qtTypeIdent(o_data.name)}}{% endif %} SET STORAGE {%if data.attstorage == 'p' %}
 PLAIN{% elif data.attstorage == 'm'%}MAIN{% elif data.attstorage == 'e'%}
 EXTERNAL{% elif data.attstorage == 'x'%}EXTENDED{% endif %};
 
 {% endif %}
-{% if data.description is defined %}
+{% if data.description is defined and data.description != None %}
 {% if data.name %}
 COMMENT ON COLUMN {{conn|qtIdent(data.schema, data.table, data.name)}}
 {% else %}
@@ -56,7 +61,7 @@ COMMENT ON COLUMN {{conn|qtIdent(data.schema, data.table, o_data.name)}}
 
 {% endif %}
 {### Update column variables ###}
-{% if 'attoptions' in data and data.attoptions|length > 0 %}
+{% if 'attoptions' in data and data.attoptions != None and data.attoptions|length > 0 %}
 {% set variables = data.attoptions %}
 {% if 'deleted' in variables and variables.deleted|length > 0 %}
 ALTER TABLE {{conn|qtIdent(data.schema, data.table)}}

@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -520,6 +520,11 @@ class BrowserPluginModule(PgAdminModule):
         )
 
 
+def _get_logout_url():
+    return '{0}?next={1}'.format(
+        url_for('security.logout'), url_for('browser.index'))
+
+
 @blueprint.route("/")
 @pgCSRFProtect.exempt
 @login_required
@@ -579,12 +584,13 @@ def index():
         MODULE_NAME + "/index.html",
         username=current_user.email,
         is_admin=current_user.has_role("Administrator"),
+        logout_url=_get_logout_url(),
         _=gettext
     ))
 
     # Set the language cookie after login, so next time the user will have that
     # same option at the login time.
-    misc_preference = Preferences.module('miscellaneous')
+    misc_preference = Preferences.module('misc')
     user_languages = misc_preference.preference(
         'user_language'
     )
@@ -666,7 +672,8 @@ def utils():
             editor_indent_with_tabs=editor_indent_with_tabs,
             app_name=config.APP_NAME,
             pg_libpq_version=pg_libpq_version,
-            support_ssh_tunnel=config.SUPPORT_SSH_TUNNEL
+            support_ssh_tunnel=config.SUPPORT_SSH_TUNNEL,
+            logout_url=_get_logout_url()
         ),
         200, {'Content-Type': 'application/javascript'})
 

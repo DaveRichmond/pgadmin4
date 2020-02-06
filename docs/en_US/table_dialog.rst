@@ -26,6 +26,8 @@ Use the fields in the *General* tab to identify the table:
   drop-down listbox in the *Schema* field.
 * Use the drop-down listbox in the *Tablespace* field to specify the tablespace
   in which the table will be stored.
+* Move the *Partitioned Table?* switch to the *Yes* in case you want to create a
+  partitioned table. Option is available for PostgreSQL 10 and above.
 * Store notes about the table in the *Comment* field.
 
 Click the *Columns* tab to continue.
@@ -50,9 +52,9 @@ the *Columns* table:
   the column. This can include array specifiers. For more information on the
   data types supported by PostgreSQL, refer to Chapter 8 of the core
   documentation.
-* If enabled, use the *Length* and *Precision* fields to specify the maximum
-  number of significant digits in a numeric value, or the maximum number of
-  characters in a text value.
+* If enabled, use the *Length/Precision* and *Scale* fields to specify the
+  maximum number of significant digits in a numeric value, or the maximum
+  number of characters in a text value.
 * Move the *Not NULL?* switch to the *Yes* position to require a value in the
   column field.
 * Move the *Primary key?* switch to the *Yes* position to specify the column is
@@ -449,6 +451,21 @@ icon (+) to add each partition:
 * If partition type is Hash then *Modulus* and *Remainder* fields will be
   enabled.
 
+Users can create a partition and define them as a partitioned table. Click
+the *Edit* icon to expand the properties of a partition.
+Use the *Partition* tab to create that partition as a partitioned table.
+
+* Move the *Partitioned Table?* switch to the *Yes* in case you want to create a
+  partitioned table.
+* Select a partition type from the *Partition Type* selection box.
+* Use the *Partition Keys* panel to define the partition keys.
+
+View of multi level Partitioned Table in browser tree:
+
+.. image:: images/table_partition_tree.png
+    :alt: Table dialog partition tree
+    :align: center
+
 Click the *Parameter* tab to continue.
 
 .. image:: images/table_parameter.png
@@ -482,8 +499,7 @@ Use the *Privileges* panel to assign privileges to a role. Click the *Add* icon
 * Select the name of the role from the drop-down listbox in the *Grantee* field.
 * Click inside the *Privileges* field. Check the boxes to the left of one or
   more privileges to grant the selected privilege to the specified user.
-* Select the name of the role from the drop-down listbox in the *Grantor* field.
-  The default grantor is the owner of the database.
+* The current user, who is the default grantor for granting the privilege, is displayed in the *Grantor* field.
 
 Click the *Add* icon (+) to assign additional privileges; to discard a
 privilege, click the trash icon to the left of the row and confirm deletion in

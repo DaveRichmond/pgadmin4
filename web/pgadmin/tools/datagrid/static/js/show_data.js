@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -130,6 +130,7 @@ function initFilterDialog(alertify, pgBrowser) {
                 name: 'dialog_help',
                 type: 'button',
                 label: gettext('Data Filter'),
+                'aria-label': gettext('Help'),
                 url: url_for('help.static', {
                   'filename': 'viewdata_filter.html',
                 }),

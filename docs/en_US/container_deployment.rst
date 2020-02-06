@@ -76,6 +76,13 @@ than using the default.
 Override the default file path for the server definition list. See the
 /pgadmin4/servers.json mapped file below for more information.
 
+**GUNICORN_ACCESS_LOGFILE**
+
+*Default: -* (stdout)
+
+Specify an output file in which to store the Gunicorn access logs, instead of
+sending them to stdout.
+
 **GUNICORN_THREADS**
 
 *Default: 25*
@@ -104,7 +111,27 @@ Mapped Files and Directories
 
 The following files or directories can be mapped from the container onto the
 host machine to allow configuration to be customised and shared between
-instances:
+instances.
+
+.. warning:: Warning: pgAdmin runs as the *pgadmin* user (UID: 5050) in the
+    *pgadmin* group (GID: 5050) in the container. You must ensure that all files
+    are readable, and where necessary (e.g. the working/session directory) for
+    this user on the host machine. For example:
+
+    .. code-block:: bash
+
+        sudo chown -R 5050:5050 <host_directory>
+
+    On some filesystems that do not support extended attributes, it may not be
+    possible to run pgAdmin without specifying a value for *PGADMIN_LISTEN_PORT*
+    that is greater than 1024. In such cases, specify an alternate port when
+    launching the container by adding the environment variable, for example:
+
+    .. code-block:: bash
+
+        -e 'PGADMIN_LISTEN_PORT=5050'
+
+    Don't forget to adjust any host-container port mapping accordingly.
 
 **/var/lib/pgadmin**
 
@@ -174,7 +201,7 @@ Run a TLS secured container using a shared config/storage directory in
         -v /private/var/lib/pgadmin:/var/lib/pgadmin \
         -v /path/to/certificate.cert:/certs/server.cert \
         -v /path/to/certificate.key:/certs/server.key \
-        -v /tmp/servers.json:/servers.json \
+        -v /tmp/servers.json:/pgadmin4/servers.json \
         -e 'PGADMIN_DEFAULT_EMAIL=user@domain.com' \
         -e 'PGADMIN_DEFAULT_PASSWORD=SuperSecret' \
         -e 'PGADMIN_ENABLE_TLS=True' \

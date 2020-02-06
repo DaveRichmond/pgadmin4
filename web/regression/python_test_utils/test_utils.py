@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -14,6 +14,7 @@ import sys
 import uuid
 import psycopg2
 import sqlite3
+import shutil
 from functools import partial
 from testtools.testcase import clone_test_with_new_id
 
@@ -23,7 +24,11 @@ from regression import test_setup
 
 from pgadmin.utils.preferences import Preferences
 
+CURRENT_PATH = os.path.abspath(os.path.join(os.path.dirname(
+    os.path.realpath(__file__)), "../"))
+
 SERVER_GROUP = test_setup.config_data['server_group']
+COVERAGE_CONFIG_FILE = os.path.join(CURRENT_PATH, ".coveragerc")
 file_name = os.path.realpath(__file__)
 
 
@@ -48,7 +53,7 @@ def login_tester_account(tester):
     :return: None
     """
     if os.environ['PGADMIN_SETUP_EMAIL'] and \
-       os.environ['PGADMIN_SETUP_PASSWORD']:
+            os.environ['PGADMIN_SETUP_PASSWORD']:
         email = os.environ['PGADMIN_SETUP_EMAIL']
         password = os.environ['PGADMIN_SETUP_PASSWORD']
         tester.login(email, password)
@@ -108,6 +113,7 @@ def clear_node_info_dict():
 
 def create_database(server, db_name, encoding=None):
     """This function used to create database and returns the database id"""
+    db_id = ''
     try:
         connection = get_db_connection(
             server['db'],
@@ -135,13 +141,13 @@ def create_database(server, db_name, encoding=None):
         pg_cursor.execute("SELECT db.oid from pg_database db WHERE"
                           " db.datname='%s'" % db_name)
         oid = pg_cursor.fetchone()
-        db_id = ''
         if oid:
             db_id = oid[0]
         connection.close()
         return db_id
     except Exception:
         traceback.print_exc(file=sys.stderr)
+        return db_id
 
 
 def create_table(server, db_name, table_name, extra_columns=[]):
@@ -274,8 +280,7 @@ def create_constraint(server,
         pg_cursor.execute('''
             ALTER TABLE "%s"
               ADD CONSTRAINT "%s" %s (some_column)
-            ''' % (table_name, constraint_name, constraint_type.upper())
-        )
+            ''' % (table_name, constraint_name, constraint_type.upper()))
 
         connection.set_isolation_level(old_isolation_level)
         connection.commit()
@@ -777,6 +782,27 @@ def configure_preferences(default_binary_path=None):
             ' WHERE PID = ?', (-1, pref_tree_state_save_interval.pid)
         )
 
+    # Disable auto expand sole children tree state for tests
+    pref_auto_expand_sol_children = \
+        browser_pref.preference('auto_expand_sole_children')
+
+    user_pref = cur.execute(
+        'SELECT pid, uid FROM user_preferences '
+        'where pid=?', (pref_auto_expand_sol_children.pid,)
+    )
+
+    if len(user_pref.fetchall()) == 0:
+        cur.execute(
+            'INSERT INTO user_preferences(pid, uid, value)'
+            ' VALUES (?,?,?)', (pref_auto_expand_sol_children.pid, 1, 'False')
+        )
+    else:
+        cur.execute(
+            'UPDATE user_preferences'
+            ' SET VALUE = ?'
+            ' WHERE PID = ?', ('False', pref_auto_expand_sol_children.pid)
+        )
+
     # Disable reload warning on browser
     pref_confirm_on_refresh_close = \
         browser_pref.preference('confirm_on_refresh_close')
@@ -820,6 +846,7 @@ def reset_layout_db(user_id=None):
                     '("Browser/Layout", "SQLEditor/Layout", "Debugger/Layout")'
                     ' AND USER_ID=?', user_id
                 )
+            cur.execute('DELETE FROM process')
             conn.commit()
             conn.close()
             break
@@ -837,13 +864,17 @@ def _cleanup(tester, app_starter):
     """This function use to cleanup the created the objects(servers, databases,
      schemas etc) during the test suite run"""
     try:
-        test_servers = regression.parent_node_dict["server"] + \
+        test_servers = \
+            regression.parent_node_dict["server"] + \
             regression.node_info_dict["sid"]
-        test_databases = regression.parent_node_dict["database"] + \
+        test_databases = \
+            regression.parent_node_dict["database"] + \
             regression.node_info_dict["did"]
-        test_table_spaces = regression.parent_node_dict["tablespace"] + \
+        test_table_spaces = \
+            regression.parent_node_dict["tablespace"] + \
             regression.node_info_dict["tsid"]
-        test_roles = regression.parent_node_dict["role"] + \
+        test_roles = \
+            regression.parent_node_dict["role"] + \
             regression.node_info_dict["lrid"]
         # Drop databases
         for database in test_databases:
@@ -1102,21 +1133,68 @@ def get_watcher_dialogue_status(self):
     """This will get watcher dialogue status"""
     import time
     attempts = 120
-
+    status = None
     while attempts > 0:
-        status = self.page.find_by_css_selector(
-            ".pg-bg-status-text").text
+        try:
+            status = self.page.find_by_css_selector(
+                ".pg-bg-status-text").text
 
-        if 'Failed' in status:
-            break
-        if status == 'Started' or status == 'Running...':
+            if 'Failed' in status:
+                break
+            if status == 'Started' or status == 'Running...':
+                attempts -= 1
+                time.sleep(.5)
+            else:
+                break
+        except Exception:
             attempts -= 1
-            time.sleep(.5)
-        else:
-            break
     return status
 
 
 def get_driver_version():
     version = getattr(psycopg2, '__version__', None)
     return version
+
+
+def is_coverage_enabled(args):
+    """
+    This function checks for coverage args exists in command line args
+    :return: boolean
+    """
+    if "coverage" in args and args["coverage"]:
+        return True
+    return False
+
+
+def print_and_store_coverage_report(cov):
+    """
+    This function print the coverage report on console and store it in html
+    files
+    :return: None
+    """
+    print("\nCoverage Summary:\n", file=sys.stderr)
+    cov.report()
+    cov_dir = os.path.join(CURRENT_PATH, "covhtml")
+    if os.path.exists(cov_dir):
+        shutil.rmtree(cov_dir)
+    cov.html_report(directory=cov_dir)
+
+
+def generate_scenarios(key, test_cases):
+    """
+    This function generates the test case scenarios according to key given
+    to it, e.g. key=ADD, key=update etc.
+    :param key: for which operation generate the test scenario
+    :type key: str
+    :param test_cases
+    :type test_cases: list
+    :return: scenarios
+    :rtype: list
+    """
+    scenarios = []
+    for scenario in test_cases[key]:
+        test_name = scenario["name"]
+        scenario.pop("name")
+        tup = (test_name, dict(scenario))
+        scenarios.append(tup)
+    return scenarios

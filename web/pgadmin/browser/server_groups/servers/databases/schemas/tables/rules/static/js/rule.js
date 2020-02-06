@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -71,6 +71,7 @@ define('pgadmin.node.rule', [
           return true;
         }
       },
+      url_jump_after_node: 'schema',
       Init: function() {
 
         /* Avoid mulitple registration of menus */
@@ -143,7 +144,7 @@ define('pgadmin.node.rule', [
         },
         {
           id: 'oid', label: gettext('OID'),
-          type: 'text', disabled: true, mode: ['properties'],
+          type: 'text', mode: ['properties'],
         },
         {
           id: 'schema', label:'',

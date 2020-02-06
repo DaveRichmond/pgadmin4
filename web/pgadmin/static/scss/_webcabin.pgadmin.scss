@@ -24,7 +24,7 @@
 
 .wcFrameTitleBar {
   height: $title-height;
-  background-color: $color-bg;
+  background-color: $header-bg;
   border-bottom: $panel-border;
 }
 
@@ -37,7 +37,7 @@
 }
 
 /* darken % taken from bootstrap - button_variant */
-.wcFrameButton:hover, .wcFrameButtonHover {
+.wcFrameButton:hover, .wcFrameButtonHover,  .wcFrameButton:focus {
   background-color: $btn-secondary-hover-bg;
 }
 
@@ -52,14 +52,12 @@
 
 .wcFrameButtonBar {
   height: $title-height;
-  background-color: $color-bg;
+  background-color: inherit;
   border-bottom: $panel-border;
   padding: 0rem 0.25rem;
 
   display: -webkit-flex; /* Safari */
-  -webkit-flex-direction: row-reverse; /* Safari 6.1+ */
   display: flex;
-  flex-direction: row-reverse;
 }
 
 
@@ -162,7 +160,7 @@
 
 .wcFloating .wcFrameTitleBar {
   height: $title-height;
-  background-color: $color-bg;
+  background-color: $header-bg;
   border-bottom: $panel-border;
 }
 
@@ -170,7 +168,7 @@
   background-position: center;
   padding: 0px 10px;
 
-  &.fa{
+  &.fa, &.pg-font-icon{
     padding: 0rem 0.25rem 0rem 0rem
   }
 }
@@ -271,7 +269,7 @@
   background-color: $dropdown-bg;
 }
 
-.wcMenuItemHover, .wcMenuItem:hover, .context-menu-item:not(.context-menu-not-selectable).hover, .context-menu-item:not(.context-menu-not-selectable):hover {
+.wcMenuItemHover, .wcMenuItem:hover, .context-menu-item:not(.context-menu-not-selectable).hover, .context-menu-item:not(.context-menu-not-selectable):hover, .context-menu-hover {
   color: $dropdown-link-hover-color;
   background-color: $dropdown-link-hover-bg !important;
 }

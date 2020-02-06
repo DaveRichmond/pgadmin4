@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -33,11 +33,27 @@ class TableUpdateTestCase(BaseTestGenerator):
               mode='create'
               )
          ),
+        ('Create partitions with partition table of existing range '
+         'partitioned table',
+         dict(url='/browser/table/obj/',
+              server_min_version=100000,
+              partition_type='range',
+              mode='multilevel'
+              )
+         ),
         ('Create partitions of existing list partitioned table',
          dict(url='/browser/table/obj/',
               server_min_version=100000,
               partition_type='list',
               mode='create'
+              )
+         ),
+        ('Create partitions with partition table of existing list '
+         'partitioned table',
+         dict(url='/browser/table/obj/',
+              server_min_version=100000,
+              partition_type='list',
+              mode='multilevel'
               )
          ),
         ('Detach partition from existing range partitioned table',

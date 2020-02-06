@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -28,7 +28,7 @@ class AppStarter:
         """ This function start the subprocess to start pgAdmin app """
         random_server_port = str(random.randint(10000, 65535))
         env = {
-            "PGADMIN_PORT": random_server_port,
+            "PGADMIN_INT_PORT": random_server_port,
             "SQLITE_PATH": str(self.app_config.TEST_SQLITE_PATH)
         }
         env.update(os.environ)

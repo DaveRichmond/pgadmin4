@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -73,7 +73,7 @@ define('pgadmin.node.index', [
     schema: [
       {
         id: 'colname', label: gettext('Column'), cell: 'node-list-by-name',
-        type: 'text', disabled: 'inSchemaWithModelCheck', editable: function(m) {
+        type: 'text', disabled: 'inSchema', readonly: 'isEditMode', editable: function(m) {
           // Header cell then skip
           if (m instanceof Backbone.Collection) {
             return false;
@@ -84,7 +84,7 @@ define('pgadmin.node.index', [
       },{
         id: 'collspcname', label: gettext('Collation'),
         cell: NodeAjaxOptionsDepsCell,
-        type: 'text', disabled: 'inSchemaWithModelCheck', editable: function(m) {
+        type: 'text', disabled: 'inSchema', readonly: 'isEditMode', editable: function(m) {
           // Header cell then skip
           if (m instanceof Backbone.Collection) {
             return false;
@@ -92,6 +92,7 @@ define('pgadmin.node.index', [
           return !(m.inSchemaWithModelCheck.apply(this, arguments));
         },
         control: 'node-ajax-options', url: 'get_collations', node: 'index',
+        url_jump_after_node: 'schema',
       },{
         id: 'op_class', label: gettext('Operator class'),
         cell: NodeAjaxOptionsDepsCell, tags: true,
@@ -106,6 +107,7 @@ define('pgadmin.node.index', [
           return !(m.checkAccessMethod.apply(this, arguments));
         },
         control: 'node-ajax-options', url: 'get_op_class', node: 'index',
+        url_jump_after_node: 'schema',
         deps: ['amname'], transform: function(data, control) {
           /* We need to extract data from collection according
            * to access method selected by user if not selected
@@ -185,6 +187,9 @@ define('pgadmin.node.index', [
       }
       return false;
     },
+    isEditMode: function(m) {
+      return !m.top.isNew();
+    },
     // We will check if we are under schema node & in 'create' mode
     inSchemaWithModelCheck: function(m) {
       if(m.top.node_info &&  'schema' in m.top.node_info) {
@@ -232,6 +237,7 @@ define('pgadmin.node.index', [
       hasStatistics: true,
       width: pgBrowser.stdW.md + 'px',
       statsPrettifyFields: [gettext('Size'), gettext('Index size')],
+      url_jump_after_node: 'schema',
       Init: function() {
         /* Avoid mulitple registration of menus */
         if (this.initialized)
@@ -290,7 +296,7 @@ define('pgadmin.node.index', [
           type: 'text', disabled: 'inSchema',
         },{
           id: 'oid', label: gettext('OID'), cell: 'string',
-          type: 'int', disabled: true, mode: ['edit', 'properties'],
+          type: 'int', readonly: true, mode: ['properties'],
         },{
           id: 'spcname', label: gettext('Tablespace'), cell: 'string',
           control: 'node-list-by-name', node: 'tablespace',
@@ -307,7 +313,8 @@ define('pgadmin.node.index', [
         },{
           id: 'amname', label: gettext('Access Method'), cell: 'string',
           type: 'text', mode: ['properties', 'create', 'edit'],
-          disabled: 'inSchemaWithModelCheck', url: 'get_access_methods',
+          disabled: 'inSchema', readonly: 'isEditMode', url: 'get_access_methods',
+          url_jump_after_node: 'schema',
           group: gettext('Definition'), select2: {'allowClear': true},
           control: Backform.NodeAjaxOptionsControl.extend({
             // When access method changes we need to clear columns collection
@@ -345,7 +352,7 @@ define('pgadmin.node.index', [
           type: 'array', group: gettext('Definition'),
           editable: false,
           canDelete: true, canAdd: true, mode: ['properties'],
-          disabled: 'inSchemaWithModelCheck',
+          disabled: 'inSchema', readonly: 'isEditMode',
           visible: function(m) {
             if(!_.isUndefined(m.node_info) && !_.isUndefined(m.node_info.server)
               && !_.isUndefined(m.node_info.server.version) &&
@@ -384,7 +391,7 @@ define('pgadmin.node.index', [
           min: 10, max:100, group: gettext('Definition'),
         },{
           id: 'indisunique', label: gettext('Unique?'), cell: 'string',
-          type: 'switch', disabled: 'inSchemaWithModelCheck',
+          type: 'switch', disabled: 'inSchema', readonly: 'isEditMode',
           group: gettext('Definition'),
         },{
           id: 'indisclustered', label: gettext('Clustered?'), cell: 'string',
@@ -392,22 +399,22 @@ define('pgadmin.node.index', [
           group: gettext('Definition'),
         },{
           id: 'indisvalid', label: gettext('Valid?'), cell: 'string',
-          type: 'switch', disabled: true, mode: ['properties'],
+          type: 'switch', mode: ['properties'],
           group: gettext('Definition'),
         },{
           id: 'indisprimary', label: gettext('Primary?'), cell: 'string',
-          type: 'switch', disabled: true, mode: ['properties'],
+          type: 'switch', mode: ['properties'],
           group: gettext('Definition'),
         },{
           id: 'is_sys_idx', label: gettext('System index?'), cell: 'string',
-          type: 'switch', disabled: true, mode: ['properties'],
+          type: 'switch', mode: ['properties'],
         },{
           id: 'isconcurrent', label: gettext('Concurrent build?'), cell: 'string',
-          type: 'switch', disabled: 'inSchemaWithModelCheck',
+          type: 'switch', disabled: 'inSchema', readonly: 'isEditMode',
           mode: ['create', 'edit'], group: gettext('Definition'),
         },{
           id: 'indconstraint', label: gettext('Constraint'), cell: 'string',
-          type: 'text', disabled: 'inSchemaWithModelCheck', mode: ['create', 'edit'],
+          type: 'text', disabled: 'inSchema', readonly: 'isEditMode', mode: ['create', 'edit'],
           control: 'sql-field', visible: true, group: gettext('Definition'),
         },{
           id: 'columns', label: gettext('Columns'), type: 'collection', deps: ['amname'],
@@ -436,7 +443,7 @@ define('pgadmin.node.index', [
           type: 'array', group: gettext('Definition'),
           editable: false,
           canDelete: true, canAdd: true, mode: ['edit', 'create'],
-          disabled: 'inSchemaWithModelCheck',
+          disabled: 'inSchema', readonly: 'isEditMode',
           visible: function(m) {
             if(!_.isUndefined(m.node_info) && !_.isUndefined(m.node_info.server)
               && !_.isUndefined(m.node_info.server.version) &&
@@ -492,12 +499,6 @@ define('pgadmin.node.index', [
             this.errorModel.set('name', msg);
             return msg;
           }
-          if (_.isUndefined(this.get('spcname'))
-            || String(this.get('spcname')).replace(/^\s+|\s+$/g, '') == '') {
-            msg = gettext('Tablespace cannot be empty.');
-            this.errorModel.set('spcname', msg);
-            return msg;
-          }
           if (_.isUndefined(this.get('amname'))
             || String(this.get('amname')).replace(/^\s+|\s+$/g, '') == '') {
             msg = gettext('Access method cannot be empty.');
@@ -525,6 +526,9 @@ define('pgadmin.node.index', [
             return true;
           }
           return false;
+        },
+        isEditMode: function(m) {
+          return !m.isNew();
         },
         // We will check if we are under schema node & in 'create' mode
         inSchemaWithModelCheck: function(m) {

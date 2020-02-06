@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -27,10 +27,6 @@ define('pgadmin.browser.node', [
       ESCAPE: 27,
       F1: 112,
     };
-
-  const REMOVE_SERVER_PRIORITY = 5;
-  const REMOVE_SERVER_LABEL = 'Remove Server';
-  const SERVER = 'server';
 
   // It has already been defined.
   // Avoid running this script again.
@@ -146,8 +142,8 @@ define('pgadmin.browser.node', [
           module: self,
           applies: ['object', 'context'],
           callback: 'delete_obj',
-          priority: self.get_menu_item_priority(self.type, 2),
-          label: self.change_menu_label(self.type, gettext('Delete/Drop')),
+          priority: self.dropPriority,
+          label: (self.dropAsRemove) ? gettext('Remove %s', self.label) : gettext('Delete/Drop'),
           data: {
             'url': 'drop',
           },
@@ -189,7 +185,7 @@ define('pgadmin.browser.node', [
           callback: 'show_query_tool',
           priority: 998,
           label: gettext('Query Tool...'),
-          icon: 'fa fa-bolt',
+          icon: 'pg-font-icon icon-query-tool',
           enable: function(itemData) {
             if (itemData._type == 'database' && itemData.allowConn)
               return true;
@@ -285,7 +281,7 @@ define('pgadmin.browser.node', [
       if (this.model) {
         // This will be the URL, used for object manipulation.
         // i.e. Create, Update in these cases
-        var urlBase = this.generate_url(item, type, node, false);
+        var urlBase = this.generate_url(item, type, node, false, null, that.url_jump_after_node);
 
         if (!urlBase)
           // Ashamed of myself, I don't know how to manipulate this
@@ -331,9 +327,9 @@ define('pgadmin.browser.node', [
             <div class="error-in-footer">
               <div class="d-flex px-2 py-1">
                 <div class="pr-2">
-                  <i class="fa fa-exclamation-triangle text-danger" aria-hidden="true"></i>
+                  <i class="fa fa-exclamation-triangle text-danger" aria-hidden="true" role="img"></i>
                 </div>
-                <div class="alert-text">${msg}</div>
+                <div role="alert" class="alert-text">${msg}</div>
                 <div class="ml-auto close-error-bar">
                   <a class="close-error fa fa-times text-danger"></a>
                 </div>
@@ -346,7 +342,12 @@ define('pgadmin.browser.node', [
                 this.empty().css('visibility', 'hidden');
               }.bind(that.statusBar));
             }
-            callback(true);
+
+            var sessHasChanged = false;
+            if(this.sessChanged && this.sessChanged()){
+              sessHasChanged = true;
+            }
+            callback(true, sessHasChanged);
 
             return true;
           };
@@ -395,7 +396,7 @@ define('pgadmin.browser.node', [
 
           if (!newModel.isNew()) {
             // This is definetely not in create mode
-            var msgDiv = '<div class="alert alert-info pg-panel-message pg-panel-properties-message">' +
+            var msgDiv = '<div role="status" class="alert alert-info pg-panel-message pg-panel-properties-message">' +
               gettext('Retrieving data from the server...') + '</div>',
               $msgDiv = $(msgDiv);
             var timer = setTimeout(function(ctx) {
@@ -499,7 +500,7 @@ define('pgadmin.browser.node', [
         isPrivate: true,
         isLayoutMember: false,
         elContainer: true,
-        content: '<div class="obj_properties container-fluid"><div class="alert alert-info pg-panel-message">' + gettext('Please wait while we fetch information about the node from the server...') + '</div></div>',
+        content: '<div class="obj_properties container-fluid"><div role="status" class="alert alert-info pg-panel-message">' + gettext('Please wait while we fetch information about the node from the server...') + '</div></div>',
         onCreate: function(myPanel, $container) {
           $container.addClass('pg-no-overflow');
         },
@@ -534,6 +535,14 @@ define('pgadmin.browser.node', [
      * Override this, when a node is not deletable.
      */
     canDropCascade: false,
+    /*********************************************************************************
+    dropAsRemove should be true in case, Drop object label needs to be replaced by Remove
+    */
+    dropAsRemove: false,
+    /******************************************************************************
+    dropPriority is set to 2 by default, override it when change is required
+    */
+    dropPriority: 2,
     // List of common callbacks - that can be used for different
     // operations!
     callbacks: {
@@ -743,7 +752,10 @@ define('pgadmin.browser.node', [
         obj = pgBrowser.Nodes[d._type];
         var objName = d.label;
 
-        var msg, title;
+        var msg, title, drop_label;
+
+        if (obj.dropAsRemove) drop_label = 'Remove'; else drop_label = 'Drop';
+
         if (input.url == 'delete') {
 
           msg = gettext('Are you sure you want to drop %s "%s" and all the objects that depend on it?',
@@ -759,31 +771,15 @@ define('pgadmin.browser.node', [
             return;
           }
         } else {
-          var remove_drop_text;
-          if(obj.type === SERVER) {
-            remove_drop_text = 'Remove';
-          }
-          else {
-            remove_drop_text = 'DROP';
-          }
-
-          msg = gettext('Are you sure you want to %s %s "%s"?', remove_drop_text.toLowerCase(), obj.label.toLowerCase(), d.label);
-          title = gettext('%s %s?', remove_drop_text, obj.label);
+          msg = gettext('Are you sure you want to %s %s "%s"?', drop_label.toLowerCase(), obj.label.toLowerCase(), d.label);
+          title = gettext('%s %s?', drop_label, obj.label);
 
           if (!(_.isFunction(obj.canDrop) ?
             obj.canDrop.apply(obj, [d, i]) : obj.canDrop)) {
-            if(obj.type === SERVER) {
-              Alertify.error(
-                gettext('The %s "%s" cannot be removed.', obj.label, d.label),
-                10
-              );
-            }
-            else {
-              Alertify.error(
-                gettext('The %s "%s" cannot be dropped.', obj.label, d.label),
-                10
-              );
-            }
+            Alertify.error(
+              gettext('The %s "%s" cannot be dropped/removed.', obj.label, d.label),
+              10
+            );
             return;
           }
         }
@@ -812,14 +808,9 @@ define('pgadmin.browser.node', [
                     console.warn(e.stack || e);
                   }
                 }
-                if(obj.type === SERVER) {
-                  pgBrowser.report_error(
-                    gettext('Error removing %s: "%s"', obj.label, objName), msg);
-                }
-                else {
-                  pgBrowser.report_error(
-                    gettext('Error dropping %s: "%s"', obj.label, objName), msg);
-                }
+                pgBrowser.report_error(
+                  gettext('Error dropping/removing %s: "%s"', obj.label, objName), msg);
+
               });
           },
           null).show();
@@ -1058,7 +1049,7 @@ define('pgadmin.browser.node', [
         tree = pgAdmin.Browser.tree,
         j = panel.$container.find('.obj_properties').first(),
         view = j.data('obj-view'),
-        content = $('<div tabindex="1"></div>')
+        content = $('<div></div>')
           .addClass('pg-prop-content col-12'),
         confirm_close = true;
 
@@ -1098,7 +1089,7 @@ define('pgadmin.browser.node', [
 
       // Template function to create the status bar
       var createStatusBar = function(location) {
-          var statusBar = $('<div></div>').addClass(
+          var statusBar = $('<div role="status"></div>').addClass(
             'pg-prop-status-bar'
           ).appendTo(j);
           statusBar.css('visibility', 'hidden');
@@ -1124,7 +1115,8 @@ define('pgadmin.browser.node', [
               tmpl = _.template([
                 '<button tabindex="0" type="<%= type %>" ',
                 'class="btn <%=extraClasses.join(\' \')%>"',
-                '<% if (disabled) { %> disabled="disabled"<% } %> title="<%-tooltip%>">',
+                '<% if (disabled) { %> disabled="disabled"<% } %> title="<%-tooltip%>"',
+                '<% if (label != "") {} else { %> aria-label="<%-tooltip%>"<% } %> >',
                 '<span class="<%= icon %>"></span><% if (label != "") { %>&nbsp;<%-label%><% } %></button>',
               ].join(' '));
             if (location == 'header') {
@@ -1274,6 +1266,40 @@ define('pgadmin.browser.node', [
 
           let confirm_on_properties_close = pgBrowser.get_preferences_for_module('browser').confirm_on_properties_close;
           if (confirm_on_properties_close && confirm_close && view && view.model) {
+            if(view.model.sessChanged()){
+              Alertify.confirm(
+                gettext('Warning'),
+                warn_text,
+                function() {
+                  setTimeout(function(){
+                    yes_callback();
+                  }.bind(self), 50);
+                  return true;
+                },
+                function() {
+                  return true;
+                }
+              ).set('labels', {
+                ok: gettext('Yes'),
+                cancel: gettext('No'),
+              }).show();
+            } else {
+              return true;
+            }
+          } else {
+            yes_callback();
+            return true;
+          }
+        }.bind(panel),
+
+        warnBeforeAttributeChange = function(yes_callback) {
+          var j = this.$container.find('.obj_properties').first(),
+            view = j && j.data('obj-view'),
+            self = this;
+
+          if (view && view.model && !_.isUndefined(view.model.warn_text) && !_.isNull(view.model.warn_text)) {
+            let warn_text;
+            warn_text = gettext(view.model.warn_text);
             if(view.model.sessChanged()){
               Alertify.confirm(
                 gettext('Warning'),
@@ -1493,15 +1519,22 @@ define('pgadmin.browser.node', [
               register: function(btn) {
                 // Save the changes
                 btn.on('click',() => {
-                  onSave.call(this, view, btn);
+                  warnBeforeAttributeChange.call(
+                    panel,
+                    function() {
+                      setTimeout(function() {
+                        onSave.call(this, view, btn);
+                      }, 0);
+                    }
+                  );
                 });
               },
             }], 'footer', 'pg-prop-btn-group-below');
 
             btn_grp.on('keydown', 'button', function(event) {
-              if (event.keyCode == 9 && $(this).nextAll('button:not([disabled])').length == 0) {
-                // set focus back to first editable input element of current active tab once we cycle through all enabled buttons.
-                commonUtils.findAndSetFocus(view.$el.find('.tab-content div.active'));
+              if (!event.shiftKey && event.keyCode == 9 && $(this).nextAll('button:not([disabled])').length == 0) {
+                // set focus back to first focusable element on dialog
+                view.$el.closest('.wcFloating').find('[tabindex]:not([tabindex="-1"]').first().focus();
                 return false;
               }
             });
@@ -1520,6 +1553,15 @@ define('pgadmin.browser.node', [
 
           // Show contents before buttons
           j.prepend(content);
+          view.$el.closest('.wcFloating').find('.wcFrameButtonBar > .wcFrameButton[style!="display: none;"]').on('keydown', function(e) {
+
+            if(e.shiftKey && e.keyCode === 9) {
+              e.stopPropagation();
+              setTimeout(() => {
+                view.$el.closest('.wcFloating').find('[tabindex]:not([tabindex="-1"]):not([disabled])').last().focus();
+              }, 10);
+            }
+          });
         }.bind(panel),
         closePanel = function(confirm_close_flag) {
           if(!_.isUndefined(confirm_close_flag)) {
@@ -1665,11 +1707,14 @@ define('pgadmin.browser.node', [
      *   type:  Create/drop/edit/properties/sql/depends/statistics
      *   d:     Provide the ItemData for the current item node
      *   with_id: Required id information at the end?
-     *
+     *   jump_after_node: This will skip all the value between jump_after_node
+     *   to the last node, excluding jump_after_node and the last node. This is particularly
+     *   helpful in partition table where we need to skip parent table OID of a partitioned
+     *   table in URL formation. Partitioned table itself is a "table" and can be multilevel
      * Supports url generation for create, drop, edit, properties, sql,
      * depends, statistics
      */
-    generate_url: function(item, type, d, with_id, info) {
+    generate_url: function(item, type, d, with_id, info, jump_after_node) {
       var opURL = {
           'create': 'obj',
           'drop': 'obj',
@@ -1702,9 +1747,16 @@ define('pgadmin.browser.node', [
           });
         }
       }
+
+      let jump_after_priority = priority;
+      if(jump_after_node && treeInfo[jump_after_node]) {
+        jump_after_priority = treeInfo[jump_after_node].priority;
+      }
+
       var nodePickFunction = function(treeInfoValue) {
-        return (treeInfoValue.priority <= priority);
+        return (treeInfoValue.priority <= jump_after_priority || treeInfoValue.priority == priority);
       };
+
       return generateUrl.generate_url(pgBrowser.URL, treeInfo, actionType, self.type, nodePickFunction, itemID);
     },
     // Base class for Node Data Collection
@@ -1782,18 +1834,6 @@ define('pgadmin.browser.node', [
         }
         return this.parent_type;
       }
-    },
-    get_menu_item_priority: function(type, default_priority) { //downgrade Remove Server priority in menus only for Servers
-      if(type && type === SERVER) {
-        return REMOVE_SERVER_PRIORITY;
-      }
-      return default_priority;
-    },
-    change_menu_label: function(type, default_label) { //change Delete/Drop menu option to Remove Server
-      if(type && type === SERVER) {
-        return gettext(REMOVE_SERVER_LABEL);
-      }
-      return default_label;
     },
   });
 

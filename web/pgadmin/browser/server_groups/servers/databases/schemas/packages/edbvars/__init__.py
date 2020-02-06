@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -137,6 +137,8 @@ class EdbVarView(PGChildNodeView, DataTypeReader):
     * sql(gid, sid, did, scid, pkgid, varid):
       - Returns the SQL for the Functions object.
 
+    * compare(**kwargs):
+      - This function will compare the nodes from two different schemas.
     """
 
     node_type = blueprint.node_type
@@ -158,7 +160,8 @@ class EdbVarView(PGChildNodeView, DataTypeReader):
             {'get': 'list'}
         ],
         'nodes': [{'get': 'nodes'}, {'get': 'nodes'}],
-        'sql': [{'get': 'sql'}]
+        'sql': [{'get': 'sql'}],
+        'compare': [{'get': 'compare'}, {'get': 'compare'}]
     })
 
     def check_precondition(f):

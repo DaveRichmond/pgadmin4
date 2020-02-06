@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -14,6 +14,7 @@ import Mousetrap from 'mousetrap';
 import * as commonUtils from '../../../static/js/utils';
 import dialogTabNavigator from '../../../static/js/dialog_tab_navigator';
 import * as keyboardFunc from 'sources/keyboard_shortcuts';
+import pgWindow from 'sources/window';
 
 const pgBrowser = pgAdmin.Browser = pgAdmin.Browser || {};
 
@@ -133,7 +134,7 @@ _.extend(pgBrowser.keyboardNavigation, {
   bindRightPanel: function(event, combo) {
     let allPanels = pgAdmin.Browser.docker.findPanels();
     let activePanel = 0;
-    let nextPanel = allPanels.length;
+    let nextPanel = allPanels.length - 1;
     let prevPanel = 1;
     let activePanelId = 0;
     let activePanelFlag = false;
@@ -366,8 +367,8 @@ _.extend(pgBrowser.keyboardNavigation, {
     };
   },
   getDialogTabNavigator: function(dialogContainer) {
-    const backward_shortcut = pgBrowser.get_preference('browser', 'dialog_tab_backward').value;
-    const forward_shortcut = pgBrowser.get_preference('browser', 'dialog_tab_forward').value;
+    const backward_shortcut = pgWindow.pgAdmin.Browser.get_preference('browser', 'dialog_tab_backward').value;
+    const forward_shortcut = pgWindow.pgAdmin.Browser.get_preference('browser', 'dialog_tab_forward').value;
 
     return new dialogTabNavigator.dialogTabNavigator(dialogContainer, backward_shortcut, forward_shortcut);
   },

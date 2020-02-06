@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -349,27 +349,9 @@ define('pgadmin.node.table', [
             return (!(d && d.label.match(/pg_global/)));
           },
           deps: ['is_partitioned'],
-          disabled: function(m) {
-            if(this.node_info &&  'catalog' in this.node_info) {
-              return true;
-            }
-
-            if(!_.isUndefined(m.node_info) && !_.isUndefined(m.node_info.server)
-              && !_.isUndefined(m.node_info.server.version) &&
-                m.node_info.server.version >= 120000 &&
-                m.get('is_partitioned')) {
-
-              setTimeout( function() {
-                m.set('spcname', undefined);
-              }, 10);
-
-              return true;
-            }
-
-            return false;
-          },
+          disabled: 'inSchema',
         },{
-          id: 'partition', type: 'group', label: gettext('Partition'),
+          id: 'partition', type: 'group', label: gettext('Partitions'),
           mode: ['edit', 'create'], min_version: 100000,
           visible: function(m) {
             // Always show in case of create mode
@@ -388,7 +370,7 @@ define('pgadmin.node.table', [
 
             return false;
           },
-          disabled: function(m) {
+          readonly: function(m) {
             if (!m.isNew())
               return true;
             return false;
@@ -789,7 +771,13 @@ define('pgadmin.node.table', [
         },{
           id: 'fillfactor', label: gettext('Fill factor'), type: 'int',
           mode: ['create', 'edit'], min: 10, max: 100,
-          disabled: 'inSchema', group: gettext('advanced'),
+          group: gettext('advanced'),
+          disabled: function(m) {
+            if(m.get('is_partitioned')) {
+              return true;
+            }
+            return m.inSchema();
+          },
         },{
           id: 'relhasoids', label: gettext('Has OIDs?'), cell: 'switch',
           type: 'switch', mode: ['properties', 'create', 'edit'],
@@ -904,10 +892,11 @@ define('pgadmin.node.table', [
             return false;
           },
           disabled: function(m) {
-            if (!m.isNew() || !m.get('is_partitioned'))
+            if (!m.get('is_partitioned'))
               return true;
             return false;
           },
+          readonly: function(m) {return !m.isNew();},
         },{
           id: 'partition_keys', label:gettext('Partition Keys'),
           model: Backform.PartitionKeyModel,
@@ -1016,7 +1005,7 @@ define('pgadmin.node.table', [
           editable: true, type: 'collection',
           group: 'partition', mode: ['edit', 'create'],
           deps: ['is_partitioned', 'partition_type', 'typname'],
-          canEdit: false, canDelete: true,
+          canEdit: true, canDelete: true,
           customDeleteTitle: gettext('Detach Partition'),
           customDeleteMsg: gettext('Are you sure you wish to detach this partition?'),
           columns:['is_attach', 'partition_name', 'is_default', 'values_from', 'values_to', 'values_in', 'values_modulus', 'values_remainder'],

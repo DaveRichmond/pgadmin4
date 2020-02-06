@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -42,6 +42,7 @@ define('pgadmin.node.trigger', [
       sqlAlterHelp: 'sql-altertrigger.html',
       sqlCreateHelp: 'sql-createtrigger.html',
       dialogHelp: url_for('help.static', {'filename': 'trigger_dialog.html'}),
+      url_jump_after_node: 'schema',
       Init: function() {
         /* Avoid mulitple registration of menus */
         if (this.initialized)
@@ -184,7 +185,7 @@ define('pgadmin.node.trigger', [
           type: 'text', disabled: 'inSchema',
         },{
           id: 'oid', label: gettext('OID'), cell: 'string',
-          type: 'int', disabled: true, mode: ['properties'],
+          type: 'int', mode: ['properties'],
         },{
           id: 'is_enable_trigger', label: gettext('Trigger enabled?'),
           mode: ['edit', 'properties'], group: gettext('Definition'),
@@ -315,7 +316,7 @@ define('pgadmin.node.trigger', [
           id: 'tfunction', label: gettext('Trigger function'),
           type: 'text', disabled: 'inSchemaWithModelCheck',
           mode: ['create','edit', 'properties'], group: gettext('Definition'),
-          control: 'node-ajax-options', url: 'get_triggerfunctions',
+          control: 'node-ajax-options', url: 'get_triggerfunctions', url_jump_after_node: 'schema',
           cache_node: 'trigger_function',
         },{
           id: 'tgargs', label: gettext('Arguments'), cell: 'string',

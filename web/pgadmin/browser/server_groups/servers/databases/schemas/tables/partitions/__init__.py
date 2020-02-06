@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -24,6 +24,11 @@ from pgadmin.browser.collection import CollectionNodeModule
 from pgadmin.utils.ajax import make_json_response, precondition_required
 from config import PG_DEFAULT_DRIVER
 from pgadmin.browser.utils import PGChildModule
+from pgadmin.tools.schema_diff.node_registry import SchemaDiffRegistry
+from pgadmin.tools.schema_diff.directory_compare import compare_dictionaries,\
+    directory_diff
+from pgadmin.tools.schema_diff.model import SchemaDiffModel
+from pgadmin.tools.schema_diff.compare import SchemaDiffObjectCompare
 
 
 def backend_supported(module, manager, **kwargs):
@@ -148,11 +153,30 @@ class PartitionsModule(CollectionNodeModule):
         """
         return False
 
+    @property
+    def csssnippets(self):
+        """
+        Returns a snippet of css to include in the page
+        """
+        snippets = [
+            render_template(
+                "partitions/css/partition.css",
+                node_type=self.node_type,
+                _=gettext
+            )
+        ]
+
+        for submodule in self.submodules:
+            snippets.extend(submodule.csssnippets)
+
+        return snippets
+
 
 blueprint = PartitionsModule(__name__)
 
 
-class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings):
+class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
+                     SchemaDiffObjectCompare):
     """
     This class is responsible for generating routes for Partition node
 
@@ -188,7 +212,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings):
     operations = dict({
         'obj': [
             {'get': 'properties', 'delete': 'delete', 'put': 'update'},
-            {'get': 'list', 'post': 'create'}
+            {'get': 'list', 'post': 'create', 'delete': 'delete'}
         ],
         'delete': [{'delete': 'delete'}, {'delete': 'delete'}],
         'nodes': [{'get': 'nodes'}, {'get': 'nodes'}],
@@ -200,52 +224,31 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings):
 
     })
 
-    def children(self, **kwargs):
-        """Build a list of treeview nodes from the child nodes."""
+    # Schema Diff: Keys to ignore while comparing
+    keys_to_ignore = ['oid', 'schema', 'vacuum_table',
+                      'vacuum_toast', 'edit_types']
 
-        if 'sid' not in kwargs:
-            return precondition_required(
-                gettext('Required properties are missing.')
-            )
-
-        from pgadmin.utils.driver import get_driver
-        manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(
-            sid=kwargs['sid']
-        )
-
-        did = None
-        if 'did' in kwargs:
-            did = kwargs['did']
-
-        conn = manager.connection(did=did)
-
-        if not conn.connected():
-            return precondition_required(
-                gettext(
-                    "Connection to the server has been lost."
-                )
-            )
-
+    def get_children_nodes(self, manager, **kwargs):
         nodes = []
+        # treat partition table as normal table.
+        # replace tid with ptid and pop ptid from kwargs
+        if 'ptid' in kwargs:
+            ptid = kwargs.pop('ptid')
+            kwargs['tid'] = ptid
+
         for module in self.blueprint.submodules:
             if isinstance(module, PGChildModule):
                 if manager is not None and \
                         module.BackendSupported(manager, **kwargs):
-                    # treat partition table as normal table.
-                    # replace tid with ptid and pop ptid from kwargs
-                    if 'ptid' in kwargs:
-                        ptid = kwargs.pop('ptid')
-                        kwargs['tid'] = ptid
                     nodes.extend(module.get_nodes(**kwargs))
             else:
                 nodes.extend(module.get_nodes(**kwargs))
 
-        # Return sorted nodes based on label
-        return make_json_response(
-            data=sorted(
-                nodes, key=lambda c: c['label']
-            )
-        )
+        if manager is not None and \
+                self.blueprint.BackendSupported(manager, **kwargs):
+            nodes.extend(self.blueprint.get_nodes(**kwargs))
+
+        return nodes
 
     @BaseTableView.check_precondition
     def list(self, gid, sid, did, scid, tid):
@@ -295,18 +298,19 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings):
         """
         SQL = render_template(
             "/".join([self.partition_template_path, 'nodes.sql']),
-            scid=scid, tid=tid
+            scid=scid, tid=tid, ptid=ptid
         )
         status, rset = self.conn.execute_2darray(SQL)
         if not status:
             return internal_server_error(errormsg=rset)
 
         def browser_node(row):
+            icon = self.get_partition_icon_css_class(row)
             return self.blueprint.generate_browser_node(
                 row['oid'],
                 tid,
                 row['name'],
-                icon=self.get_icon_css_class({}),
+                icon=icon,
                 tigger_count=row['triggercount'],
                 has_enable_triggers=row['has_enable_triggers'],
                 is_partitioned=row['is_partitioned'],
@@ -368,6 +372,63 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings):
             gid, sid, did, scid, ptid, res)
 
     @BaseTableView.check_precondition
+    def fetch_objects_to_compare(self, sid, did, scid, tid, ptid=None):
+        """
+        This function will fetch the list of all the tables for
+        specified schema id.
+
+        :param sid: Server Id
+        :param did: Database Id
+        :param scid: Schema Id
+        :param tid: Table Id
+        :param ptif: Partition table Id
+        :return:
+        """
+        res = {}
+
+        if ptid:
+            SQL = render_template("/".join([self.partition_template_path,
+                                            'properties.sql']),
+                                  did=did, scid=scid, tid=tid,
+                                  ptid=ptid, datlastsysoid=self.datlastsysoid)
+            status, result = self.conn.execute_dict(SQL)
+            if not status:
+                current_app.logger.error(result)
+                return False
+
+            res = super(PartitionsView, self).properties(
+                0, sid, did, scid, ptid, result)
+
+        else:
+            SQL = render_template(
+                "/".join([self.partition_template_path, 'nodes.sql']),
+                scid=scid, tid=tid
+            )
+            status, partitions = self.conn.execute_2darray(SQL)
+            if not status:
+                current_app.logger.error(partitions)
+                return False
+
+            for row in partitions['rows']:
+                SQL = render_template("/".join([self.partition_template_path,
+                                                'properties.sql']),
+                                      did=did, scid=scid, tid=tid,
+                                      ptid=row['oid'],
+                                      datlastsysoid=self.datlastsysoid)
+                status, result = self.conn.execute_dict(SQL)
+
+                if not status:
+                    current_app.logger.error(result)
+                    return False
+
+                data = super(PartitionsView, self).properties(
+                    0, sid, did, scid, row['oid'], result, False
+                )
+                res[row['name']] = data
+
+            return res
+
+    @BaseTableView.check_precondition
     def sql(self, gid, sid, did, scid, tid, ptid):
         """
         This function will creates reverse engineered sql for
@@ -399,6 +460,62 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings):
 
         return BaseTableView.get_reverse_engineered_sql(self, did, scid, ptid,
                                                         main_sql, data)
+
+    @BaseTableView.check_precondition
+    def get_sql_from_diff(self, **kwargs):
+        """
+        This function will create sql on the basis the difference of 2 tables
+        """
+        data = dict()
+        res = None
+        sid = kwargs['sid']
+        did = kwargs['did']
+        scid = kwargs['scid']
+        tid = kwargs['tid']
+        ptid = kwargs['ptid']
+        diff_data = kwargs['diff_data'] if 'diff_data' in kwargs else None
+        json_resp = kwargs['json_resp'] if 'json_resp' in kwargs else True
+        diff_schema = kwargs['diff_schema'] if 'diff_schema' in kwargs else\
+            None
+
+        if diff_data:
+            SQL = render_template("/".join([self.partition_template_path,
+                                            'properties.sql']),
+                                  did=did, scid=scid, tid=tid,
+                                  ptid=ptid, datlastsysoid=self.datlastsysoid)
+            status, res = self.conn.execute_dict(SQL)
+            if not status:
+                return internal_server_error(errormsg=res)
+
+            SQL, name = self.get_sql(did, scid, ptid, diff_data, res)
+            SQL = re.sub('\n{2,}', '\n\n', SQL)
+            SQL = SQL.strip('\n')
+            return SQL
+        else:
+            main_sql = []
+
+            SQL = render_template("/".join([self.partition_template_path,
+                                            'properties.sql']),
+                                  did=did, scid=scid, tid=tid,
+                                  ptid=ptid, datlastsysoid=self.datlastsysoid)
+            status, res = self.conn.execute_dict(SQL)
+            if not status:
+                return internal_server_error(errormsg=res)
+
+            if len(res['rows']) == 0:
+                return gone(gettext(
+                    "The specified partitioned table could not be found."))
+
+            data = res['rows'][0]
+
+            if diff_schema:
+                data['schema'] = diff_schema
+                data['parent_schema'] = diff_schema
+
+            return BaseTableView.get_reverse_engineered_sql(self, did,
+                                                            scid, ptid,
+                                                            main_sql, data,
+                                                            False)
 
     @BaseTableView.check_precondition
     def detach(self, gid, sid, did, scid, tid, ptid):
@@ -501,7 +618,12 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings):
         data = dict()
         for k, v in request.args.items():
             try:
-                data[k] = json.loads(v, encoding='utf-8')
+                # comments should be taken as is because if user enters a
+                # json comment it is parsed by loads which should not happen
+                if k in ('description',):
+                    data[k] = v
+                else:
+                    data[k] = json.loads(v, encoding='utf-8')
             except (ValueError, TypeError, KeyError):
                 data[k] = v
 
@@ -543,7 +665,12 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings):
 
         for k, v in data.items():
             try:
-                data[k] = json.loads(v, encoding='utf-8')
+                # comments should be taken as is because if user enters a
+                # json comment it is parsed by loads which should not happen
+                if k in ('description',):
+                    data[k] = v
+                else:
+                    data[k] = json.loads(v, encoding='utf-8')
             except (ValueError, TypeError, KeyError):
                 data[k] = v
 
@@ -591,7 +718,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings):
             return internal_server_error(errormsg=str(e))
 
     @BaseTableView.check_precondition
-    def delete(self, gid, sid, did, scid, tid, ptid=None):
+    def delete(self, gid, sid, did, scid, tid, ptid=None, only_sql=False):
         """
         This function will delete the table object
 
@@ -646,5 +773,61 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings):
         except Exception as e:
             return internal_server_error(errormsg=str(e))
 
+    def ddl_compare(self, **kwargs):
+        """
+        This function will compare index properties and
+        return the difference of SQL
+        """
 
+        src_sid = kwargs.get('source_sid')
+        src_did = kwargs.get('source_did')
+        src_scid = kwargs.get('source_scid')
+        src_tid = kwargs.get('source_tid')
+        src_oid = kwargs.get('source_oid')
+        tar_sid = kwargs.get('target_sid')
+        tar_did = kwargs.get('target_did')
+        tar_scid = kwargs.get('target_scid')
+        tar_tid = kwargs.get('target_tid')
+        tar_oid = kwargs.get('target_oid')
+        comp_status = kwargs.get('comp_status')
+
+        source = ''
+        target = ''
+        diff = ''
+
+        status, target_schema = self.get_schema_for_schema_diff(tar_sid,
+                                                                tar_did,
+                                                                tar_scid
+                                                                )
+        if not status:
+            return internal_server_error(errormsg=target_schema)
+
+        if comp_status == SchemaDiffModel.COMPARISON_STATUS['source_only']:
+            diff = self.get_sql_from_diff(sid=src_sid,
+                                          did=src_did, scid=src_scid,
+                                          tid=src_tid, ptid=src_oid,
+                                          diff_schema=target_schema)
+
+        elif comp_status == SchemaDiffModel.COMPARISON_STATUS['target_only']:
+            SQL = render_template("/".join([self.partition_template_path,
+                                            'properties.sql']),
+                                  did=did, scid=scid, tid=tid,
+                                  ptid=ptid, datlastsysoid=self.datlastsysoid)
+            status, res = self.conn.execute_dict(SQL)
+
+            SQL = render_template(
+                "/".join([self.table_template_path, 'properties.sql']),
+                did=tar_did, scid=tar_scid, tid=tar_oid,
+                datlastsysoid=self.datlastsysoid
+            )
+            status, res = self.conn.execute_dict(SQL)
+            if status:
+                self.cmd = 'delete'
+                diff = super(PartitionsView, self).get_delete_sql(res)
+                self.cmd = None
+
+        return diff
+
+
+SchemaDiffRegistry(blueprint.node_type, PartitionsView, 'table')
 PartitionsView.register_node_view(blueprint)

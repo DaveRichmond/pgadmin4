@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -47,6 +47,7 @@ export class RestoreDialogWrapper extends DialogWrapper {
           name: 'dialog_help',
           type: 'button',
           label: gettext('Restore'),
+          'aria-label': gettext('Help'),
           url: url_for('help.static', {
             'filename': 'restore_dialog.html',
           }),

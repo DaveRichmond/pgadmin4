@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -18,7 +18,7 @@ const sourceDir = __dirname + '/pgadmin/static';
 const webpackShimConfig = require('./webpack.shim');
 const PRODUCTION = process.env.NODE_ENV === 'production';
 const OptimizeCssAssetsPlugin = require('optimize-css-assets-webpack-plugin');
-const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
+const TerserPlugin = require('terser-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const extractStyle = new MiniCssExtractPlugin({
   filename: '[name].css',
@@ -35,6 +35,7 @@ const devToolVal = PRODUCTION ? false : 'eval';
 const analyzerMode = process.env.ANALYZE=='true' ? 'static' : 'disabled';
 
 const outputPath = __dirname + '/pgadmin/static/js/generated';
+const pgadminThemesJson = __dirname + '/pgadmin/misc/themes/pgadmin.themes.json';
 
 // Expose libraries in app context so they need not to
 // require('libname') when used in a module
@@ -84,7 +85,6 @@ const bundleAnalyzer = new BundleAnalyzerPlugin({
   reportFilename: 'analyze_report.html',
 });
 
-let pgadminThemesJson = 'pgadmin.themes.json';
 const copyFiles = new CopyPlugin([
   pgadminThemesJson,
   {
@@ -356,6 +356,7 @@ module.exports = [{
     slickgrid: sourceDir + '/bundle/slickgrid.js',
     sqleditor: './pgadmin/tools/sqleditor/static/js/sqleditor.js',
     debugger_direct: './pgadmin/tools/debugger/static/js/direct.js',
+    schema_diff: './pgadmin/tools/schema_diff/static/js/schema_diff_hook.js',
     file_utils: './pgadmin/misc/file_manager/static/js/utility.js',
     'pgadmin.style': pgadminCssStyles,
     pgadmin: pgadminScssStyles,
@@ -492,7 +493,8 @@ module.exports = [{
         ',pgadmin.tools.import_export' +
         ',pgadmin.tools.debugger.controller' +
         ',pgadmin.tools.debugger.direct' +
-        ',pgadmin.node.pga_job',
+        ',pgadmin.node.pga_job' +
+        ',pgadmin.tools.schema_diff',
       },
     }, {
       test: require.resolve('snapsvg'),
@@ -518,13 +520,12 @@ module.exports = [{
     poll: 1000,
     ignored: /node_modules/,
   },
-  // Webpack 4: uglifyPlugin moved from plugins to optimization
   optimization: {
     minimizer: [
-      new UglifyJsPlugin({
+      new TerserPlugin({
         parallel: true,
         cache: true,
-        uglifyOptions: {
+        terserOptions: {
           compress: true,
           extractComments: true,
           output: {

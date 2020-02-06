@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -44,10 +44,28 @@ class TableAddTestCase(BaseTestGenerator):
                        'PPAS/PG 10.0 and below.'
               )
          ),
+        ('Create Multilevel Range partitioned table with subpartition table',
+         dict(url='/browser/table/obj/',
+              server_min_version=100000,
+              partition_type='range',
+              multilevel_partition=True,
+              skip_msg='Partitioned table are not supported by '
+                       'PPAS/PG 10.0 and below.'
+              )
+         ),
         ('Create List partitioned table with 2 partitions',
          dict(url='/browser/table/obj/',
               server_min_version=100000,
               partition_type='list',
+              skip_msg='Partitioned table are not supported by '
+                       'PPAS/PG 10.0 and below.'
+              )
+         ),
+        ('Create Multilevel List partitioned table with subpartition table',
+         dict(url='/browser/table/obj/',
+              server_min_version=100000,
+              partition_type='list',
+              multilevel_partition=True,
               skip_msg='Partitioned table are not supported by '
                        'PPAS/PG 10.0 and below.'
               )
@@ -170,6 +188,10 @@ class TableAddTestCase(BaseTestGenerator):
         self.table_name = "test_table_add_%s" % (str(uuid.uuid4())[1:8])
         # Get the common data
         data = tables_utils.get_table_common_data()
+        if self.server_information and \
+            'server_version' in self.server_information and \
+                self.server_information['server_version'] >= 120000:
+            data['spcname'] = None
         data.update({
             "name": self.table_name,
             "relowner": db_user,
@@ -201,63 +223,20 @@ class TableAddTestCase(BaseTestGenerator):
             data['partition_type'] = self.partition_type
             data['is_partitioned'] = True
             if self.partition_type == 'range':
-                data['partitions'] = \
-                    [{'values_from': "'2010-01-01'",
-                      'values_to': "'2010-12-31'",
-                      'is_attach': False,
-                      'partition_name': 'emp_2010'
-                      },
-                     {'values_from': "'2011-01-01'",
-                      'values_to': "'2011-12-31'",
-                      'is_attach': False,
-                      'partition_name': 'emp_2011'
-                      }]
                 if hasattr(self, 'is_default'):
-                    data['partitions'] = \
-                        [{'values_from': "'2010-01-01'",
-                          'values_to': "'2010-12-31'",
-                          'is_attach': False,
-                          'partition_name': 'emp_2010_def'
-                          },
-                         {'values_from': "'2011-01-01'",
-                          'values_to': "'2011-12-31'",
-                          'is_attach': False,
-                          'partition_name': 'emp_2011_def'
-                          },
-                         {'values_from': "",
-                          'values_to': "",
-                          'is_attach': False,
-                          'is_default': True,
-                          'partition_name': 'emp_2012_def'
-                          }]
-                data['partition_keys'] = \
-                    [{'key_type': 'column', 'pt_column': 'DOJ'}]
+                    tables_utils.get_range_partitions_data(data, 'Default')
+                elif hasattr(self, 'multilevel_partition'):
+                    tables_utils.get_range_partitions_data(
+                        data, None, True)
+                else:
+                    tables_utils.get_range_partitions_data(data)
             elif self.partition_type == 'list':
-                data['partitions'] = \
-                    [{'values_in': "'2012-01-01', '2012-12-31'",
-                      'is_attach': False,
-                      'partition_name': 'emp_2012'
-                      },
-                     {'values_in': "'2013-01-01', '2013-12-31'",
-                      'is_attach': False,
-                      'partition_name': 'emp_2013'
-                      }]
-                data['partition_keys'] = \
-                    [{'key_type': 'column', 'pt_column': 'DOJ'}]
+                if hasattr(self, 'multilevel_partition'):
+                    tables_utils.get_list_partitions_data(data, True)
+                else:
+                    tables_utils.get_list_partitions_data(data)
             else:
-                data['partitions'] = \
-                    [{'values_modulus': "24",
-                      'values_remainder': "3",
-                      'is_attach': False,
-                      'partition_name': 'emp_2016'
-                      },
-                     {'values_modulus': "8",
-                      'values_remainder': "2",
-                      'is_attach': False,
-                      'partition_name': 'emp_2017'
-                      }]
-                data['partition_keys'] = \
-                    [{'key_type': 'column', 'pt_column': 'empno'}]
+                tables_utils.get_hash_partitions_data(data)
 
         # Add table
         response = self.tester.post(

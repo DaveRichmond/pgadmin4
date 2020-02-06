@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -15,6 +15,8 @@ from flask import render_template
 
 from pgadmin.browser.collection import CollectionNodeModule
 from pgadmin.utils.ajax import internal_server_error
+from pgadmin.utils.driver import get_driver
+from config import PG_DEFAULT_DRIVER
 
 
 class SchemaChildModule(CollectionNodeModule):
@@ -144,7 +146,12 @@ class DataTypeReader:
                         # Max of integer value
                         max_val = 2147483647
                     else:
-                        max_val = 10
+                        # Max value is 6 for data type like
+                        # interval, timestamptz, etc..
+                        if typeval == 'D':
+                            max_val = 6
+                        else:
+                            max_val = 10
 
                 res.append({
                     'label': row['typname'], 'value': row['typname'],
@@ -206,7 +213,8 @@ class DataTypeReader:
 
         return length, precision, typeval
 
-    def get_full_type(self, nsp, typname, isDup, numdims, typmod):
+    @staticmethod
+    def get_full_type(nsp, typname, isDup, numdims, typmod):
         """
         Returns full type name with Length and Precision.
 
@@ -273,6 +281,10 @@ class DataTypeReader:
             elif name == 'interval':
                 _prec = 0
                 _len = typmod & 0xffff
+                # Max length for interval data type is 6
+                # If length is greater then 6 then set length to None
+                if _len > 6:
+                    _len = ''
                 length += str(_len)
             elif name == 'date':
                 # Clear length
@@ -330,6 +342,10 @@ class DataTypeReader:
                 from re import sub as sub_str
                 pattern = r'(\(\d+\))'
                 type_name = sub_str(pattern, '', type_name)
+        # We need special handling for interval types like
+        # interval hours to minute.
+        elif type_name.startswith("interval"):
+            type_name = 'interval'
 
         if is_array:
             type_name += "[]"
@@ -471,11 +487,50 @@ class VacuumSettings:
         * type - table/toast vacuum type
 
     """
+    vacuum_settings = dict()
 
     def __init__(self):
         pass
 
-    def get_vacuum_table_settings(self, conn):
+    def fetch_default_vacuum_settings(self, conn, sid, setting_type):
+        """
+        This function is used to fetch and cached the default vacuum settings
+        for specified server id.
+        :param conn: Connection Object
+        :param sid:  Server ID
+        :param setting_type: Type (table or toast)
+        :return:
+        """
+        if sid in VacuumSettings.vacuum_settings:
+            if setting_type in VacuumSettings.vacuum_settings[sid]:
+                return VacuumSettings.vacuum_settings[sid][setting_type]
+        else:
+            VacuumSettings.vacuum_settings[sid] = dict()
+
+        # returns an array of name & label values
+        vacuum_fields = render_template("vacuum_settings/vacuum_fields.json")
+        vacuum_fields = json.loads(vacuum_fields)
+
+        # returns an array of setting & name values
+        vacuum_fields_keys = "'" + "','".join(
+            vacuum_fields[setting_type].keys()) + "'"
+        SQL = render_template('vacuum_settings/sql/vacuum_defaults.sql',
+                              columns=vacuum_fields_keys)
+
+        status, res = conn.execute_dict(SQL)
+        if not status:
+            return internal_server_error(errormsg=res)
+
+        for row in res['rows']:
+            row_name = row['name']
+            row['name'] = vacuum_fields[setting_type][row_name][0]
+            row['label'] = vacuum_fields[setting_type][row_name][1]
+            row['column_type'] = vacuum_fields[setting_type][row_name][2]
+
+        VacuumSettings.vacuum_settings[sid][setting_type] = res['rows']
+        return VacuumSettings.vacuum_settings[sid][setting_type]
+
+    def get_vacuum_table_settings(self, conn, sid):
         """
         Fetch the default values for autovacuum
         fields, return an array of
@@ -484,31 +539,9 @@ class VacuumSettings:
           - setting
         values
         """
+        return self.fetch_default_vacuum_settings(conn, sid, 'table')
 
-        # returns an array of name & label values
-        vacuum_fields = render_template("vacuum_settings/vacuum_fields.json")
-
-        vacuum_fields = json.loads(vacuum_fields)
-
-        # returns an array of setting & name values
-        vacuum_fields_keys = "'" + "','".join(
-            vacuum_fields['table'].keys()) + "'"
-        SQL = render_template('vacuum_settings/sql/vacuum_defaults.sql',
-                              columns=vacuum_fields_keys)
-        status, res = conn.execute_dict(SQL)
-
-        if not status:
-            return internal_server_error(errormsg=res)
-
-        for row in res['rows']:
-            row_name = row['name']
-            row['name'] = vacuum_fields['table'][row_name][0]
-            row['label'] = vacuum_fields['table'][row_name][1]
-            row['column_type'] = vacuum_fields['table'][row_name][2]
-
-        return res
-
-    def get_vacuum_toast_settings(self, conn):
+    def get_vacuum_toast_settings(self, conn, sid):
         """
         Fetch the default values for autovacuum
         fields, return an array of
@@ -517,29 +550,7 @@ class VacuumSettings:
           - setting
         values
         """
-
-        # returns an array of name & label values
-        vacuum_fields = render_template("vacuum_settings/vacuum_fields.json")
-
-        vacuum_fields = json.loads(vacuum_fields)
-
-        # returns an array of setting & name values
-        vacuum_fields_keys = "'" + "','".join(
-            vacuum_fields['toast'].keys()) + "'"
-        SQL = render_template('vacuum_settings/sql/vacuum_defaults.sql',
-                              columns=vacuum_fields_keys)
-        status, res = conn.execute_dict(SQL)
-
-        if not status:
-            return internal_server_error(errormsg=res)
-
-        for row in res['rows']:
-            row_name = row['name']
-            row['name'] = vacuum_fields['toast'][row_name][0]
-            row['label'] = vacuum_fields['toast'][row_name][1]
-            row['column_type'] = vacuum_fields['table'][row_name][2]
-
-        return res
+        return self.fetch_default_vacuum_settings(conn, sid, 'toast')
 
     def parse_vacuum_data(self, conn, result, type):
         """
@@ -553,47 +564,46 @@ class VacuumSettings:
         * type - table/toast vacuum type
         """
 
-        # returns an array of name & label values
-        vacuum_fields = render_template("vacuum_settings/vacuum_fields.json")
+        vacuum_settings_tmp = self.fetch_default_vacuum_settings(
+            conn, self.manager.sid, type)
 
-        vacuum_fields = json.loads(vacuum_fields)
+        for row in vacuum_settings_tmp:
+            row_name = row['name']
+            if type is 'toast':
+                row_name = 'toast_{0}'.format(row['name'])
+            if row_name in result and result[row_name] is not None:
+                if row['column_type'] == 'number':
+                    value = float(result[row_name])
+                else:
+                    value = int(result[row_name])
+                row['value'] = value
+            else:
+                if 'value' in row:
+                    row.pop('value')
 
-        # returns an array of setting & name values
-        vacuum_fields_keys = "'" + "','".join(
-            vacuum_fields[type].keys()) + "'"
-        SQL = render_template('vacuum_settings/sql/vacuum_defaults.sql',
-                              columns=vacuum_fields_keys)
-        status, res = conn.execute_dict(SQL)
+        return vacuum_settings_tmp
 
-        if not status:
-            return internal_server_error(errormsg=res)
 
-        if type is 'table':
-            for row in res['rows']:
-                row_name = row['name']
-                row['name'] = vacuum_fields[type][row_name][0]
-                row['label'] = vacuum_fields[type][row_name][1]
-                row['column_type'] = vacuum_fields[type][row_name][2]
-                if result[row['name']] is not None:
-                    if row['column_type'] == 'number':
-                        value = float(result[row['name']])
-                    else:
-                        value = int(result[row['name']])
-                    row['value'] = row['setting'] = value
+def get_schema(sid, did, scid):
+    """
+    This function will return the schema name.
+    """
 
-        elif type is 'toast':
-            for row in res['rows']:
-                row_old_name = row['name']
-                row_name = 'toast_{0}'.format(
-                    vacuum_fields[type][row_old_name][0])
-                row['name'] = vacuum_fields[type][row_old_name][0]
-                row['label'] = vacuum_fields[type][row_old_name][1]
-                row['column_type'] = vacuum_fields[type][row_old_name][2]
-                if result[row_name] and result[row_name] is not None:
-                    if row['column_type'] == 'number':
-                        value = float(result[row_name])
-                    else:
-                        value = int(result[row_name])
-                    row['value'] = row['setting'] = value
+    driver = get_driver(PG_DEFAULT_DRIVER)
+    manager = driver.connection_manager(sid)
+    conn = manager.connection(did=did)
 
-        return res['rows']
+    ver = manager.version
+    server_type = manager.server_type
+
+    # Fetch schema name
+    status, schema_name = conn.execute_scalar(
+        render_template("/".join(['schemas',
+                                  '{0}/#{1}#'.format(server_type,
+                                                     ver),
+                                  'sql/get_name.sql']),
+                        conn=conn, scid=scid
+                        )
+    )
+
+    return status, schema_name

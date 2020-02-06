@@ -10,6 +10,14 @@
   cursor: pointer;
 }
 
+.backgrid .ascending .sort-caret {
+    border-bottom-color: $color-fg;
+}
+
+.backgrid .descending .sort-caret {
+    border-top-color: $color-fg;
+}
+
 .backgrid.backgrid-striped tbody {
   & tr:nth-child(even) {
     background: $table-bg;
@@ -80,8 +88,8 @@
 
 .backgrid thead td,
 .backgrid thead th{
-  background: $color-bg;
-  background-color: $color-bg !important;
+  background: $table-bg;
+  background-color: $table-bg !important;
   text-align: left;
 }
 
@@ -139,10 +147,6 @@ table.backgrid {
   color:  $color-gray-dark;
   font-size: 14px;
   font-weight: normal;
-}
-
-span.form-control:disabled {
-  @extend .form-control:disabled
 }
 
 .subnode {
@@ -203,7 +207,7 @@ span.form-control:disabled {
 }
 
 .subnode-header {
-    background-color: $color-bg;
+    background-color: $header-bg;
     color: $color-fg;
     border-bottom: $panel-border;
 }
@@ -290,10 +294,21 @@ table.backgrid {
 
   & td.editor {
     background-color: $color-bg !important;
+    color: $color-fg !important;
+
+    & input {
+        color: $color-fg !important;
+    }
   }
 
   & td.edit-cell.editor:focus {
     outline: $input-focus-border-color auto 5px !important;
+  }
+
+  & td.select-cell.editor select{
+    outline: none !important;
+    height: 100% !important;
+    width: 100% !important;
   }
 
   tr.editor-row  {

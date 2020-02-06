@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -12,7 +12,7 @@
 
 export const QuerySources = {
   EXECUTE: {
-    ICON_CSS_CLASS: 'fa fa-bolt',
+    ICON_CSS_CLASS: 'fa fa-play',
   },
   EXPLAIN: {
     ICON_CSS_CLASS: 'fa fa-hand-pointer-o',

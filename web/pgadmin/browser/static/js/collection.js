@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -57,7 +57,7 @@ define([
               name: 'show_query_tool', node: this.type, module: this,
               applies: ['context'], callback: 'show_query_tool',
               priority: 998, label: gettext('Query Tool...'),
-              icon: 'fa fa-bolt',
+              icon: 'pg-font-icon icon-query-tool',
             }]);
           }
         }
@@ -99,7 +99,7 @@ define([
                   '<button tabindex="0" type="<%= type %>" ',
                   'class="btn <%=extraClasses.join(\' \')%>"',
                   '<% if (disabled) { %> disabled="disabled"<% } %> title="<%-tooltip%>">',
-                  '<span class="<%= icon %>"></span><% if (label != "") { %>&nbsp;<%-label%><% } %></button>',
+                  '<span class="<%= icon %>" role="img"></span><% if (label != "") { %>&nbsp;<%-label%><% } %><span class="sr-only"><%-tooltip%></span></button>',
                 ].join(' '));
               if (location == 'header') {
                 btnGroup.appendTo(that.header);
@@ -165,9 +165,9 @@ define([
 
                 // canDrop can be set to false for individual row from the server side to disable the checkbox
                 if ('canDrop' in model && model.canDrop === false)
-                  this.$el.empty().append('<input tabindex="-1" type="checkbox" disabled="disabled"/>');
+                  this.$el.empty().append('<input tabindex="-1" type="checkbox" title="Select" disabled="disabled"/>');
                 else
-                  this.$el.empty().append('<input tabindex="-1" type="checkbox" />');
+                  this.$el.empty().append('<input tabindex="-1" type="checkbox" title="Select" />');
 
                 this.delegateEvents();
                 return this;
@@ -216,7 +216,7 @@ define([
         j.empty();
         j.data('obj-view', gridView);
 
-        $msgContainer = '<div class="alert alert-info pg-panel-message pg-panel-properties-message">' +
+        $msgContainer = '<div role="status" class="alert alert-info pg-panel-message pg-panel-properties-message">' +
          gettext('Retrieving data from the server...') + '</div>';
 
         $msgContainer = $($msgContainer).appendTo(j);

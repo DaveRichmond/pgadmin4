@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -169,7 +169,7 @@ define(['sources/gettext', 'underscore', 'jquery', 'backbone', 'backform',
         );
       },
     },{
-      id: 'grantor', label: gettext('Grantor'), type: 'text', disabled: true,
+      id: 'grantor', label: gettext('Grantor'), type: 'text', readonly: true,
       cell: 'node-list-by-name', node: 'role',
     }],
 
@@ -353,7 +353,7 @@ define(['sources/gettext', 'underscore', 'jquery', 'backbone', 'backform',
         this.$el.attr('target', this.elId);
 
         var collection = this.model.get(this.column.get('name')),
-          tbl = $('<table></table>').appendTo(this.$el),
+          tbl = $('<table aria-label='+this.column.get('label')+'></table>').appendTo(this.$el),
           self = this,
           privilege = true, with_grant = true;
 

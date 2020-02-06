@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -586,7 +586,7 @@ define([
                     label: gettext('Users'),
                     url: url_for(
                       'help.static', {
-                        'filename': 'pgadmin_user.html',
+                        'filename': 'user_management.html',
                       }),
                   },
                 }, {
@@ -636,7 +636,7 @@ define([
                   '        <div class="pr-2"> ',
                   '          <i class="fa fa-exclamation-triangle text-danger" aria-hidden="true"></i> ',
                   '        </div> ',
-                  '        <div class="alert-text"></div> ',
+                  '        <div class="alert-text" role="status></div> ',
                   '        <div class="ml-auto close-error-bar"> ',
                   '          <a class="close-error fa fa-times text-danger"></a> ',
                   '        </div> ',
@@ -777,7 +777,7 @@ define([
                   add_title: gettext('Add new user'),
                 },
                 $gridBody = $('<div></div>', {
-                  class: 'user_container',
+                  class: 'user_container flex-grow-1',
                 });
 
               $.ajax({
@@ -801,12 +801,12 @@ define([
                 row: UserRow,
                 columns: gridSchema.columns,
                 collection: userCollection,
-                className: 'backgrid table table-bordered table-noouter-border table-hover',
+                className: 'backgrid table table-bordered table-noouter-border table-bottom-border table-hover',
               });
 
               $gridBody.append(view.render().$el[0]);
 
-              this.$content = $('<div class=\'user_management object subnode subnode-noouter-border\'></div>').append(
+              this.$content = $('<div class=\'user_management object subnode subnode-noouter-border d-flex flex-column\'></div>').append(
                 headerTpl(data)).append($gridBody).append($statusBar);
 
               this.elements.content.appendChild(this.$content[0]);

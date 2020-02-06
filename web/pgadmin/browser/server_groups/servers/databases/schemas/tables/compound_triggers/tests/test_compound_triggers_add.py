@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -63,12 +63,9 @@ class CompoundTriggersAddTestCase(BaseTestGenerator):
              url='/browser/compound_trigger/obj/',
              data={
                  "prosrc": "var varchar2(20) := 'Global_var';\n\n"
-                           "BEFORE STATEMENT IS\nBEGIN\n    "
-                           "DBMS_OUTPUT.PUT_LINE('Before Statement: ' || var)"
-                           ";\n    var := 'BEFORE STATEMENT';\nEND;\n\nBEFORE "
-                           "EACH ROW IS\nBEGIN\n    DBMS_OUTPUT.PUT_LINE('"
-                           "Before each row: ' || var);\n    var := 'BEFORE "
-                           "EACH ROW';\nEND;",
+                           "BEFORE EACH ROW IS\nBEGIN\n    "
+                           "DBMS_OUTPUT.PUT_LINE('Before each row: ' || var)"
+                           ";\n    var := 'EACH ROW';\nEND;",
                  "evnt_insert": True,
                  "evnt_update": False,
                  "evnt_delete": False,

@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -69,6 +69,7 @@ if not os.path.isfile(config.SQLITE_PATH):
 ##########################################################################
 class ReverseProxied(object):
     def __init__(self, app):
+        self.app = app
         # https://werkzeug.palletsprojects.com/en/0.15.x/middleware/proxy_fix/#module-werkzeug.middleware.proxy_fix
         try:
             from werkzeug.middleware.proxy_fix import ProxyFix
@@ -128,15 +129,15 @@ if config.DEBUG:
 # runtime if we're running in desktop mode, otherwise we'll just use the
 # Flask default.
 PGADMIN_RUNTIME = False
-if 'PGADMIN_PORT' in globals():
+if 'PGADMIN_INT_PORT' in globals():
     app.logger.debug(
         'Running under the desktop runtime, port: %s',
-        globals()['PGADMIN_PORT']
+        globals()['PGADMIN_INT_PORT']
     )
-    server_port = int(globals()['PGADMIN_PORT'])
+    server_port = int(globals()['PGADMIN_INT_PORT'])
     PGADMIN_RUNTIME = True
-elif 'PGADMIN_PORT' in os.environ:
-    port = os.environ['PGADMIN_PORT']
+elif 'PGADMIN_INT_PORT' in os.environ:
+    port = os.environ['PGADMIN_INT_PORT']
     app.logger.debug(
         'Not running under the desktop runtime, port: %s',
         port
@@ -153,11 +154,11 @@ else:
 app.PGADMIN_RUNTIME = PGADMIN_RUNTIME
 
 # Set the key if appropriate
-if 'PGADMIN_KEY' in globals():
-    app.PGADMIN_KEY = globals()['PGADMIN_KEY']
-    app.logger.debug("Desktop security key: %s" % app.PGADMIN_KEY)
+if 'PGADMIN_INT_KEY' in globals():
+    app.PGADMIN_INT_KEY = globals()['PGADMIN_INT_KEY']
+    app.logger.debug("Desktop security key: %s" % app.PGADMIN_INT_KEY)
 else:
-    app.PGADMIN_KEY = ''
+    app.PGADMIN_INT_KEY = ''
 
 # Output a startup message if we're not under the runtime and startup.
 # If we're under WSGI, we don't need to worry about this

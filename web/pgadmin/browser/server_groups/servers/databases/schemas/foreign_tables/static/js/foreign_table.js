@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -573,7 +573,7 @@ define('pgadmin.node.foreign_table', [
         },{
           id: 'ftsrvname', label: gettext('Foreign server'), cell: 'string', control: 'node-ajax-options',
           type: 'text', group: gettext('Definition'), url: 'get_foreign_servers',
-          disabled: function(m) { return !m.isNew(); }, cache_node: 'database',
+          readonly: function(m) { return !m.isNew(); }, cache_node: 'database',
         },{
           id: 'inherits', label: gettext('Inherits'), group: gettext('Definition'),
           type: 'array', min_version: 90500, control: NodeAjaxOptionsMultipleControl,

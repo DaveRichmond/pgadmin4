@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -127,8 +127,8 @@ define([
               alertMessage = '\
                   <div class="media text-danger text-14">\
                     <div class="media-body media-middle">\
-                      <div class="alert-text">' + promptmsg + '</div><br/>\
-                      <div class="alert-text">' + gettext('Click for details.') + '</div>\
+                      <div class="alert-text" role="alert">' + promptmsg + '</div><br/>\
+                      <div class="alert-text" role="alert">' + gettext('Click for details.') + '</div>\
                     </div>\
                   </div>';
             }
@@ -172,8 +172,8 @@ define([
           var alertMessage = '\
                 <div class="media text-danger text-14">\
                   <div class="media-body media-middle">\
-                    <div class="alert-text">' + gettext('INTERNAL SERVER ERROR') + '</div><br/>\
-                    <div class="alert-text">' + gettext('Click for details.') + '</div>\
+                    <div class="alert-text" role="alert">' + gettext('INTERNAL SERVER ERROR') + '</div><br/>\
+                    <div class="alert-text" role="alert">' + gettext('Click for details.') + '</div>\
                   </div>\
                 </div>';
 
@@ -260,6 +260,8 @@ define([
       this.elements.dialog.classList.add('pg-el-container');
       $(this.elements.commands.close).attr('title', gettext('Close'));
       $(this.elements.commands.maximize).attr('title', gettext('Maximize'));
+      $(this.elements.commands.close).attr('aria-label', gettext('Close'));
+      $(this.elements.commands.maximize).attr('aria-label', gettext('Maximize'));
       alertifyDialogResized.apply(this, arguments);
     });
     this.set('onresize', alertifyDialogStartResizing.bind(this, true));
@@ -422,7 +424,7 @@ define([
         <div class="pr-2">
           <i class="fa fa-check text-success" aria-hidden="true"></i>
         </div>
-        <div class="text-body">${message}</div>
+        <div class="text-body" role="status">${message}</div>
       </div>`;
       return alertify.orig_success(alertMessage, timeout, callback);
     },
@@ -432,7 +434,7 @@ define([
         <div class="pr-2">
           <i class="fa fa-exclamation-triangle text-danger" aria-hidden="true"></i>
         </div>
-        <div class="text-body">${message}</div>
+        <div class="text-body" role="status">${message}</div>
       </div>`;
       return alertify.orig_error(alertMessage, timeout, callback);
     },
@@ -442,7 +444,7 @@ define([
         <div class="mr-3">
           <i class="fa fa-info text-primary" aria-hidden="true"></i>
         </div>
-        <div class="text-body">${message}</div>
+        <div class="text-body" role="status">${message}</div>
       </div>`;
       var alert = alertify.notify(alertMessage, timeout);
       return alert;
@@ -455,6 +457,14 @@ define([
       $(this.elements.commands.close).attr('title', gettext('Close'));
       $(this.elements.commands.maximize).attr('title', gettext('Maximize'));
       $(this.elements.content).addClass('ajs-wrap-text');
+      $(this.elements.header).attr('id', 'confirm-dialog-header');
+      $(this.elements.body).attr('id', 'confirm-dialog-body');
+      $(this.elements.dialog).attr({
+        role: 'alertdialog',
+        'aria-modal': 'true',
+        'aria-labelledby': 'confirm-dialog-header',
+        'aria-describedby': 'confirm-dialog-body',
+      });
     },
     reverseButtons: true,
   });
@@ -463,13 +473,26 @@ define([
     reverseButtons: true,
   });
 
+  alertify.alert().set({
+    onshow:function() {
+      $(this.elements.header).attr('id', 'alert-dialog-header');
+      $(this.elements.body).attr('id', 'alert-dialog-body');
+      $(this.elements.modal).attr({
+        role: 'alertdialog',
+        'aria-modal': 'true',
+        'aria-labelledby': 'alert-dialog-header',
+        'aria-describedby': 'alert-dialog-body',
+      });
+    },
+  });
+
   /* Suppress the enter key events occurring from select2 boxes
    * so that the dialog does not close.
    * Alertify listens to keyup events on the body element unfortunately
    * instead of alertify dialog
    */
   $('body').off('keyup').on('keyup', function(ev){
-    if(ev.which === 13) {
+    if(ev.which === 13 || ev.which === 27) {
       let suppressForClasses = ['select2-selection', 'select2-search__field'];
       let $el = $(ev.target);
       for(let i=0; i<suppressForClasses.length; i++){

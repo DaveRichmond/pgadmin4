@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2019, The pgAdmin Development Team
+# Copyright (C) 2013 - 2020, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -55,15 +55,6 @@ class TestUtils(BaseTestGenerator):
                 subject.table_template_path, 'tables/sql/#gpdb#10#')
             self.assertEqual(
                 subject.data_type_template_path, 'datatype/sql/#gpdb#10#')
-            self.assertEqual(
-                subject.check_constraint_template_path,
-                'check_constraint/sql/#gpdb#10#')
-            self.assertEqual(
-                subject.exclusion_constraint_template_path,
-                'exclusion_constraint/sql/#gpdb#10#')
-            self.assertEqual(
-                subject.foreign_key_template_path,
-                'foreign_key/sql/#gpdb#10#')
             self.assertEqual(
                 subject.index_template_path,
                 'indexes/sql/#gpdb#10#')

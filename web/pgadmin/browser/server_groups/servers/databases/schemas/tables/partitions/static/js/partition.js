@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -49,8 +49,7 @@ function(
       sqlCreateHelp: 'sql-createtable.html',
       dialogHelp: url_for('help.static', {'filename': 'table_dialog.html'}),
       hasScriptTypes: ['create'],
-      height: '95%',
-      width: '85%',
+      width: '650px',
       Init: function() {
         /* Avoid mulitple registration of menus */
         if (this.initialized)
@@ -402,7 +401,7 @@ function(
 
             return false;
           },
-          disabled: function(m) {
+          readonly: function(m) {
             if (!m.isNew())
               return true;
             return false;
@@ -563,7 +562,9 @@ function(
             control: 'unique-col-collection',
             columns : ['name', 'columns'],
             canAdd: function(m) {
-              if (m.get('is_partitioned')) {
+              if (m.get('is_partitioned') && !_.isUndefined(m.top.node_info) && !_.isUndefined(m.top.node_info.server)
+              && !_.isUndefined(m.top.node_info.server.version) &&
+                m.top.node_info.server.version < 110000) {
                 setTimeout(function() {
                   var coll = m.get('primary_key');
                   coll.remove(coll.filter(function() { return true; }));
@@ -715,11 +716,17 @@ function(
         },{
           id: 'fillfactor', label: gettext('Fill factor'), type: 'int',
           mode: ['create', 'edit'], min: 10, max: 100,
-          disabled: 'inSchema',group: gettext('Advanced'),
+          group: gettext('Advanced'),
+          disabled: function(m) {
+            if(m.get('is_partitioned')) {
+              return true;
+            }
+            return m.inSchema();
+          },
         },{
           id: 'relhasoids', label: gettext('Has OIDs?'), cell: 'switch',
           type: 'switch', mode: ['properties', 'create', 'edit'],
-          disabled: 'inSchema', group: gettext('Advanced'),
+          disabled: true, group: gettext('Advanced'),
         },{
           id: 'relpersistence', label: gettext('Unlogged?'), cell: 'switch',
           type: 'switch', mode: ['properties', 'create', 'edit'],
@@ -792,10 +799,11 @@ function(
 
             return false;
           },
+          readonly: function(m) {
+            return !m.isNew();
+          },
           disabled: function(m) {
-            if (!m.isNew() || !m.get('is_partitioned'))
-              return true;
-            return false;
+            return !m.get('is_partitioned');
           },
         },{
           id: 'partition_keys', label:gettext('Partition Keys'),
@@ -862,10 +870,10 @@ function(
           editable: true, type: 'collection',
           group: 'partition', mode: ['edit', 'create'],
           deps: ['is_partitioned', 'partition_type'],
-          canEdit: false, canDelete: true,
+          canEdit: true, canDelete: true,
           customDeleteTitle: gettext('Detach Partition'),
           customDeleteMsg: gettext('Are you sure you wish to detach this partition?'),
-          columns:['is_attach', 'partition_name', 'values_from', 'values_to', 'values_in'],
+          columns:['is_attach', 'partition_name', 'is_default', 'values_from', 'values_to', 'values_in', 'values_modulus', 'values_remainder'],
           control: Backform.SubNodeCollectionControl.extend({
             row: Backgrid.PartitionRow,
             initialize: function() {
@@ -930,10 +938,30 @@ function(
         },{
           id: 'partition_note', label: gettext('Partition'),
           type: 'note', group: 'partition',
-          text: gettext('The control above is used to Create/Attach/Detach partitions.<br>' +
-            '<ul><li>Create Mode: User will be able to create N number of partitions. Mode switch control is disabled in this scenario.</li>' +
-            '<li>Edit Mode: User will be able to create/attach/detach N number of partitions. ' +
-            'In attach mode there will be list of suitable tables to be attached.</li></ul>'),
+          text: [
+            '<ul><li>',
+            '<strong>', gettext('Create a table: '), '</strong>',
+            gettext('User can create multiple partitions while creating new partitioned table. Operation switch is disabled in this scenario.'),
+            '</li><li>',
+            '<strong>', gettext('Edit existing table: '), '</strong>',
+            gettext('User can create/attach/detach multiple partitions. In attach operation user can select table from the list of suitable tables to be attached.'),
+            '</li><li>',
+            '<strong>', gettext('Default: '), '</strong>',
+            gettext('The default partition can store rows that do not fall into any existing partition’s range or list.'),
+            '</li><li>',
+            '<strong>', gettext('From/To/In input: '), '</strong>',
+            gettext('From/To/In input: Values for these fields must be quoted with single quote. For more than one partition key values must be comma(,) separated.'),
+            '</li><li>',
+            '<strong>', gettext('Example: From/To: '), '</strong>',
+            gettext('Enabled for range partition. Consider partitioned table with multiple keys of type Integer, then values should be specified like \'100\',\'200\'.'),
+            '</li><li>',
+            '<strong>', gettext('In: '), '</strong>',
+            gettext('Enabled for list partition. Values must be comma(,) separated and quoted with single quote.'),
+            '</li><li>',
+            '<strong>', gettext('Modulus/Remainder: '), '</strong>',
+            gettext('Enabled for hash partition.'),
+            '</li></ul>',
+          ].join(''),
           visible: function(m) {
             if(!_.isUndefined(m.node_info) && !_.isUndefined(m.node_info.server)
               && !_.isUndefined(m.node_info.server.version) &&

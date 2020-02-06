@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -211,7 +211,7 @@ _.extend(pgBrowser.browserTreeState, {
       node = data && pgBrowser.Nodes[data._type],
       treeHierarchy = node && node.getTreeNodeHierarchy(item);
 
-    if (!pgBrowser.tree.hasParent(item) || !(self.parent in treeHierarchy))
+    if (treeHierarchy === null || !pgBrowser.tree.hasParent(item) || !(self.parent in treeHierarchy))
       return;
 
     let topParent = treeHierarchy && treeHierarchy[self.parent]['_id'],
@@ -269,7 +269,7 @@ _.extend(pgBrowser.browserTreeState, {
       treeHierarchy = node && node.getTreeNodeHierarchy(item);
 
 
-    if (!pgBrowser.tree.hasParent(item) || !(self.parent in treeHierarchy))
+    if (treeHierarchy === null || !pgBrowser.tree.hasParent(item) || !(self.parent in treeHierarchy))
       return;
 
     // If the server node is open then only we should populate the tree

@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2019, The pgAdmin Development Team
+// Copyright (C) 2013 - 2020, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -49,7 +49,7 @@ export function setQueryToolDockerTitle(panel, is_query_tool, panel_title, is_fi
   } else {
     // Query tool titles
     panel_tooltip = gettext('Query Tool - ') + panel_title;
-    panel_icon = 'fa fa-bolt';
+    panel_icon = 'pg-font-icon icon-query-tool';
   }
 
   panel.title('<span title="'+ _.escape(panel_tooltip) +'">'+ _.escape(panel_title) +'</span>');
