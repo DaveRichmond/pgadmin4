@@ -103,7 +103,9 @@
                command.moveUp() || command.moveDown()) {
         e.preventDefault();
         e.stopPropagation();
-        this.model.trigger("backgrid:edited", this.model, this.column, command);
+        if(this.model) {
+          this.model.trigger("backgrid:edited", this.model, this.column, command);
+        }
       }
     },
 
@@ -122,7 +124,15 @@
        Renders a checkbox in a table cell.
     */
     render: function () {
-      this.$el.empty().append('<label class="sr-only">Select all</label><input tabindex="-1" type="checkbox" title="Select all"/>');
+      var id = 'selectall-' + _.uniqueId(this.column.get('name'));
+      this.$el.empty().append([
+        '<div class="custom-control custom-checkbox custom-checkbox-no-label">',
+        '  <input tabindex="-1" type="checkbox" class="custom-control-input" id="'+ id +'" />',
+        '  <label class="custom-control-label" for="'+ id +'">',
+        '    <span class="sr-only">Select All<span>',
+        '  </label>',
+        '</div>'
+      ].join('\n'));
       this.delegateEvents();
       return this;
     }
