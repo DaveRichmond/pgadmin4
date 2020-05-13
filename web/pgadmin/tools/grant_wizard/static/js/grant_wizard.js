@@ -251,7 +251,7 @@ define([
             DbObjectFilter: function(coll) {
               var clientSideFilter = this.clientSideFilter = new Backgrid.Extension.ClientSideFilter({
                 collection: coll,
-                placeholder: _('Search by object type or name'),
+                placeholder: gettext('Search by object type or name'),
 
                 // The model fields to search for matches
                 fields: ['object_type', 'name'],
@@ -428,34 +428,6 @@ define([
               });
 
             },
-            hooks: {
-              onshow: function() {
-                commonUtils.findAndSetFocus($(this.elements.body));
-                let self = this;
-                let containerFooter = $(this.elements.content).find('.wizard-buttons').find('.ml-auto');
-                //To get last header button
-                let lastHeaderButton = $(this.elements.content).find('.wizard-header').find('.ml-auto').find('button:first');
-
-                $(containerFooter).on('keydown', 'button', function(event) {
-                  if (!event.shiftKey && event.keyCode == 9 && $(this).nextAll('button:not([disabled])').length == 0) {
-                    // set focus back to first editable input element of current active tab once we cycle through all enabled buttons.
-                    let container = $(self.elements.content).find('.wizard-header');
-                    commonUtils.findAndSetFocus(container.find('button:not([disabled]):first'));
-                    return false;
-                  }
-                });
-
-                $(lastHeaderButton).on('keydown', function(event) {
-                  if (event.shiftKey && event.keyCode == 9) {
-                    // set focus back to first element of current active tab once we cycle through all enabled buttons.
-                    let container = $(self.elements.content).find('.wizard-footer');
-                    commonUtils.findAndSetFocus(container.find('button:not([disabled]):last'));
-                    return false;
-                  }
-                });
-
-              },
-            },
 
             prepare: function() {
               var that = this;
@@ -528,6 +500,7 @@ define([
 
               coll.sort();
               this.dbObjectFilter = this.DbObjectFilter(coll);
+              coll.fullCollection = this.dbObjectFilter.shadowCollection;
 
               /**
                 privArray holds objects selected which further helps
@@ -541,7 +514,6 @@ define([
               */
               coll.on('backgrid:selected', function(model, selected) {
                 model.set('selected', selected);
-
                 var object_type = model.get('object_type');
                 switch (object_type) {
                 case 'Function':
@@ -697,11 +669,11 @@ define([
               */
               var dbObjectTypePage = self.dbObjectTypePage = new pgBrowser.WizardPage({
                 id: 1,
-                page_title: _('Object Selection (step 1 of 3)'),
+                page_title: gettext('Object Selection (step 1 of 3)'),
                 disable_prev: true,
                 disable_next: true,
                 show_description: '',
-                show_progress_bar: _('Please wait while fetching records...'),
+                show_progress_bar: gettext('Please wait while fetching records...'),
                 model: newModel,
                 view: new(function() {
 
@@ -735,13 +707,13 @@ define([
                         $(`
                         <div class="db_objects_container pg-el-xs-12">
                           <div class="db_objects_header d-flex py-1">
-                            <div>${_('Please select the objects to grant privileges to from the list below.')}</div>
+                            <div>` + gettext('Please select the objects to grant privileges to from the list below.') + `</div>
                             <div class="db_objects_filter ml-auto">
                               <div class="input-group">
                                 <div class="input-group-prepend">
                                   <span class="input-group-text fa fa-search" id="labelSearch"></span>
                                 </div>
-                                <input type="search" class="form-control" id="txtGridSearch" placeholder="Search" aria-label="Search" aria-describedby="labelSearch">
+                                <input type="search" class="form-control" id="txtGridSearch" placeholder="` + gettext('Search') + '" aria-label="' + gettext('Search') + `" aria-describedby="labelSearch">
                               </div>
                             </div>
                           </div>
@@ -822,8 +794,8 @@ define([
               // Wizard for Privelege control
               var privilegePage = self.privilegePage = new pgBrowser.WizardPage({
                 id: 2,
-                page_title: _('Privilege Selection (step 2 of 3)'),
-                show_description: _('Please add the required privileges for the selected objects.'),
+                page_title: gettext('Privilege Selection (step 2 of 3)'),
+                show_description: gettext('Please add the required privileges for the selected objects.'),
                 disable_next: true,
                 model: newModel,
 
@@ -1021,7 +993,7 @@ define([
               //Create SqlField Object
               var sqlField = new Backform.Field({
                   id: 'sqltab',
-                  label: _('Sql Tab'),
+                  label: gettext('Sql Tab'),
 
                   /**
                     Extend 'SqlTabControl' to define new
@@ -1091,10 +1063,10 @@ define([
               // Wizard for SQL tab control
               var reviewSQLPage = self.reviewSQLPage = new pgBrowser.WizardPage({
                 id: 3,
-                page_title: _('Final (Review Selection) (step 3 of 3)'),
-                show_description: _('The SQL below will be executed on the ' +
+                page_title: gettext('Final (Review Selection) (step 3 of 3)'),
+                show_description: gettext('The SQL below will be executed on the ' +
                   'database server to grant the selected privileges. ' +
-                  'Please click on <b>Finish</b> to complete the process.'),
+                  'Please click on <strong>Finish</strong> to complete the process.'),
                 model: newModel,
                 view: new(function() {
 
@@ -1151,7 +1123,7 @@ define([
                 */
               self.wizard = new(pgBrowser.Wizard.extend({
                 options: {
-                  title: _('Grant Wizard'),
+                  title: gettext('Grant Wizard'),
                   /* Main Wizard Title */
                   width: '',
                   height: '',
@@ -1218,7 +1190,6 @@ define([
           };
         });
       }
-
       // Call Grant Wizard Dialog and set dimensions for wizard
       Alertify.wizardDialog(true).resizeTo(pgBrowser.stdW.lg,pgBrowser.stdH.lg);
     },

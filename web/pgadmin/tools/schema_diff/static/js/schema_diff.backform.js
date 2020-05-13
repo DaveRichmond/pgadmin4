@@ -63,6 +63,8 @@ let SchemaDiffSqlControl =
     },
     render: function() {
       let obj = Backform.SqlFieldControl.prototype.render.apply(this, arguments);
+
+      obj.sqlCtrl.setOption('readOnly', true);
       if(this.$el.find('.ddl-copy')) this.$el.find('.ddl-copy').on('click', this.copyData);
       return obj;
     },
@@ -287,11 +289,11 @@ let SchemaDiffHeaderView = Backform.Form.extend({
   },
   template: _.template(`
     <div class="row pgadmin-control-group">
-      <div class="col-1 control-label">Select Source</div>
+      <div class="col-1 control-label">` + gettext('Select Source') + `</div>
       <div class="col-6 source row"></div>
     </div>
     <div class="row pgadmin-control-group">
-      <div class="col-1 control-label">Select Target</div>
+      <div class="col-1 control-label">` + gettext('Select Target') + `</div>
       <div class="col-6 target row"></div>
       <div class="col-5 target-buttons">
           <div class="action-btns d-flex">
@@ -419,9 +421,9 @@ let SchemaDiffFooterView = Backform.Form.extend({
   template: {
     'content': _.template(`
        <div class="pg-el-sm-12 row <%=contentClass%>">
-                  <div class="pg-el-sm-4 ddl-source">Source</div>
-                  <div class="pg-el-sm-4 ddl-target">Target</div>
-                  <div class="pg-el-sm-4 ddl-diff">Difference
+                  <div class="pg-el-sm-4 ddl-source">` + gettext('Source') + `</div>
+                  <div class="pg-el-sm-4 ddl-target">` + gettext('Target') + `</div>
+                  <div class="pg-el-sm-4 ddl-diff">` + gettext('Difference') + `
                   </div>
               </div>
       </div>

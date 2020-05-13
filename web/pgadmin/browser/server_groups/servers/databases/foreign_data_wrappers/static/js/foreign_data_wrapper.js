@@ -37,7 +37,7 @@ define('pgadmin.node.foreign_data_wrapper', [
       if (_.isUndefined(this.get('fdwoption')) ||
             _.isNull(this.get('fdwoption')) ||
             String(this.get('fdwoption')).replace(/^\s+|\s+$/g, '') == '') {
-        var msg = 'Please enter an option name';
+        var msg = gettext('Please enter an option name.');
         this.errorModel.set('fdwoption', msg);
         return msg;
       } else {
@@ -108,6 +108,7 @@ define('pgadmin.node.foreign_data_wrapper', [
         defaults: {
           name: undefined,
           fdwowner: undefined,
+          is_sys_obj: undefined,
           comment: undefined,
           fdwvalue: undefined,
           fdwhan: undefined,
@@ -146,6 +147,9 @@ define('pgadmin.node.foreign_data_wrapper', [
         },{
           id: 'fdwhan', label: gettext('Handler'), type: 'text', control: 'node-ajax-options',
           group: gettext('Definition'), mode: ['edit', 'create', 'properties'], url:'get_handlers',
+        },{
+          id: 'is_sys_obj', label: gettext('System foreign data wrapper?'),
+          cell:'boolean', type: 'switch', mode: ['properties'],
         },{
           id: 'description', label: gettext('Comment'), cell: 'string',
           type: 'multiline',

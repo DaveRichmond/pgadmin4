@@ -16,39 +16,29 @@ if [ ! -f ${SOURCEDIR}/pkg/mac/framework.conf ]; then
     exit 1
 fi
 
-export SYSTEM_PYTHON=0
 if [ "x${PYTHON_HOME}" == "x" ]; then
-    echo "PYTHON_HOME not set. Setting it to default"
-    export PYTHON_HOME=/System/Library/Frameworks/Python.framework/Versions/2.7
-    export PYTHON_VERSION=27
-    export SYSTEM_PYTHON=1
+    echo "PYTHON_HOME not set. It must be set, and pointing to a Python 3 installation."
+    exit 1
 fi
 
 # Check if Python is working and calculate PYTHON_VERSION
-if ${PYTHON_HOME}/bin/python2 -V > /dev/null 2>&1; then
-    export PYTHON_VERSION=`${PYTHON_HOME}/bin/python2 -V 2>&1 | awk '{print $2}' | cut -d"." -f1-2 | sed 's/\.//'`
-elif ${PYTHON_HOME}/bin/python3 -V > /dev/null 2>&1; then
+if ${PYTHON_HOME}/bin/python3 -V > /dev/null 2>&1; then
     export PYTHON_VERSION=`${PYTHON_HOME}/bin/python3 -V 2>&1 | awk '{print $2}' | cut -d"." -f1-2 | sed 's/\.//'`
 else
     echo "Error: Python installation missing!"
     exit 1
 fi
 
-if [ "${PYTHON_VERSION}" -gt "37" -a "${PYTHON_VERSION}" -lt "27" ]; then
-    echo "Python version not supported"
+if [ "${PYTHON_VERSION}" -gt "38" -a "${PYTHON_VERSION}" -lt "34" ]; then
+    echo "Python version not supported."
     exit 1
 fi
 
-if [ "${PYTHON_VERSION}" -ge "30" ]; then
-    export PYTHON=${PYTHON_HOME}/bin/python3
-    export PIP=pip3
-else
-    export PYTHON=${PYTHON_HOME}/bin/python2
-    export PIP=pip
-fi
+export PYTHON=${PYTHON_HOME}/bin/python3
+export PIP=pip3
 
 if [ "x${QTDIR}" == "x" ]; then
-    echo "QTDIR not set. Setting it to default"
+    echo "QTDIR not set. Setting it to default."
     export QTDIR=~/Qt/5.8/clang_64
 fi
 export QMAKE=${QTDIR}/bin/qmake
@@ -58,7 +48,7 @@ if ! ${QMAKE} --version > /dev/null 2>&1; then
 fi
 
 if [ "x${PGDIR}" == "x" ]; then
-    echo "PGDIR not set. Setting it to default"
+    echo "PGDIR not set. Setting it to default."
     export PGDIR=/usr/local/pgsql
 fi
 
@@ -82,17 +72,13 @@ _cleanup() {
     rm -f ${DISTROOT}/pgadmin4*.dmg
 }
 
-_create_python_virtualenv() {
+_create_venv() {
     export PATH=${PGDIR}/bin:${PATH}
     export LD_LIBRARY_PATH=${PGDIR}/lib:${LD_LIBRARY_PATH}
     test -d ${BUILDROOT} || mkdir ${BUILDROOT} || exit 1
     cd ${BUILDROOT}
 
-    if [ ${SYSTEM_PYTHON} -eq 1 ]; then
-        test -d ${VIRTUALENV} || virtualenv -p ${PYTHON} ${VIRTUALENV} || exit 1
-    else
-        test -d ${VIRTUALENV} || virtualenv -p ${PYTHON} --always-copy ${VIRTUALENV} || exit 1
-    fi
+    test -d ${VIRTUALENV} || virtualenv -p ${PYTHON} --always-copy ${VIRTUALENV} || exit 1
 
     source ${VIRTUALENV}/bin/activate
     ${PIP} install --no-cache-dir --no-binary psycopg2 -r ${SOURCEDIR}/requirements.txt || { echo PIP install failed. Please resolve the issue and rerun the script; exit 1; }
@@ -114,11 +100,7 @@ _create_python_virtualenv() {
     for FULLPATH in ${PYSYSLIB_PATH}/*.py; do
         FILE=${FULLPATH##*/}
         if [ ! -e ${FILE} ]; then
-           if [ ${SYSTEM_PYTHON} -eq 1 ]; then
-               ln -s ${FULLPATH} ${FILE}
-           else
-               cp ${FULLPATH} ${FILE}
-           fi
+           cp ${FULLPATH} ${FILE}
         fi
     done
 
@@ -127,18 +109,14 @@ _create_python_virtualenv() {
         FULLPATH=${FULLPATH%*/}
         FILE=${FULLPATH##*/}
         if [ ! -e ${FILE} ]; then
-            if [ ${SYSTEM_PYTHON} -eq 1 ]; then
-                ln -s ${FULLPATH} ${FILE}
-            else
-                cp -R ${FULLPATH} ${FILE}
-            fi
+            cp -R ${FULLPATH} ${FILE}
         fi
     done
 
     # Remove tests
     cd site-packages
-    find . -name "test" -type d -exec rm -rf "{}" \;
-    find . -name "tests" -type d -exec rm -rf "{}" \;
+    find . -name "test" -type d -print0 | xargs -0 rm -rf
+    find . -name "tests" -type d -print0 | xargs -0 rm -rf
 
     # Link the python<version> directory to python so that the private environment path is found by the application.
     if test -d ${DIR_PYMODULES_PATH}; then
@@ -147,10 +125,9 @@ _create_python_virtualenv() {
 }
 
 _build_runtime() {
-    _create_python_virtualenv || exit 1
     cd ${SOURCEDIR}/runtime
     make clean
-    ${QMAKE} || { echo qmake failed; exit 1; }
+    PGADMIN_PYTHON_DIR=${PYTHON_HOME} ${QMAKE} || { echo qmake failed; exit 1; }
     make || { echo make failed; exit 1; }
     cp -r pgAdmin4.app "${BUILDROOT}/${APP_BUNDLE_NAME}"
 }
@@ -178,14 +155,8 @@ _complete_bundle() {
     # copy Python private environment to app bundle
     cp -PR ${BUILDROOT}/${VIRTUALENV} "${BUILDROOT}/${APP_BUNDLE_NAME}/Contents/Resources/" || exit 1
 
-    if [ ${SYSTEM_PYTHON} -eq 1 ]; then
-        # remove the python bin and include from app bundle as it is not needed
-        rm -rf "${BUILDROOT}/${APP_BUNDLE_NAME}/Contents/Resources/${VIRTUALENV}/bin" "${BUILDROOT}/${APP_BUNDLE_NAME}/Contents/Resources/${VIRTUALENV}/include"
-        rm -rf "${BUILDROOT}/${APP_BUNDLE_NAME}/Contents/Resources/${VIRTUALENV}/.Python"
-    fi
-
     # Remove any TCL-related files that may cause us problems
-    find "${BUILDROOT}/${APP_BUNDLE_NAME}/Contents/Resources/${VIRTUALENV}/" -name "_tkinter*" -exec rm -f "{}" \;
+    find "${BUILDROOT}/${APP_BUNDLE_NAME}/Contents/Resources/${VIRTUALENV}/" -name "_tkinter*" -print0 | xargs -0 rm -f
 
     # run complete-bundle to copy the dependent libraries and frameworks and fix the rpaths
     ./complete-bundle.sh "${BUILDROOT}/${APP_BUNDLE_NAME}" || { echo complete-bundle.sh failed; exit 1; }
@@ -202,9 +173,9 @@ _complete_bundle() {
     cd "${BUILDROOT}/${APP_BUNDLE_NAME}/Contents/Resources/web"
     rm -f pgadmin4.db config_local.*
     rm -rf karma.conf.js package.json node_modules/ regression/ tools/ pgadmin/static/js/generated/.cache
-    find . -name "tests" -type d -exec rm -rf "{}" \;
-    find . -name "feature_tests" -type d -exec rm -rf "{}" \;
-    find . -name ".DS_Store" -exec rm -f "{}" \;
+    find . -name "tests" -type d -print0 | xargs -0 rm -rf
+    find . -name "feature_tests" -type d -print0 | xargs -0 rm -rf
+    find . -name ".DS_Store" -print0 | xargs -0 rm -f
 
     echo "SERVER_MODE = False" > config_distro.py
     echo "HELP_PATH = '../../../docs/en_US/html/'" >> config_distro.py
@@ -215,7 +186,7 @@ _complete_bundle() {
 
     # Remove the .pyc files if any
     cd "${BUILDROOT}/${APP_BUNDLE_NAME}"
-    find . -name *.pyc | xargs rm -f
+    find . -name *.pyc -print0 | xargs -0 rm -f
 }
 
 _framework_config() {
@@ -280,6 +251,7 @@ _codesign_dmg() {
 
 _get_version || { echo Could not get versioning; exit 1; }
 _cleanup
+_create_venv || { echo venv creation failed; exit 1; }
 _build_runtime || { echo Runtime build failed; exit 1; }
 _build_doc
 _complete_bundle

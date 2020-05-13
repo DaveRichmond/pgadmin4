@@ -884,8 +884,8 @@ body {
 table.table-noouter-border {
   border: none !important;
 
-  tbody tr:last-of-type{
-    & td {
+  & > tbody > tr:last-of-type{
+    &  > td {
       border-bottom: $table-border-width solid transparent;
     }
   }
@@ -1109,4 +1109,7 @@ select:-webkit-autofill:focus {
 /* Left side has a check icon, right side corrected */
 .btn-radiomodern {
     padding-right: 1.75*$input-btn-padding-x !important;
+    &.disabled {
+      pointer-events: none !important;
+    }
 }

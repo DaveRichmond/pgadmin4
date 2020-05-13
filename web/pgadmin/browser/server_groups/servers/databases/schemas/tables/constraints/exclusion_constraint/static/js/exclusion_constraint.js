@@ -450,7 +450,7 @@ define('pgadmin.node.exclusion_constraint', [
           titleTmpl = _.template([
             '<div class="subnode-header">',
             '  <label class="control-label pg-el-sm-10"><%-label%></label>',
-            '  <button class="btn btn-sm-sq btn-secondary add fa fa-plus" <%=canAdd ? "" : "disabled=\'disabled\'"%> title="' + _('Add new row') + '"></button>',
+            '  <button class="btn btn-sm-sq btn-secondary add fa fa-plus" <%=canAdd ? "" : "disabled=\'disabled\'"%> title="' + gettext('Add new row') + '"></button>',
             '</div>'].join('\n')),
           $gridBody =
           $('<div class=\'pgadmin-control-group backgrid form-group col-12 object subnode\'></div>').append(
@@ -473,7 +473,7 @@ define('pgadmin.node.exclusion_constraint', [
 
         if (self.grid) {
           self.grid.remove();
-          self.grid.null;
+          self.grid = null;
         }
         // Initialize a new Grid instance
         var grid = self.grid = new Backgrid.Grid({
@@ -655,6 +655,7 @@ define('pgadmin.node.exclusion_constraint', [
         defaults: {
           name: undefined,
           oid: undefined,
+          is_sys_obj: undefined,
           comment: undefined,
           spcname: undefined,
           amname: 'gist',
@@ -672,6 +673,9 @@ define('pgadmin.node.exclusion_constraint', [
         },{
           id: 'oid', label: gettext('OID'), cell: 'string',
           type: 'text' , mode: ['properties'],
+        },{
+          id: 'is_sys_obj', label: gettext('System exclusion constraint?'),
+          cell:'boolean', type: 'switch', mode: ['properties'],
         },{
           id: 'comment', label: gettext('Comment'), cell: 'string',
           type: 'multiline', mode: ['properties', 'create', 'edit'],

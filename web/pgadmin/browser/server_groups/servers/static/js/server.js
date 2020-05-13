@@ -425,7 +425,7 @@ define('pgadmin.node.server', [
             Alertify.dialog('changeServerPassword' ,function factory() {
               return {
                 main: function(params) {
-                  var title = gettext('Change Password ');
+                  var title = gettext('Change Password');
                   this.set('title', title);
                   this.user_name = params.user.name;
                 },
@@ -821,7 +821,11 @@ define('pgadmin.node.server', [
           mode: ['properties', 'edit', 'create'], readonly: 'isConnected',
           group: gettext('Connection'),
         },{
-          id: 'sslmode', label: gettext('SSL mode'), type: 'options', group: gettext('SSL'),
+          id: 'sslmode', label: gettext('SSL mode'), control: 'select2', group: gettext('SSL'),
+          select2: {
+            allowClear: false,
+            minimumResultsForSearch: Infinity,
+          },
           mode: ['properties', 'edit', 'create'], disabled: 'isConnected',
           'options': [
             {label: gettext('Allow'), value: 'allow'},

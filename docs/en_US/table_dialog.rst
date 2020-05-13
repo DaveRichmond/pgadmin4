@@ -395,6 +395,14 @@ Use the fields in the *Advanced* tab to define advanced features for the table:
 * Use the *Fill Factor* field to specify a fill factor for the table. The fill
   factor for a table is a percentage between 10 and 100. 100 (complete packing)
   is the default.
+* Use the *Toast tuple target* field to set toast_tuple_target storage
+  parameter of the table. The toast_tuple_target value is in bytes and has
+  minimum value of 128. This field will be enabled only for
+  PostgreSQL version >= 11
+* Use the *Parallel workers* field to set parallel_workers storage
+  parameter of the table. The parallel_workers sets the number of workers that
+  should be used to assist a parallel scan of the table. This field will be
+  enabled only for PostgreSQL version >= 9.6
 * Move the *Has OIDs?* switch to the *Yes* position to specify that each row
   within a table has a system-assigned object identifier. The default is *No*.
 * Move the *Unlogged?* switch to the *Yes* position to disable logging for the
@@ -477,10 +485,10 @@ thresholds; use the *Table* tab and the *Toast Table* tab to customize values
 for the table and the associated toast table:
 
 * Move the *Custom auto-vacuum?* switch to the *Yes* position to perform custom
-  maintenance on the table.
-* Move the *Enabled?* switch to the *Yes* position to select values in the
+  maintenance on the table and to select values in the
   *Vacuum table*. The *Vacuum Table* provides default values for maintenance
   operations.
+* Changing *Autovacuum enabled?* to *Not set* will reset autovacuum_enabled.
 
 Provide a custom value in the *Value* column for each metric listed in the
 *Label* column.

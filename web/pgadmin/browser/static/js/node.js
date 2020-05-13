@@ -177,6 +177,14 @@ define('pgadmin.browser.node', [
 
       // Show query tool only in context menu of supported nodes.
       if (_.indexOf(pgAdmin.unsupported_nodes, self.type) == -1) {
+        let enable = function(itemData) {
+          if (itemData._type == 'database' && itemData.allowConn)
+            return true;
+          else if (itemData._type != 'database')
+            return true;
+          else
+            return false;
+        };
         pgAdmin.Browser.add_menus([{
           name: 'show_query_tool',
           node: self.type,
@@ -186,14 +194,15 @@ define('pgadmin.browser.node', [
           priority: 998,
           label: gettext('Query Tool...'),
           icon: 'pg-font-icon icon-query-tool',
-          enable: function(itemData) {
-            if (itemData._type == 'database' && itemData.allowConn)
-              return true;
-            else if (itemData._type != 'database')
-              return true;
-            else
-              return false;
-          },
+          enable: enable,
+        }]);
+
+        // show search objects same as query tool
+        pgAdmin.Browser.add_menus([{
+          name: 'search_objects', node: self.type, module: pgAdmin.SearchObjects,
+          applies: ['context'], callback: 'show_search_objects',
+          priority: 997, label: gettext('Search Objects...'),
+          icon: 'fa fa-search', enable: enable,
         }]);
       }
 
@@ -216,7 +225,7 @@ define('pgadmin.browser.node', [
             callback: 'show_script',
             priority: 4,
             label: type_label,
-            category: 'Scripts',
+            category: gettext('Scripts'),
             data: {
               'script': stype,
             },
@@ -752,9 +761,7 @@ define('pgadmin.browser.node', [
         obj = pgBrowser.Nodes[d._type];
         var objName = d.label;
 
-        var msg, title, drop_label;
-
-        if (obj.dropAsRemove) drop_label = 'Remove'; else drop_label = 'Drop';
+        var msg, title;
 
         if (input.url == 'delete') {
 
@@ -771,8 +778,13 @@ define('pgadmin.browser.node', [
             return;
           }
         } else {
-          msg = gettext('Are you sure you want to %s %s "%s"?', drop_label.toLowerCase(), obj.label.toLowerCase(), d.label);
-          title = gettext('%s %s?', drop_label, obj.label);
+          if (obj.dropAsRemove) {
+            msg = gettext('Are you sure you want to remove %s "%s"?', obj.label.toLowerCase(), d.label);
+            title = gettext('Remove %s?', obj.label);
+          } else {
+            msg = gettext('Are you sure you want to drop %s "%s"?', obj.label.toLowerCase(), d.label);
+            title = gettext('Drop %s?', obj.label);
+          }
 
           if (!(_.isFunction(obj.canDrop) ?
             obj.canDrop.apply(obj, [d, i]) : obj.canDrop)) {
@@ -813,7 +825,11 @@ define('pgadmin.browser.node', [
 
               });
           },
-          null).show();
+          null
+        ).set('labels', {
+          ok: gettext('Yes'),
+          cancel: gettext('No'),
+        }).show();
       },
       // Callback for creating script(s) & opening them in Query editor
       show_script: function(args, item) {
@@ -1536,6 +1552,17 @@ define('pgadmin.browser.node', [
                 // set focus back to first focusable element on dialog
                 view.$el.closest('.wcFloating').find('[tabindex]:not([tabindex="-1"]').first().focus();
                 return false;
+              }
+              let btnGroup = $(panel.$container.find('.pg-prop-btn-group'));
+              let el = $(btnGroup).find('button:first');
+              if (panel.$container.find('.number-cell.editable:last').is(':visible')){
+                if (event.keyCode === 9 && event.shiftKey) {
+                  if ($(el).is($(event.target))){
+                    $(panel.$container.find('td.editable:last').trigger('click'));
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }
+                }
               }
             });
 

@@ -90,6 +90,7 @@ define('pgadmin.node.unique_constraint', [
         defaults: {
           name: undefined,
           oid: undefined,
+          is_sys_obj: undefined,
           comment: undefined,
           spcname: undefined,
           index: undefined,
@@ -109,6 +110,9 @@ define('pgadmin.node.unique_constraint', [
           id: 'oid', label: gettext('OID'), cell: 'string',
           type: 'text' , mode: ['properties'], editable: false,
           cellHeaderClasses:'width_percent_20',
+        },{
+          id: 'is_sys_obj', label: gettext('System unique constraint?'),
+          cell:'boolean', type: 'switch', mode: ['properties'],
         },{
           id: 'comment', label: gettext('Comment'), cell: 'string',
           type: 'multiline', mode: ['properties', 'create', 'edit'],
@@ -354,6 +358,14 @@ define('pgadmin.node.unique_constraint', [
                 Backform.MultiSelectAjaxControl.prototype.remove.apply(this, arguments);
               }
             },
+            render: function() {
+              var index = this.model.get('index');
+              if(!_.isUndefined(index) && index != '') {
+                var col = this.model.get('columns');
+                col.reset([], {silent: true});
+              }
+              return Backform.Select2Control.prototype.render.apply(this, arguments);
+            },
           }),
           deps: ['index'], node: 'column',
           model: pgBrowser.Node.Model.extend({
@@ -394,8 +406,6 @@ define('pgadmin.node.unique_constraint', [
             if(_.isUndefined(index) || index == '') {
               return false;
             } else {
-              var col = m.get('columns');
-              col.reset();
               return true;
             }
           },
@@ -493,8 +503,9 @@ define('pgadmin.node.unique_constraint', [
             if(_.isUndefined(index) || index == '') {
               return false;
             } else {
-              var col = m.get('columns');
-              col.reset();
+              setTimeout(function(){
+                m.set('include', []);
+              },10);
               return true;
             }
           },
@@ -527,11 +538,7 @@ define('pgadmin.node.unique_constraint', [
           type: 'text', group: gettext('Definition'),
           control: Backform.NodeListByNameControl.extend({
             initialize:function() {
-              if (_.isUndefined(this.model.top)) {
-                Backform.NodeListByNameControl.prototype.initialize.apply(this,arguments);
-              } else {
-                Backform.Control.prototype.initialize.apply(this,arguments);
-              }
+              Backform.NodeListByNameControl.prototype.initialize.apply(this,arguments);
             },
           }),
           select2:{allowClear:true}, node: 'index',
@@ -638,7 +645,7 @@ define('pgadmin.node.unique_constraint', [
 
           if ((_.isUndefined(index) || String(index).replace(/^\s+|\s+$/g, '') == '') &&
             (_.isUndefined(columns) || _.isNull(columns) || columns.length < 1)) {
-            var msg = gettext('Please specify columns for %s', gettext('Unique constraint'));
+            var msg = gettext('Please specify columns for %s.', gettext('Unique constraint'));
             this.errorModel.set('columns', msg);
             return msg;
           }

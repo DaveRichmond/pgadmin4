@@ -118,10 +118,6 @@ var webpackShimConfig = {
     'pgadmin.browser.messages': {
       'deps': ['pgadmin.browser.datamodel'],
     },
-    'spectrum': {
-      'deps': ['jquery'],
-      'exports': '$.fn.spectrum',
-    },
   },
 
   // Map module id to file path used in 'define(['baseurl', 'misc']). It is
@@ -153,7 +149,7 @@ var webpackShimConfig = {
     'bignumber': path.join(__dirname, './node_modules/bignumber.js/bignumber'),
     'json-bignumber': path.join(__dirname, './node_modules/json-bignumber/dist/JSONBigNumber.min'),
     'snap.svg': path.join(__dirname, './node_modules/snapsvg/dist/snap.svg-min'),
-    'spectrum': path.join(__dirname, './node_modules/spectrum-colorpicker/spectrum'),
+    'color-picker': path.join(__dirname, './node_modules/@simonwep/pickr/dist/pickr.es5.min'),
     'mousetrap': path.join(__dirname, './node_modules/mousetrap'),
     'tablesorter-metric': path.join(__dirname, './node_modules/tablesorter/dist/js/parsers/parser-metric.min'),
 
@@ -281,6 +277,8 @@ var webpackShimConfig = {
     'pgadmin.tools.restore': path.join(__dirname, './pgadmin/tools/restore/static/js/restore'),
     'pgadmin.tools.schema_diff': path.join(__dirname, './pgadmin/tools/schema_diff/static/js/schema_diff'),
     'pgadmin.tools.schema_diff_ui': path.join(__dirname, './pgadmin/tools/schema_diff/static/js/schema_diff_ui'),
+    'pgadmin.tools.search_objects': path.join(__dirname, './pgadmin/tools/search_objects/static/js/search_objects'),
+    'pgadmin.search_objects': path.join(__dirname, './pgadmin/tools/search_objects/static/js'),
     'pgadmin.tools.user_management': path.join(__dirname, './pgadmin/tools/user_management/static/js/user_management'),
     'pgadmin.user_management.current_user': '/user_management/current_user',
     'slick.pgadmin.editors': path.join(__dirname, './pgadmin/tools/../static/js/slickgrid/editors'),

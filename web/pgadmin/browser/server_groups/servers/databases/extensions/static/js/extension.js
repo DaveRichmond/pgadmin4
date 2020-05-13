@@ -24,7 +24,7 @@ define('pgadmin.node.extension', [
     pgAdmin.Browser.Nodes['coll-extension'] =
       pgAdmin.Browser.Collection.extend({
         node: 'extension',
-        label: gettext('Extension'),
+        label: gettext('Extensions'),
         type: 'coll-extension',
         columns: ['name', 'owner', 'comment'],
       });
@@ -228,8 +228,10 @@ define('pgadmin.node.extension', [
               });
               return res;
             },
-          },
-          {
+          },{
+            id: 'is_sys_obj', label: gettext('System extension?'),
+            cell:'boolean', type: 'switch', mode: ['properties'],
+          },{
             id: 'comment', label: gettext('Comment'), cell: 'string',
             type: 'multiline', readonly: true,
           },

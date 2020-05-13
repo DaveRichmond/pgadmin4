@@ -190,7 +190,7 @@ define('pgadmin.node.database', [
 
           Alertify.confirm(
             gettext('Disconnect the database'),
-            pgadminUtils.sprintf(gettext('Are you sure you want to disconnect the database - %s?'), d.label),
+            gettext('Are you sure you want to disconnect the database - %s?', d.label),
             function() {
               var data = d;
               $.ajax({
@@ -228,7 +228,11 @@ define('pgadmin.node.database', [
                   t.unload(i);
                 });
             },
-            function() { return true; });
+            function() { return true; }
+          ).set('labels', {
+            ok: gettext('Yes'),
+            cancel: gettext('No'),
+          });
 
           return false;
         },
@@ -275,6 +279,7 @@ define('pgadmin.node.database', [
         defaults: {
           name: undefined,
           owner: undefined,
+          is_sys_obj: undefined,
           comment: undefined,
           encoding: 'UTF8',
           template: undefined,
@@ -330,6 +335,9 @@ define('pgadmin.node.database', [
         },{
           id: 'typeacl', label: gettext('Default TYPE privileges'), type: 'text',
           group: gettext('Security'), mode: ['properties'], min_version: 90200,
+        },{
+          id: 'is_sys_obj', label: gettext('System database?'),
+          cell:'boolean', type: 'switch', mode: ['properties'],
         },{
           id: 'comments', label: gettext('Comment'),
           editable: false, type: 'multiline',
@@ -512,7 +520,6 @@ define('pgadmin.node.database', [
               tree.deselect(item);
               tree.setInode(item);
             }
-
             if (res && res.data) {
               if(typeof res.data.connected == 'boolean') {
                 data.connected = res.data.connected;
@@ -522,11 +529,17 @@ define('pgadmin.node.database', [
                 data.icon = res.data.icon;
                 tree.addIcon(item, {icon: data.icon});
               }
+              if(res.data.already_connected) {
+                res.info = gettext('Database already connected.');
+              }
               if(res.data.info_prefix) {
                 res.info = `${_.escape(res.data.info_prefix)} - ${res.info}`;
               }
-
-              Alertify.success(res.info);
+              if(res.data.already_connected) {
+                Alertify.info(res.info);
+              } else {
+                Alertify.success(res.info);
+              }
               obj.trigger('connected', obj, item, data);
               pgBrowser.Events.trigger(
                 'pgadmin:database:connected', item, data

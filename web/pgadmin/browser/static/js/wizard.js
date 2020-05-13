@@ -155,6 +155,7 @@ define([
       'click button.wizard-finish': 'finishWizard',
       'click button.wizard-help': 'onDialogHelp',
       'click a.close-error': 'closeErrorMsg',
+      'keydown': 'keydownHandler',
     },
     initialize: function(options) {
       this.options = _.extend({}, this.options, options.options);
@@ -183,11 +184,10 @@ define([
 
       /* OnLoad Callback */
       this.onLoad();
-
       setTimeout(function() {
         var container = $(self.el);
         commonUtils.findAndSetFocus(container);
-      }, 100);
+      }, 500);
 
       return this;
     },
@@ -238,6 +238,9 @@ define([
       delete this.$el; // Delete the jQuery wrapped object variable
       delete this.el; // Delete the variable reference to this node
       return true;
+    },
+    keydownHandler: function(event) {
+      commonUtils.handleKeyNavigation(event);
     },
     enableDisableNext: function(disable) {
       if (typeof(disable) != 'undefined') {

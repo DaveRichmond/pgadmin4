@@ -18,6 +18,7 @@ define('pgadmin.node.role', [
     pgAdmin.Browser.Nodes['coll-role'] =
       pgAdmin.Browser.Collection.extend({
         node: 'role',
+        label: gettext('Login/Group Roles'),
         type: 'coll-role',
         columns: [
           'rolname', 'rolvaliduntil', 'rolconnlimit', 'rolcanlogin',
@@ -447,6 +448,9 @@ define('pgadmin.node.role', [
           controlLabelClassName: 'control-label pg-el-sm-4 pg-el-12',
           controlsClassName: 'pgadmin-controls pg-el-sm-8 pg-el-12',
           readonly: 'readonly',
+        },{
+          id: 'is_sys_obj', label: gettext('System role?'),
+          cell:'boolean', type: 'switch', mode: ['properties'],
         },{
           id: 'description', label: gettext('Comments'), type: 'multiline',
           group: null, mode: ['properties', 'edit', 'create'],

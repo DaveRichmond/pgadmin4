@@ -69,7 +69,7 @@ define('pgadmin.node.synonym', [
         isNew: function() {
           return !this.fetchFromServer;
         },
-        idAttribute: 'name',
+        idAttribute: 'oid',
         // Default values!
         initialize: function(attrs, args) {
           var isNew = (_.size(attrs) === 0);
@@ -93,6 +93,9 @@ define('pgadmin.node.synonym', [
           id: 'name', label: gettext('Name'), cell: 'string',
           type: 'text', mode: ['properties', 'create', 'edit'],
           disabled: 'inSchema', readonly: function(m) { return !m.isNew(); },
+        },{
+          id: 'oid', label: gettext('OID'), cell: 'string',
+          type: 'text', mode: ['properties'],
         },{
           id: 'owner', label: gettext('Owner'), cell: 'string',
           type: 'text', mode: ['properties', 'create', 'edit'],
@@ -147,14 +150,13 @@ define('pgadmin.node.synonym', [
           },
         },{
           id: 'synobjname', label: gettext('Target object'), cell: 'string',
-          type: 'text', disabled: 'inSchema', group: gettext('Definition'),
+          type: 'text', group: gettext('Definition'),
           deps: ['targettype', 'synobjschema'],
           control: 'node-ajax-options',
           options: function(control) {
             var trgTyp = control.model.get('targettype');
             var trgSchema = control.model.get('synobjschema');
             var res = [];
-
             var node = control.field.get('schema_node'),
               _url = node.generate_url.apply(
                 node, [
@@ -179,11 +181,22 @@ define('pgadmin.node.synonym', [
               });
             return res;
           },
+          disabled: function(m) {
+            if (this.node_info &&  'catalog' in this.node_info) {
+              return true;
+            }
+            // Check the changed attributes if targettype or synobjschema
+            // is changed then reset the target object
+            if ('changed' in m && !('name' in m.changed) &&
+               ('targettype' in m.changed || 'synobjschema' in m.changed)) {
+              m.set('synobjname', undefined);
+            }
+
+            return false;
+          },
         },{
-          id: 'is_public_synonym', label: gettext('Public synonym?'),
-          type: 'switch', mode: ['properties'], cell: 'switch',
-          options: { onText: gettext('Yes'), offText: gettext('No'), onColor: 'success',
-            offColor: 'ternary', size: 'mini'},
+          id: 'is_sys_obj', label: gettext('System synonym?'),
+          cell:'boolean', type: 'switch', mode: ['properties'],
         },
         ],
         validate: function() {

@@ -261,7 +261,7 @@ define('pgadmin.node.tablespace', [
                       self.__internal.buttons[2].element.disabled = false;
                     } else {
                       self.__internal.buttons[2].element.disabled = true;
-                      this.errorModel.set('tblspc', gettext('Please select tablespace'));
+                      this.errorModel.set('tblspc', gettext('Please select tablespace.'));
                     }
                   });
                 },
@@ -319,6 +319,7 @@ define('pgadmin.node.tablespace', [
         defaults: {
           name: undefined,
           owner: undefined,
+          is_sys_obj: undefined,
           comment: undefined,
           spclocation: undefined,
           spcoptions: [],
@@ -358,6 +359,9 @@ define('pgadmin.node.tablespace', [
         },{
           id: 'acl', label: gettext('Privileges'), type: 'text',
           group: gettext('Security'), mode: ['properties'],
+        },{
+          id: 'is_sys_obj', label: gettext('System tablespace?'),
+          cell:'boolean', type: 'switch', mode: ['properties'],
         },{
           id: 'description', label: gettext('Comment'), cell: 'string',
           type: 'multiline',

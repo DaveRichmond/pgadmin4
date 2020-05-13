@@ -60,23 +60,23 @@ function(
         pgBrowser.add_menus([{
           name: 'truncate_table', node: 'partition', module: this,
           applies: ['object', 'context'], callback: 'truncate_table',
-          category: 'Truncate', priority: 3, label: gettext('Truncate'),
+          category: gettext('Truncate'), priority: 3, label: gettext('Truncate'),
           icon: 'fa fa-eraser', enable : 'canCreate',
         },{
           name: 'truncate_table_cascade', node: 'partition', module: this,
           applies: ['object', 'context'], callback: 'truncate_table_cascade',
-          category: 'Truncate', priority: 3, label: gettext('Truncate Cascade'),
+          category: gettext('Truncate'), priority: 3, label: gettext('Truncate Cascade'),
           icon: 'fa fa-eraser', enable : 'canCreate',
         },{
           // To enable/disable all triggers for the table
           name: 'enable_all_triggers', node: 'partition', module: this,
           applies: ['object', 'context'], callback: 'enable_triggers_on_table',
-          category: 'Trigger(s)', priority: 4, label: gettext('Enable All'),
+          category: gettext('Trigger(s)'), priority: 4, label: gettext('Enable All'),
           icon: 'fa fa-check', enable : 'canCreate_with_trigger_enable',
         },{
           name: 'disable_all_triggers', node: 'partition', module: this,
           applies: ['object', 'context'], callback: 'disable_triggers_on_table',
-          category: 'Trigger(s)', priority: 4, label: gettext('Disable All'),
+          category: gettext('Trigger(s)'), priority: 4, label: gettext('Disable All'),
           icon: 'fa fa-times', enable : 'canCreate_with_trigger_disable',
         },{
           name: 'reset_table_stats', node: 'partition', module: this,
@@ -119,12 +119,12 @@ function(
       callbacks: {
         /* Enable trigger(s) on table */
         enable_triggers_on_table: function(args) {
-          var params = {'enable': true };
+          var params = {'is_enable_trigger': 'O'};
           this.callbacks.set_triggers.apply(this, [args, params]);
         },
         /* Disable trigger(s) on table */
         disable_triggers_on_table: function(args) {
-          var params = {'enable': false };
+          var params = {'is_enable_trigger': 'D'};
           this.callbacks.set_triggers.apply(this, [args, params]);
         },
         set_triggers: function(args, params) {
@@ -330,8 +330,8 @@ function(
           is_sys_table: undefined,
           coll_inherits: [],
           hastoasttable: true,
-          toast_autovacuum_enabled: false,
-          autovacuum_enabled: false,
+          toast_autovacuum_enabled: 'x',
+          autovacuum_enabled: 'x',
           primary_key: [],
           partitions: [],
           partition_type: 'range',

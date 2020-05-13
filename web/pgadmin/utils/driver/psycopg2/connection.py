@@ -15,17 +15,15 @@ object.
 
 import random
 import select
-import sys
 import six
 import datetime
 from collections import deque
-import simplejson as json
 import psycopg2
 from flask import g, current_app
 from flask_babelex import gettext
 from flask_security import current_user
 from pgadmin.utils.crypto import decrypt
-from psycopg2.extensions import adapt, encodings
+from psycopg2.extensions import encodings
 
 import config
 from pgadmin.model import User
@@ -39,13 +37,7 @@ from .typecast import register_global_typecasters, \
 from .encoding import getEncoding, configureDriverEncodings
 from pgadmin.utils import csv
 from pgadmin.utils.master_password import get_crypt_key
-
-if sys.version_info < (3,):
-    from StringIO import StringIO
-    IS_PY2 = True
-else:
-    from io import StringIO
-    IS_PY2 = False
+from io import StringIO
 
 _ = gettext
 
@@ -692,8 +684,7 @@ WHERE
             u"{conn_id} (Query-id: {query_id}):\n{query}".format(
                 server_id=self.manager.sid,
                 conn_id=self.conn_id,
-                query=query.decode(self.python_encoding) if
-                sys.version_info < (3,) else query,
+                query=query,
                 query_id=query_id
             )
         )
@@ -705,10 +696,10 @@ WHERE
             current_app.logger.error(
                 u"failed to execute query ((with server cursor) "
                 u"for the server #{server_id} - {conn_id} "
-                u"(query-id: {query_id}):\nerror message:{errmsg}".format(
+                u"(query-id: {query_id}):\n"
+                u"error message:{errmsg}".format(
                     server_id=self.manager.sid,
                     conn_id=self.conn_id,
-                    query=query,
                     errmsg=errmsg,
                     query_id=query_id
                 )
@@ -720,33 +711,6 @@ WHERE
         if cur.description is None:
             return False, \
                 gettext('The query executed did not return any data.')
-
-        def handle_json_data(json_columns, results):
-            """
-            [ This is only for Python2.x]
-            This function will be useful to handle json data types.
-            We will dump json data as proper json instead of unicode values
-
-            Args:
-                json_columns: Columns which contains json data
-                results: Query result
-
-            Returns:
-                results
-            """
-            # Only if Python2 and there are columns with JSON type
-            if IS_PY2 and len(json_columns) > 0:
-                temp_results = []
-                for row in results:
-                    res = dict()
-                    for k, v in row.items():
-                        if k in json_columns:
-                            res[k] = json.dumps(v)
-                        else:
-                            res[k] = v
-                    temp_results.append(res)
-                results = temp_results
-            return results
 
         def convert_keys_to_unicode(results, conn_encoding):
             """
@@ -804,19 +768,13 @@ WHERE
 
             header = []
             json_columns = []
-            conn_encoding = encodings[cur.connection.encoding]
 
             for c in cur.ordered_description():
                 # This is to handle the case in which column name is non-ascii
                 column_name = c.to_dict()['name']
-                if IS_PY2:
-                    column_name = column_name.decode(conn_encoding)
                 header.append(column_name)
                 if c.to_dict()['type_code'] in ALL_JSON_TYPES:
                     json_columns.append(column_name)
-
-            if IS_PY2:
-                results = convert_keys_to_unicode(results, conn_encoding)
 
             res_io = StringIO()
 
@@ -848,7 +806,6 @@ WHERE
             )
 
             csv_writer.writeheader()
-            results = handle_json_data(json_columns, results)
             # Replace the null values with given string if configured.
             if replace_nulls_with is not None:
                 results = handle_null_values(results, replace_nulls_with)
@@ -872,10 +829,6 @@ WHERE
                     replace_nulls_with=replace_nulls_with
                 )
 
-                if IS_PY2:
-                    results = convert_keys_to_unicode(results, conn_encoding)
-
-                results = handle_json_data(json_columns, results)
                 # Replace the null values with given string if configured.
                 if replace_nulls_with is not None:
                     results = handle_null_values(results, replace_nulls_with)
@@ -925,7 +878,6 @@ WHERE
                 u"Error Message:{errmsg}".format(
                     server_id=self.manager.sid,
                     conn_id=self.conn_id,
-                    query=query,
                     errmsg=errmsg,
                     query_id=query_id
                 )
@@ -991,7 +943,6 @@ WHERE
                 u"Error Message:{errmsg}".format(
                     server_id=self.manager.sid,
                     conn_id=self.conn_id,
-                    query=query.decode(encoding),
                     errmsg=errmsg,
                     query_id=query_id
                 )
@@ -1063,7 +1014,6 @@ WHERE
                 u"Error Message:{errmsg}".format(
                     server_id=self.manager.sid,
                     conn_id=self.conn_id,
-                    query=query,
                     errmsg=errmsg,
                     query_id=query_id
                 )
@@ -1093,7 +1043,7 @@ WHERE
 
             current_app.logger.warning(
                 "Failed to reconnect the database server "
-                "(#{server_id})".format(
+                "(Server #{server_id}, Connection #{conn_id})".format(
                     server_id=self.manager.sid,
                     conn_id=self.conn_id
                 )
@@ -1142,7 +1092,6 @@ WHERE
                 u"Error Message:{errmsg}".format(
                     server_id=self.manager.sid,
                     conn_id=self.conn_id,
-                    query=query,
                     errmsg=errmsg,
                     query_id=query_id
                 )
@@ -1260,7 +1209,7 @@ WHERE
                     for col in self.column_info:
                         new_row.append(row[col['name']])
                     result.append(new_row)
-            except psycopg2.ProgrammingError as e:
+            except psycopg2.ProgrammingError:
                 result = None
         else:
             # User performed operation which dose not produce record/s as
@@ -1745,7 +1694,7 @@ Failed to reset the connection to the server due to following error:
         # Do not append if error starts with `ERROR:` as most pg related
         # error starts with `ERROR:`
         if not errmsg.startswith(u'ERROR:'):
-            errmsg = u'ERROR:  ' + errmsg + u'\n\n'
+            errmsg = gettext(u'ERROR: ') + errmsg + u'\n\n'
 
         if exception_obj.diag.severity is not None \
                 and exception_obj.diag.message_primary is not None:

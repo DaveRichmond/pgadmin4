@@ -1133,7 +1133,7 @@ define([
         $('.storage_dialog #uploader .input-path').prop('disabled', false);
       });
   };
-
+  var homedir='/';
   // Enable/Disable level up button
   var enab_dis_level_up = function() {
     $('.file_manager #uploader .input-path').show();
@@ -1144,13 +1144,9 @@ define([
         $level_up = $('.file_manager').find('button.level-up'),
         $home_btn = $('.file_manager').find('button.home');
 
-      if (b === '/') {
-        $level_up.attr('disabled', 'disabled');
-        $home_btn.attr('disabled', 'disabled');
-      } else {
-        $home_btn.removeAttr('disabled');
-        $level_up.removeAttr('disabled');
-      }
+      (b === '/') ? $level_up.attr('disabled', 'disabled') : $level_up.removeAttr('disabled');
+      (b === homedir) ? $home_btn.attr('disabled', 'disabled') : $home_btn.removeAttr('disabled');
+
     }, 100);
   };
 
@@ -1202,6 +1198,7 @@ define([
       // load user configuration file
       if (cfg.readyState == 4) {
         this.config = config = JSON.parse(cfg.responseText);
+        homedir=config.options.homedir;
       }
 
       // set main url to filemanager and its capabilites
@@ -1258,12 +1255,12 @@ define([
           }
 
           select_box = `<div class='change_file_types d-flex align-items-center p-1'>
-          <div>
-            ${gettext('Show hidden files and folders')}?
-            <input type='checkbox' id='show_hidden' onclick='pgAdmin.FileUtils.handleClick(this)' tabindex='0'>
+          <div>` +
+            gettext('Show hidden files and folders?') +
+            `<input type='checkbox' id='show_hidden' onclick='pgAdmin.FileUtils.handleClick(this)' tabindex='0'>
           </div>
           <div class="ml-auto">
-            <label class="my-auto">${gettext('Format')}</label>
+            <label class="my-auto">` + gettext('Format') + `</label>
             <select name='type' tabindex='0'>${fileFormats}</select>
           <div>`;
         }
@@ -1343,8 +1340,7 @@ define([
         $('.delete_item, .fileinfo .fm_dimmer').hide();
       });
 
-      // Disable home button on load
-      $('.file_manager').find('button.home').attr('disabled', 'disabled');
+      // Disable button on load
       $('.file_manager').find('button.rename').attr('disabled', 'disabled');
 
       // stop click event on dimmer click
@@ -1382,7 +1378,7 @@ define([
       $('.file_manager .home').on('click', function() {
         var currentViewMode = $('.fileinfo').data('view');
         $('.fileinfo').data('view', currentViewMode);
-        getFolderInfo('/');
+        getFolderInfo(homedir);
         enab_dis_level_up();
       });
 
@@ -1552,7 +1548,7 @@ define([
             '<div id="multiple-uploads" class="dropzone flex-grow-1 d-flex p-1">'+
             '<div class="dz-default dz-message d-none"></div>'+
             '</div>' +
-            '<div class="prompt-info">Drop files here to upload. ' + lg.file_size_limit +
+            '<div class="prompt-info">' + gettext('Drop files here to upload.') + ' ' + lg.file_size_limit +
             config.upload.fileSizeLimit + ' ' + lg.mb + '.</div>',
             path = $('.currentpath').val(),
             filesizelimit = config.upload.fileSizeLimit,
