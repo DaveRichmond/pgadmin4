@@ -29,7 +29,7 @@ from flask_security.recoverable import reset_password_token_status, \
 from flask_security.signals import reset_password_instructions_sent
 from flask_security.utils import config_value, do_flash, get_url, \
     get_message, slash_url_suffix, login_user, send_mail
-from flask_security.views import _security, _commit, default_render_json, _ctx
+from flask_security.views import _security, _commit, _ctx
 from werkzeug.datastructures import MultiDict
 
 import config
@@ -51,6 +51,14 @@ try:
     import urllib.request as urlreq
 except ImportError as e:
     import urllib2 as urlreq
+
+try:
+    from flask_security.views import default_render_json
+except ImportError as e:
+    # Support Flask-Security-Too == 3.2
+    import sys
+    if sys.version_info < (3, 8):
+        from flask_security.views import _render_json as default_render_json
 
 MODULE_NAME = 'browser'
 
@@ -557,8 +565,18 @@ def index():
             browser_name = 'Chrome'
         elif browser == 'firefox' and version < 65:
             browser_name = 'Firefox'
-        elif browser == 'edge' and version < 44:
+        # comparing EdgeHTML engine version
+        elif browser == 'edge' and version < 18:
             browser_name = 'Edge'
+            # browser version returned by edge browser is actual EdgeHTML
+            # engine version. Below code gets actual browser version using
+            # EdgeHTML version
+            engine_to_actual_browser_version = {
+                16: 41,
+                17: 42,
+                18: 44
+            }
+            version = engine_to_actual_browser_version.get(version, '< 44')
         elif browser == 'safari' and version < 12:
             browser_name = 'Safari'
         elif browser == 'msie':
