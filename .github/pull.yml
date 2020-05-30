@@ -1,0 +1,10 @@
+version: "1"
+rules:
+  - base: master
+    upstream: postgres:pgadmin4
+    mergeMethod: hardreset
+  - base: github-actions
+    upstream: master
+    mergeMethod: merge
+    assignees:
+      - DaveRichmond
