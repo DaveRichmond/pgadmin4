@@ -19,7 +19,7 @@ from flask_babelex import gettext
 from pgadmin.browser.server_groups.servers.databases.schemas\
     .tables.base_partition_table import BasePartitionTable
 from pgadmin.utils.ajax import make_json_response, internal_server_error, \
-    make_response as ajax_response
+    gone, make_response as ajax_response
 from pgadmin.browser.server_groups.servers.databases.schemas.utils \
     import DataTypeReader, parse_rule_definition
 from pgadmin.browser.server_groups.servers.utils import parse_priv_from_db, \
@@ -42,6 +42,9 @@ from pgadmin.browser.server_groups.servers.databases.schemas.tables.\
     triggers import utils as trigger_utils
 from pgadmin.browser.server_groups.servers.databases.schemas.tables.\
     compound_triggers import utils as compound_trigger_utils
+from pgadmin.browser.server_groups.servers.databases.schemas. \
+    tables.row_security_policies import \
+    utils as row_security_policies_utils
 
 
 class BaseTableView(PGChildNodeView, BasePartitionTable):
@@ -120,6 +123,10 @@ class BaseTableView(PGChildNodeView, BasePartitionTable):
             # Template for index node
             self.index_template_path = compile_template_path(
                 'indexes/sql', server_type, ver)
+
+            # Template for index node
+            self.row_security_policies_template_path = \
+                'row_security_policies/sql/#{0}#'.format(ver)
 
             # Template for trigger node
             self.trigger_template_path = \
@@ -512,6 +519,33 @@ class BaseTableView(PGChildNodeView, BasePartitionTable):
             main_sql.append(index_sql.strip('\n'))
 
         """
+        ########################################################
+        # 2) Reverse engineered sql for ROW SECURITY POLICY
+        ########################################################
+        """
+        if self.manager.version >= 90500:
+            SQL = \
+                render_template(
+                    "/".join([self.row_security_policies_template_path,
+                              'nodes.sql']), tid=tid)
+            status, rset = self.conn.execute_2darray(SQL)
+            if not status:
+                return internal_server_error(errormsg=rset)
+
+            for row in rset['rows']:
+                policy_sql = row_security_policies_utils. \
+                    get_reverse_engineered_sql(
+                        self.conn, schema, table, did, tid, row['oid'],
+                        self.datlastsysoid,
+                        template_path=None, with_header=json_resp)
+                policy_sql = u"\n" + policy_sql
+
+                # Add into main sql
+                policy_sql = re.sub('\n{2,}', '\n\n', policy_sql)
+
+                main_sql.append(policy_sql.strip('\n'))
+
+        """
         ########################################
         # 3) Reverse engineered sql for TRIGGERS
         ########################################
@@ -657,6 +691,13 @@ class BaseTableView(PGChildNodeView, BasePartitionTable):
            scid: Schema ID
            tid: Table ID
         """
+        # checking the table existence using the function of the same class
+        schema_name, table_name = self.get_schema_and_table_name(tid)
+
+        if table_name is None:
+            return gone(gettext("The specified table could not be found."))
+
+        # table exist
         try:
             SQL = render_template("/".join([self.table_template_path,
                                             'reset_stats.sql']),
@@ -716,9 +757,9 @@ class BaseTableView(PGChildNodeView, BasePartitionTable):
         elif key == 'foreign_key':
             if 'oid' not in data:
                 for arg in ['columns']:
-                    if arg not in data:
-                        return False
-                    elif isinstance(data[arg], list) and len(data[arg]) < 1:
+                    if arg not in data or \
+                            (isinstance(data[arg], list) and
+                             len(data[arg]) < 1):
                         return False
 
                 if 'autoindex' in data and \
@@ -1061,6 +1102,13 @@ class BaseTableView(PGChildNodeView, BasePartitionTable):
            parent_id: parent table id if current table is partition of parent
                     table else none
         """
+        # checking the table existence using the function of the same class
+        schema_name, table_name = self.get_schema_and_table_name(tid)
+
+        if table_name is None:
+            return gone(gettext("The specified table could not be found."))
+
+        # table exists
         try:
             SQL, name = self.get_sql(did, scid, tid, data, res)
 
@@ -1478,6 +1526,8 @@ class BaseTableView(PGChildNodeView, BasePartitionTable):
                                       'get_schema_oid.sql']), tid=tid))
         if not status:
             return internal_server_error(errormsg=scid)
+        if scid is None:
+            return None, None
 
         # Fetch schema name
         status, schema_name = self.conn.execute_scalar(
@@ -1524,13 +1574,13 @@ class BaseTableView(PGChildNodeView, BasePartitionTable):
             reset_values = []
             for data_row in data[vacuum_key]['changed']:
                 for old_data_row in old_data[vacuum_key]:
-                    if data_row['name'] == old_data_row['name']:
-                        if 'value' in data_row:
-                            if data_row['value'] is not None:
-                                set_values.append(data_row)
-                            elif data_row['value'] is None and \
-                                    'value' in old_data_row:
-                                reset_values.append(data_row)
+                    if data_row['name'] == old_data_row['name'] and \
+                            'value' in data_row:
+                        if data_row['value'] is not None:
+                            set_values.append(data_row)
+                        elif data_row['value'] is None and \
+                                'value' in old_data_row:
+                            reset_values.append(data_row)
 
             if len(set_values) > 0:
                 data[vacuum_key]['set_values'] = set_values

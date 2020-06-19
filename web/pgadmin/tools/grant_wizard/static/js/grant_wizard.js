@@ -79,7 +79,7 @@ define([
         node = this.get('objects').toJSON();
       if (_.isEmpty(node)) {
         err['selected'] = gettext('Please select any database object.');
-        errmsg = errmsg || err['selected'];
+        errmsg = err['selected'];
         this.errorModel.set('selected', errmsg);
         return errmsg;
       } else {
@@ -442,6 +442,8 @@ define([
                 d = this.d = i && i.length == 1 ? t.itemData(i) : undefined,
                 info = this.info = pgBrowser.Node.getTreeNodeHierarchy(i);
 
+              if(_.isUndefined(d))
+                return;
               /**
                 Generate a URL using:
                 gid, did, sid(server id), node_id(node id),

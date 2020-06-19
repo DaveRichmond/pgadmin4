@@ -417,11 +417,7 @@ define('pgadmin.node.primary_key', [
           disabled: function(m) {
             // Disable if index is selected.
             var index = m.get('index');
-            if(_.isUndefined(index) || index == '') {
-              return false;
-            } else {
-              return true;
-            }
+            return !(_.isUndefined(index) || index == '');
           },
         },{
           id: 'include', label: gettext('Include columns'),
@@ -531,8 +527,7 @@ define('pgadmin.node.primary_key', [
           select2:{allowClear:false},
           filter: function(m) {
             // Don't show pg_global tablespace in selection.
-            if (m.label == 'pg_global') return false;
-            else return true;
+            return (m.label != 'pg_global');
           },
           disabled: function(m) {
             // Disable if index is selected.

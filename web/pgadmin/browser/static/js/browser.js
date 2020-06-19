@@ -58,7 +58,7 @@ define('pgadmin.browser', [
     var data = JSON.parse(payload).data;
     if (data.length && data[0]._type !== 'column' &&
       data[0]._type !== 'catalog_object_column') {
-      data = data.sort(function(a, b) {
+      data.sort(function(a, b) {
         return pgAdmin.natural_sort(a.label, b.label);
       });
     }
@@ -428,6 +428,7 @@ define('pgadmin.browser', [
           mode: 'text/x-pgsql',
           readOnly: true,
           extraKeys: pgAdmin.Browser.editor_shortcut_keys,
+          screenReaderLabel: gettext('SQL'),
         });
       /* Cache may take time to load for the first time
        * Reflect the changes once cache is available
@@ -597,13 +598,13 @@ define('pgadmin.browser', [
               };
             },
             prepare:function() {
-              let self = this;
-              self.setContent(self.message);
+              let _self = this;
+              _self.setContent(_self.message);
               /* Reset button hide */
-              if(!self.reset) {
-                $(self.__internal.buttons[1].element).addClass('d-none');
+              if(!_self.reset) {
+                $(_self.__internal.buttons[1].element).addClass('d-none');
               } else {
-                $(self.__internal.buttons[1].element).removeClass('d-none');
+                $(_self.__internal.buttons[1].element).removeClass('d-none');
               }
             },
             callback: function(event) {
@@ -688,12 +689,10 @@ define('pgadmin.browser', [
     set_master_password: function(password='', button_click=false, set_callback=()=>{}) {
       let data=null, self = this;
 
-      if(password != null || password!='') {
-        data = JSON.stringify({
-          'password': password,
-          'button_click': button_click,
-        });
-      }
+      data = JSON.stringify({
+        'password': password,
+        'button_click': button_click,
+      });
 
       self.masterpass_callback_queue.push(set_callback);
 
@@ -764,7 +763,7 @@ define('pgadmin.browser', [
           if ($.inArray(a, [
             'context', 'file', 'edit', 'object',
             'management', 'tools', 'help']) >= 0) {
-            var menus;
+            var _menus;
 
             // If current node is not visible in browser tree
             // then return from here
@@ -780,29 +779,29 @@ define('pgadmin.browser', [
 
             pgMenu[a] = pgMenu[a] || {};
             if (_.isString(m.node)) {
-              menus = pgMenu[a][m.node] = pgMenu[a][m.node] || {};
+              _menus = pgMenu[a][m.node] = pgMenu[a][m.node] || {};
             } else if (_.isString(m.category)) {
-              menus = pgMenu[a][m.category] = pgMenu[a][m.category] || {};
+              _menus = pgMenu[a][m.category] = pgMenu[a][m.category] || {};
             }
             else {
-              menus = pgMenu[a];
+              _menus = pgMenu[a];
             }
 
-            let get_menuitem_obj = function(m) {
+            let get_menuitem_obj = function(_m) {
               return new MenuItem({
-                name: m.name, label: m.label, module: m.module,
-                category: m.category, callback: m.callback,
-                priority: m.priority, data: m.data, url: m.url || '#',
-                target: m.target, icon: m.icon,
-                enable: (m.enable == '' ? true : (_.isString(m.enable) &&
-                    m.enable.toLowerCase() == 'false') ?
-                  false : m.enable),
-                node: m.node, checked: m.checked,
+                name: _m.name, label: _m.label, module: _m.module,
+                category: _m.category, callback: _m.callback,
+                priority: _m.priority, data: _m.data, url: _m.url || '#',
+                target: _m.target, icon: _m.icon,
+                enable: (_m.enable == '' ? true : (_.isString(_m.enable) &&
+                  _m.enable.toLowerCase() == 'false') ?
+                  false : _m.enable),
+                node: _m.node, checked: _m.checked,
               });
             };
 
-            if (!_.has(menus, m.name)) {
-              menus[m.name] = get_menuitem_obj(m);
+            if (!_.has(_menus, m.name)) {
+              _menus[m.name] = get_menuitem_obj(m);
 
               if(m.menu_items) {
                 let sub_menu_items = [];
@@ -810,7 +809,7 @@ define('pgadmin.browser', [
                 for(let i=0; i<m.menu_items.length; i++) {
                   sub_menu_items.push(get_menuitem_obj(m.menu_items[i]));
                 }
-                menus[m.name]['menu_items'] = sub_menu_items;
+                _menus[m.name]['menu_items'] = sub_menu_items;
               }
             }
           } else  {
@@ -950,24 +949,24 @@ define('pgadmin.browser', [
           o: _opts,
         },
         traversePath = function() {
-          var ctx = this, data;
+          var _ctx = this, data;
 
-          ctx.success = traversePath;
-          if (ctx.p.length) {
-            data = ctx.p.shift();
+          _ctx.success = traversePath;
+          if (_ctx.p.length) {
+            data = _ctx.p.shift();
             // This is the parent node.
             // Replace the parent-id of the data, which could be different
             // from the given hierarchy.
-            if (!ctx.p.length) {
+            if (!_ctx.p.length) {
               data._id = _data._pid;
-              ctx.success = addItemNode;
+              _ctx.success = addItemNode;
             }
-            ctx.b._findTreeChildNode(
-              ctx.i, data, ctx
+            _ctx.b._findTreeChildNode(
+              _ctx.i, data, _ctx
             );
             // if parent node is null
             if (!_data._pid) {
-              addItemNode.apply(ctx, arguments);
+              addItemNode.apply(_ctx, arguments);
             }
           }
           return true;
@@ -975,33 +974,33 @@ define('pgadmin.browser', [
         addItemNode = function() {
           // Append the new data in the tree under the current item.
           // We may need to pass it to proper collection node.
-          var ctx = this,
-            first = (ctx.i || this.t.wasLoad(ctx.i)) &&
-            this.t.first(ctx.i),
+          var _ctx = this,
+            first = (_ctx.i || this.t.wasLoad(_ctx.i)) &&
+            this.t.first(_ctx.i),
             findChildNode = function(success, notFound) {
-              var ctx = this;
-              ctx.success = success;
-              ctx.notFound = notFound;
+              var __ctx = this;
+              __ctx.success = success;
+              __ctx.notFound = notFound;
 
-              ctx.b._findTreeChildNode(ctx.i, _data, ctx);
-            }.bind(ctx),
+              __ctx.b._findTreeChildNode(__ctx.i, _data, __ctx);
+            }.bind(_ctx),
             selectNode = function() {
               this.t.openPath(this.i);
               this.t.select(this.i);
               if (
-                ctx.o && ctx.o.success && typeof(ctx.o.success) == 'function'
+                _ctx.o && _ctx.o.success && typeof(_ctx.o.success) == 'function'
               ) {
-                ctx.o.success.apply(ctx.t, [ctx.i, _data]);
+                _ctx.o.success.apply(_ctx.t, [_ctx.i, _data]);
               }
-            }.bind(ctx),
+            }.bind(_ctx),
             addNode = function() {
-              var ctx = this,
-                items = ctx.t.children(ctx.i),
+              var __ctx = this,
+                items = __ctx.t.children(__ctx.i),
                 s = 0, e = items.length - 1, i,
                 linearSearch = function() {
                   while (e >= s) {
                     i = items.eq(s);
-                    var d = ctx.t.itemData(i);
+                    var d = __ctx.t.itemData(i);
                     if (d._type === 'column') {
                       if (pgAdmin.numeric_comparator(d._id, _data._id) == 1)
                         return true;
@@ -1028,7 +1027,7 @@ define('pgadmin.browser', [
                   // We will try until it's half.
                   while (e - s > 22) {
                     i = items.eq(s);
-                    d = ctx.t.itemData(i);
+                    d = __ctx.t.itemData(i);
                     if (d._type === 'column') {
                       if (pgAdmin.numeric_comparator(d._id, _data._id) != -1)
                         return true;
@@ -1037,7 +1036,7 @@ define('pgadmin.browser', [
                         return true;
                     }
                     i = items.eq(e);
-                    d = ctx.t.itemData(i);
+                    d = __ctx.t.itemData(i);
                     let result;
                     if (d._type === 'column') {
                       result = pgAdmin.numeric_comparator(d._id, _data._id);
@@ -1054,7 +1053,7 @@ define('pgadmin.browser', [
                     }
                     m = s + Math.round((e - s) / 2);
                     i = items.eq(m);
-                    d = ctx.t.itemData(i);
+                    d = __ctx.t.itemData(i);
                     if(d._type === 'column'){
                       result = pgAdmin.numeric_comparator(d._id, _data._id);
                     } else {
@@ -1077,34 +1076,34 @@ define('pgadmin.browser', [
                 };
 
               if (binarySearch()) {
-                ctx.t.before(i, {
+                __ctx.t.before(i, {
                   itemData: _data,
                   success: function() {
                     if (
-                      ctx.o && ctx.o.success && typeof(ctx.o.success) == 'function'
+                      __ctx.o && __ctx.o.success && typeof(__ctx.o.success) == 'function'
                     ) {
-                      ctx.o.success.apply(ctx.t, [i, _data]);
+                      __ctx.o.success.apply(__ctx.t, [i, _data]);
                     }
                   },
                   fail: function() {
                     console.warn('Failed to add before...', arguments);
                     if (
-                      ctx.o && ctx.o.fail && typeof(ctx.o.fail) == 'function'
+                      __ctx.o && __ctx.o.fail && typeof(__ctx.o.fail) == 'function'
                     ) {
-                      ctx.o.fail.apply(ctx.t, [i, _data]);
+                      __ctx.o.fail.apply(__ctx.t, [i, _data]);
                     }
                   },
                 });
               } else {
                 var _append = function() {
-                  var ctx = this,
-                    is_parent_loaded_before = ctx.t.wasLoad(ctx.i),
-                    _parent_data = ctx.t.itemData(ctx.i);
+                  var ___ctx = this,
+                    is_parent_loaded_before = ___ctx.t.wasLoad(___ctx.i),
+                    _parent_data = ___ctx.t.itemData(___ctx.i);
 
-                  ctx.t.append(ctx.i, {
+                  ___ctx.t.append(___ctx.i, {
                     itemData: _data,
                     success: function(item, options) {
-                      var i = $(options.items[0]);
+                      var _i = $(options.items[0]);
                       // Open the item path only if its parent is loaded
                       // or parent type is same as nodes
                       if(
@@ -1113,52 +1112,52 @@ define('pgadmin.browser', [
                           _data._type
                         ) > -1
                       ) {
-                        ctx.t.openPath(i);
-                        ctx.t.select(i);
+                        ___ctx.t.openPath(_i);
+                        ___ctx.t.select(_i);
                       } else {
                         if (_parent_data) {
                           // Unload the parent node so that we'll get
                           // latest data when we try to expand it
-                          ctx.t.unload(ctx.i, {
-                            success: function (item) {
+                          ___ctx.t.unload(___ctx.i, {
+                            success: function (_item) {
                               // Lets try to load it now
-                              ctx.t.open(item);
+                              ___ctx.t.open(_item);
                             },
                           });
                         }
                       }
                       if (
-                        ctx.o && ctx.o.success &&
-                          typeof(ctx.o.success) == 'function'
+                        ___ctx.o && ___ctx.o.success &&
+                          typeof(___ctx.o.success) == 'function'
                       ) {
-                        ctx.o.success.apply(ctx.t, [i, _data]);
+                        ___ctx.o.success.apply(___ctx.t, [_i, _data]);
                       }
                     },
                     fail: function() {
                       console.warn('Failed to append...', arguments);
                       if (
-                        ctx.o && ctx.o.fail &&
-                          typeof(ctx.o.fail) == 'function'
+                        ___ctx.o && ___ctx.o.fail &&
+                          typeof(___ctx.o.fail) == 'function'
                       ) {
-                        ctx.o.fail.apply(ctx.t, [ctx.i, _data]);
+                        ___ctx.o.fail.apply(___ctx.t, [___ctx.i, _data]);
                       }
                     },
                   });
-                }.bind(ctx);
+                }.bind(__ctx);
 
-                if (ctx.i && !ctx.t.isInode(ctx.i)) {
-                  ctx.t.setInode(ctx.i, {success: _append});
+                if (__ctx.i && !__ctx.t.isInode(__ctx.i)) {
+                  __ctx.t.setInode(__ctx.i, {success: _append});
                 } else {
                   // Handle case for node without parent i.e. server-group
                   // or if parent node's inode is true.
                   _append();
                 }
               }
-            }.bind(ctx);
+            }.bind(_ctx);
 
           // Parent node do not have any children, let me unload it.
-          if (!first && ctx.t.wasLoad(ctx.i)) {
-            ctx.t.unload(ctx.i, {
+          if (!first && _ctx.t.wasLoad(_ctx.i)) {
+            _ctx.t.unload(_ctx.i, {
               success: function() {
                 findChildNode(
                   selectNode,
@@ -1264,7 +1263,7 @@ define('pgadmin.browser', [
             var _parent = this.t.parent(this.i) || null;
 
             // If there is no parent then just update the node
-            if(_parent.length == 0 && ctx.op == 'UPDATE') {
+            if(_parent && _parent.length == 0 && ctx.op == 'UPDATE') {
               updateNode();
             } else {
               var postRemove = function() {
@@ -1464,60 +1463,60 @@ define('pgadmin.browser', [
           }
         }.bind(ctx),
         traversePath = function() {
-          var ctx = this, data;
+          var _ctx = this, data;
 
-          ctx.success = traversePath;
-          if (ctx.p.length) {
-            data = ctx.p.shift();
+          _ctx.success = traversePath;
+          if (_ctx.p.length) {
+            data = _ctx.p.shift();
             // This is the node, we can now do the required operations.
             // We should first delete the existing node, if the parent-id is
             // different.
-            if (!ctx.p.length) {
-              if (ctx.op == 'RECREATE') {
-                ctx.load = false;
-                ctx.success = deleteNode;
-                ctx.notFound = findNewParent;
+            if (!_ctx.p.length) {
+              if (_ctx.op == 'RECREATE') {
+                _ctx.load = false;
+                _ctx.success = deleteNode;
+                _ctx.notFound = findNewParent;
               } else {
-                ctx.success = updateNode;
-                ctx.notFound = errorOut;
+                _ctx.success = updateNode;
+                _ctx.notFound = errorOut;
               }
             }
-            ctx.b._findTreeChildNode(
-              ctx.i, data, ctx
+            _ctx.b._findTreeChildNode(
+              _ctx.i, data, _ctx
             );
-          } else if (ctx.p.length == 1) {
-            ctx.notFound = findNewParent;
+          } else if (_ctx.p.length == 1) {
+            _ctx.notFound = findNewParent;
           }
           return true;
         }.bind(ctx),
         addItemNode = function() {
-          var ctx = this,
-            first = (ctx.i || this.t.wasLoad(ctx.i)) &&
-            this.t.first(ctx.i),
+          var _ctx = this,
+            first = (_ctx.i || this.t.wasLoad(_ctx.i)) &&
+            this.t.first(_ctx.i),
             findChildNode = function(success, notFound) {
-              var ctx = this;
-              ctx.success = success;
-              ctx.notFound = notFound;
+              var __ctx = this;
+              __ctx.success = success;
+              __ctx.notFound = notFound;
 
-              ctx.b._findTreeChildNode(ctx.i, _new, ctx);
-            }.bind(ctx),
+              __ctx.b._findTreeChildNode(__ctx.i, _new, __ctx);
+            }.bind(_ctx),
             selectNode = function() {
               this.t.openPath(this.i);
               this.t.select(this.i);
               if (
-                ctx.o && ctx.o.success && typeof(ctx.o.success) == 'function'
+                _ctx.o && _ctx.o.success && typeof(_ctx.o.success) == 'function'
               ) {
-                ctx.o.success.apply(ctx.t, [ctx.i, _new]);
+                _ctx.o.success.apply(_ctx.t, [_ctx.i, _new]);
               }
-            }.bind(ctx),
+            }.bind(_ctx),
             addNode = function() {
-              var ctx = this,
-                items = ctx.t.children(ctx.i),
+              var __ctx = this,
+                items = __ctx.t.children(__ctx.i),
                 s = 0, e = items.length - 1, i,
                 linearSearch = function() {
                   while (e >= s) {
                     i = items.eq(s);
-                    var d = ctx.t.itemData(i);
+                    var d = __ctx.t.itemData(i);
                     if (d._type === 'column') {
                       if (pgAdmin.numeric_comparator(d._id, _new._id) == 1)
                         return true;
@@ -1537,7 +1536,7 @@ define('pgadmin.browser', [
                 binarySearch = function() {
                   while (e - s > 22) {
                     i = items.eq(s);
-                    var d = ctx.t.itemData(i);
+                    var d = __ctx.t.itemData(i);
                     if (d._type === 'column') {
                       if (pgAdmin.numeric_comparator(d._id, _new._id) != -1)
                         return true;
@@ -1546,7 +1545,7 @@ define('pgadmin.browser', [
                         return true;
                     }
                     i = items.eq(e);
-                    d = ctx.t.itemData(i);
+                    d = __ctx.t.itemData(i);
                     let result;
                     if (d._type === 'column') {
                       result = pgAdmin.numeric_comparator(d._id, _new._id);
@@ -1563,7 +1562,7 @@ define('pgadmin.browser', [
                     }
                     var m = s + Math.round((e - s) / 2);
                     i = items.eq(m);
-                    d = ctx.t.itemData(i);
+                    d = __ctx.t.itemData(i);
                     if(d._type === 'column'){
                       result = pgAdmin.numeric_comparator(d._id, _new._id);
                     } else {
@@ -1586,55 +1585,55 @@ define('pgadmin.browser', [
                 };
 
               if (binarySearch()) {
-                ctx.t.before(i, {
+                __ctx.t.before(i, {
                   itemData: _new,
                   success: function() {
                     var new_item = $(arguments[1].items[0]);
-                    ctx.t.openPath(new_item);
-                    ctx.t.select(new_item);
+                    __ctx.t.openPath(new_item);
+                    __ctx.t.select(new_item);
                     if (
-                      ctx.o && ctx.o.success && typeof(ctx.o.success) == 'function'
+                      __ctx.o && __ctx.o.success && typeof(__ctx.o.success) == 'function'
                     ) {
-                      ctx.o.success.apply(ctx.t, [i, _old, _new]);
+                      __ctx.o.success.apply(__ctx.t, [i, _old, _new]);
                     }
                   },
                   fail: function() {
                     console.warn('Failed to add before..', arguments);
                     if (
-                      ctx.o && ctx.o.fail && typeof(ctx.o.fail) == 'function'
+                      __ctx.o && __ctx.o.fail && typeof(__ctx.o.fail) == 'function'
                     ) {
-                      ctx.o.fail.apply(ctx.t, [i, _old, _new]);
+                      __ctx.o.fail.apply(__ctx.t, [i, _old, _new]);
                     }
                   },
                 });
               } else {
                 var _appendNode = function() {
-                  ctx.t.append(ctx.i, {
+                  __ctx.t.append(__ctx.i, {
                     itemData: _new,
                     success: function() {
                       var new_item = $(arguments[1].items[0]);
-                      ctx.t.openPath(new_item);
-                      ctx.t.select(new_item);
+                      __ctx.t.openPath(new_item);
+                      __ctx.t.select(new_item);
                       if (
-                        ctx.o && ctx.o.success && typeof(ctx.o.success) == 'function'
+                        __ctx.o && __ctx.o.success && typeof(__ctx.o.success) == 'function'
                       ) {
-                        ctx.o.success.apply(ctx.t, [ctx.i, _old, _new]);
+                        __ctx.o.success.apply(__ctx.t, [__ctx.i, _old, _new]);
                       }
                     },
                     fail: function() {
                       console.warn('Failed to append...', arguments);
                       if (
-                        ctx.o && ctx.o.fail && typeof(ctx.o.fail) == 'function'
+                        __ctx.o && __ctx.o.fail && typeof(__ctx.o.fail) == 'function'
                       ) {
-                        ctx.o.fail.apply(ctx.t, [ctx.i, _old, _new]);
+                        __ctx.o.fail.apply(__ctx.t, [__ctx.i, _old, _new]);
                       }
                     },
                   });
                 };
 
                 // If the current node's inode is false
-                if (ctx.i && !ctx.t.isInode(ctx.i)) {
-                  ctx.t.setInode(ctx.i, {success: _appendNode});
+                if (__ctx.i && !__ctx.t.isInode(__ctx.i)) {
+                  __ctx.t.setInode(__ctx.i, {success: _appendNode});
                 } else {
                   // Handle case for node without parent i.e. server-group
                   // or if parent node's inode is true.
@@ -1642,11 +1641,11 @@ define('pgadmin.browser', [
                 }
 
               }
-            }.bind(ctx);
+            }.bind(_ctx);
 
           // Parent node do not have any children, let me unload it.
-          if (!first && ctx.t.wasLoad(ctx.i)) {
-            ctx.t.unload(ctx.i, {
+          if (!first && _ctx.t.wasLoad(_ctx.i)) {
+            _ctx.t.unload(_ctx.i, {
               success: function() {
                 findChildNode(
                   selectNode,
@@ -1711,11 +1710,11 @@ define('pgadmin.browser', [
     },
 
     onRefreshTreeNode: function(_i, _opts) {
-      var d = _i && this.tree.itemData(_i),
-        n = d && d._type && this.Nodes[d._type],
+      var _d = _i && this.tree.itemData(_i),
+        n = _d && _d._type && this.Nodes[_d._type],
         ctx = {
           b: this, // Browser
-          d: d, // current parent
+          d: _d, // current parent
           i: _i, // current item
           p: null, // path of the old object
           pathOfTreeItems: [], // path items
@@ -1725,7 +1724,7 @@ define('pgadmin.browser', [
         isOpen,
         idx = -1;
 
-      this.Events.trigger('pgadmin-browser:tree:refreshing', _i, d, n);
+      this.Events.trigger('pgadmin-browser:tree:refreshing', _i, _d, n);
 
       if (!n) {
         _i = null;
@@ -1763,9 +1762,9 @@ define('pgadmin.browser', [
         });
         return;
       }
-      var fetchNodeInfo = function(_i, _d, _n) {
-        var info = _n.getTreeNodeHierarchy(_i),
-          url = _n.generate_url(_i, 'nodes', _d, true);
+      var fetchNodeInfo = function(__i, __d, __n) {
+        var info = __n.getTreeNodeHierarchy(__i),
+          url = __n.generate_url(__i, 'nodes', __d, true);
 
         $.ajax({
           url: url,
@@ -1791,9 +1790,9 @@ define('pgadmin.browser', [
             _.extend(itemData, newData);
 
             if (
-              _n.can_expand && typeof(_n.can_expand) == 'function'
+              __n.can_expand && typeof(__n.can_expand) == 'function'
             ) {
-              if (!_n.can_expand(itemData)) {
+              if (!__n.can_expand(itemData)) {
                 ctx.t.unload(ctx.i);
                 return;
               }
@@ -1807,7 +1806,7 @@ define('pgadmin.browser', [
           .fail(function(xhr, error, status) {
             if (
               !Alertify.pgHandleItemError(
-                xhr, error, status, {item: _i, info: info}
+                xhr, error, status, {item: __i, info: info}
               )
             ) {
               var contentType = xhr.getResponseHeader('Content-Type'),
@@ -1818,15 +1817,15 @@ define('pgadmin.browser', [
                 ) || {};
 
               if (xhr.status == 410 && jsonResp.success == 0) {
-                var p = ctx.t.parent(ctx.i);
+                var parent = ctx.t.parent(ctx.i);
 
                 ctx.t.remove(ctx.i, {
                   success: function() {
-                    if (p) {
+                    if (parent) {
                     // Try to refresh the parent on error
                       try {
                         pgBrowser.Events.trigger(
-                          'pgadmin:browser:tree:refresh', p
+                          'pgadmin:browser:tree:refresh', parent
                         );
                       } catch (e) { console.warn(e.stack || e); }
                     }
@@ -1836,7 +1835,7 @@ define('pgadmin.browser', [
 
               Alertify.pgNotifier(error, xhr, gettext('Error retrieving details for the node.'), function (msg) {
                 if (msg == 'CRYPTKEY_SET') {
-                  fetchNodeInfo(_i, _d, _n);
+                  fetchNodeInfo(__i, __d, __n);
                 } else {
                   console.warn(arguments);
                 }
@@ -1851,10 +1850,10 @@ define('pgadmin.browser', [
             this.tree.unload(_i, {
               success: function() {
                 _i = p;
-                d = ctx.d = ctx.t.itemData(ctx.i);
-                n = ctx.b.Nodes[d._type];
+                _d = ctx.d = ctx.t.itemData(ctx.i);
+                n = ctx.b.Nodes[_d._type];
                 _i = p;
-                fetchNodeInfo(_i, d, n);
+                fetchNodeInfo(_i, _d, n);
               },
               fail: function() { console.warn(arguments); },
             });
@@ -1866,20 +1865,20 @@ define('pgadmin.browser', [
         }
       } else if (isOpen) {
         this.tree.unload(_i, {
-          success: fetchNodeInfo.bind(this, _i, d, n),
+          success: fetchNodeInfo.bind(this, _i, _d, n),
           fail: function() {
             console.warn(arguments);
           },
         });
-      } else if (!this.tree.isInode(_i) && d.inode) {
+      } else if (!this.tree.isInode(_i) && _d.inode) {
         this.tree.setInode(_i, {
-          success: fetchNodeInfo.bind(this, _i, d, n),
+          success: fetchNodeInfo.bind(this, _i, _d, n),
           fail: function() {
             console.warn(arguments);
           },
         });
       } else {
-        fetchNodeInfo(_i, d, n);
+        fetchNodeInfo(_i, _d, n);
       }
     },
 
@@ -1899,9 +1898,9 @@ define('pgadmin.browser', [
     },
 
     removeChildTreeNodesById: function(_parentNode, _collType, _childIds) {
-      var tree = pgBrowser.tree;
+      var tree_local = pgBrowser.tree;
       if(_parentNode && _collType) {
-        var children = tree.children(_parentNode),
+        var children = tree_local.children(_parentNode),
           idx = 0, size = children.length,
           childNode, childNodeData;
 
@@ -1909,7 +1908,7 @@ define('pgadmin.browser', [
 
         for (; idx < size; idx++) {
           childNode = children.eq(idx);
-          childNodeData = tree.itemData(childNode);
+          childNodeData = tree_local.itemData(childNode);
 
           if (childNodeData._type == _collType) {
             _parentNode = childNode;
@@ -1919,13 +1918,13 @@ define('pgadmin.browser', [
       }
 
       if (_parentNode) {
-        children = tree.children(_parentNode);
+        children = tree_local.children(_parentNode);
         idx = 0;
         size = children.length;
 
         for (; idx < size; idx++) {
           childNode = children.eq(idx);
-          childNodeData = tree.itemData(childNode);
+          childNodeData = tree_local.itemData(childNode);
 
           if (_childIds.indexOf(childNodeData._id) != -1) {
             pgBrowser.removeTreeNode(childNode, false, _parentNode);
@@ -1937,41 +1936,41 @@ define('pgadmin.browser', [
     },
 
     removeTreeNode: function(_node, _selectNext, _parentNode) {
-      var tree = pgBrowser.tree,
+      var tree_local = pgBrowser.tree,
         nodeToSelect = null;
 
       if (!_node)
         return false;
 
       if (_selectNext) {
-        nodeToSelect = tree.next(_node);
+        nodeToSelect = tree_local.next(_node);
         if (!nodeToSelect || !nodeToSelect.length) {
-          nodeToSelect = tree.prev(_node);
+          nodeToSelect = tree_local.prev(_node);
 
           if (!nodeToSelect || !nodeToSelect.length) {
             if (!_parentNode) {
-              nodeToSelect = tree.parent(_node);
+              nodeToSelect = tree_local.parent(_node);
             } else {
               nodeToSelect = _parentNode;
             }
           }
         }
         if (nodeToSelect)
-          tree.select(nodeToSelect);
+          tree_local.select(nodeToSelect);
       }
-      tree.remove(_node);
+      tree_local.remove(_node);
       return true;
     },
 
     findSiblingTreeNode: function(_node, _id) {
-      var tree = pgBrowser.tree,
-        parentNode = tree.parent(_node),
-        siblings = tree.children(parentNode),
+      var tree_local = pgBrowser.tree,
+        parentNode = tree_local.parent(_node),
+        siblings = tree_local.children(parentNode),
         idx = 0, nodeData, node;
 
       for(; idx < siblings.length; idx++) {
         node = siblings.eq(idx);
-        nodeData = tree.itemData(node);
+        nodeData = tree_local.itemData(node);
 
         if (nodeData && nodeData._id == _id)
           return node;
@@ -1980,32 +1979,32 @@ define('pgadmin.browser', [
     },
 
     findParentTreeNodeByType: function(_node, _parentType) {
-      var tree = pgBrowser.tree,
+      var tree_local = pgBrowser.tree,
         nodeData,
         node = _node;
 
       do {
-        nodeData = tree.itemData(node);
+        nodeData = tree_local.itemData(node);
         if (nodeData && nodeData._type == _parentType)
           return node;
-        node = tree.hasParent(node) ? tree.parent(node) : null;
+        node = tree_local.hasParent(node) ? tree_local.parent(node) : null;
       } while (node);
 
       return null;
     },
 
     findChildCollectionTreeNode: function(_node, _collType) {
-      var tree = pgBrowser.tree,
+      var tree_local = pgBrowser.tree,
         nodeData, idx = 0,
-        node = _node,
-        children = _node && tree.children(_node);
+        node,
+        children = _node && tree_local.children(_node);
 
       if (!children || !children.length)
         return null;
 
       for(; idx < children.length; idx++) {
         node = children.eq(idx);
-        nodeData = tree.itemData(node);
+        nodeData = tree_local.itemData(node);
 
         if (nodeData && nodeData._type == _collType)
           return node;
@@ -2020,10 +2019,10 @@ define('pgadmin.browser', [
             _val.priority -= 1; return _val;
           })),
         arrayChildNodeData = [],
-        fetchNodeInfo = function(_callback) {
+        fetchNodeInfo = function(__callback) {
           if (!_arrayIds.length) {
-            if (_callback) {
-              _callback();
+            if (__callback) {
+              __callback();
             }
             return;
           }
@@ -2083,35 +2082,35 @@ define('pgadmin.browser', [
     },
 
     _refreshNode: function(_ctx, _d) {
-      var traverseNodes = function(_d) {
-        var _ctx = this, idx = 0, ctx, d,
-          size = (_d.branch && _d.branch.length) || 0,
-          findNode = function(_i, __d, __ctx) {
+      var traverseNodes = function(__d) {
+        var __ctx = this, idx = 0, ctx, d,
+          size = (__d.branch && __d.branch.length) || 0,
+          findNode = function(i_findNode, d_findNode, ctx_findNode) {
             setTimeout(
               function() {
-                __ctx.b._findTreeChildNode(_i, __d, __ctx);
+                ctx_findNode.b._findTreeChildNode(i_findNode, d_findNode, ctx_findNode);
               }, 0
             );
           };
 
         for (; idx < size; idx++) {
-          d = _d.branch[idx];
-          var n = _ctx.b.Nodes[d._type];
+          d = __d.branch[idx];
+          var n = __ctx.b.Nodes[d._type];
           ctx = {
-            b: _ctx.b,
-            t: _ctx.t,
+            b: __ctx.b,
+            t: __ctx.t,
             pathOfTreeItems: [],
-            i: _ctx.i,
+            i: __ctx.i,
             d: d,
-            select: _ctx.select,
+            select: __ctx.select,
             hasId: n && !n.collection_node,
-            o: _ctx.o,
+            o: __ctx.o,
             load: true,
           };
           ctx.success = function() {
             this.b._refreshNode.call(this.b, this, this.d);
           }.bind(ctx);
-          findNode(_ctx.i, d, ctx);
+          findNode(__ctx.i, d, ctx);
         }
       }.bind(_ctx, _d);
 

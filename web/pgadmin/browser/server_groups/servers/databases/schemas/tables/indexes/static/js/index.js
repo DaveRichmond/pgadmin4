@@ -99,9 +99,7 @@ define('pgadmin.node.index', [
         type: 'text', disabled: 'checkAccessMethod',
         editable: function(m) {
           // Header cell then skip
-          if (m instanceof Backbone.Collection) {
-            return false;
-          } else if (m.inSchemaWithModelCheck.apply(this, arguments)) {
+          if (m instanceof Backbone.Collection || m.inSchemaWithModelCheck.apply(this, arguments)) {
             return false;
           }
           return !(m.checkAccessMethod.apply(this, arguments));
@@ -194,11 +192,7 @@ define('pgadmin.node.index', [
     inSchemaWithModelCheck: function(m) {
       if(m.top.node_info &&  'schema' in m.top.node_info) {
         // We will disable control if it's in 'edit' mode
-        if (m.top.isNew()) {
-          return false;
-        } else {
-          return true;
-        }
+        return !m.top.isNew();
       }
       return true;
     },
@@ -421,20 +415,12 @@ define('pgadmin.node.index', [
           group: gettext('Definition'), model: ColumnModel, mode: ['edit', 'create'],
           canAdd: function(m) {
             // We will disable it if it's in 'edit' mode
-            if (m.isNew()) {
-              return true;
-            } else {
-              return false;
-            }
+            return m.isNew();
           },
           canEdit: false,
           canDelete: function(m) {
             // We will disable it if it's in 'edit' mode
-            if (m.isNew()) {
-              return true;
-            } else {
-              return false;
-            }
+            return m.isNew();
           },
           control: 'unique-col-collection', uniqueCol : ['colname'],
           columns: ['colname', 'op_class', 'sort_order', 'nulls', 'collspcname'],
@@ -534,11 +520,7 @@ define('pgadmin.node.index', [
         inSchemaWithModelCheck: function(m) {
           if(this.node_info &&  'schema' in this.node_info) {
             // We will disable control if it's in 'edit' mode
-            if (m.isNew()) {
-              return false;
-            } else {
-              return true;
-            }
+            return !m.isNew();
           }
           return true;
         },

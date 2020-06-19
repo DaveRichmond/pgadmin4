@@ -58,7 +58,7 @@ define('pgadmin.dashboard', [
         if (e.keyCode == 32) {
           self.$el.click();
         }
-      }),
+      });
       this.delegateEvents();
       return this;
     },
@@ -490,7 +490,7 @@ define('pgadmin.dashboard', [
           });
         }
       } else {
-        Object.keys(new_data).map((label, label_ind) => {
+        Object.keys(new_data).forEach((label, label_ind) => {
           // Push new values onto the existing data structure
           // If this is a counter stat, we need to subtract the previous value
           if (!counter) {

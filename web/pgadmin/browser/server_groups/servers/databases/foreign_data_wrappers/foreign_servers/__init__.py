@@ -291,7 +291,6 @@ class ForeignServerView(PGChildNodeView):
             fsid: Foreign server ID
         """
 
-        res = []
         sql = render_template("/".join([self.template_path, 'properties.sql']),
                               fsid=fsid, conn=self.conn)
         status, r_set = self.conn.execute_2darray(sql)
@@ -405,7 +404,10 @@ class ForeignServerView(PGChildNodeView):
             status, res1 = self.conn.execute_dict(sql)
             if not status:
                 return internal_server_error(errormsg=res1)
-
+            if len(res1['rows']) == 0:
+                return gone(
+                    gettext("The specified foreign server could not be found.")
+                )
             fdw_data = res1['rows'][0]
 
             is_valid_options = False

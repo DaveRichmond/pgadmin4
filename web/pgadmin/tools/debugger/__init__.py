@@ -24,7 +24,7 @@ from pgadmin.utils import PgAdminModule, \
     ACCESSKEY_FIELDS as accesskey_fields
 from pgadmin.utils.ajax import bad_request
 from pgadmin.utils.ajax import make_json_response, \
-    internal_server_error
+    internal_server_error, gone
 from pgadmin.utils.driver import get_driver
 from pgadmin.settings import get_setting
 
@@ -391,6 +391,9 @@ def init_function(node_type, sid, did, scid, fid, trid=None):
             "Error retrieving function information from database")
         return internal_server_error(errormsg=r_set)
 
+    if len(r_set['rows']) == 0:
+        return gone(
+            gettext("The specified %s could not be found." % node_type))
     ret_status = status
 
     # Check that the function is actually debuggable...
@@ -567,21 +570,21 @@ def direct_new(trans_id):
     user_agent = UserAgent(request.headers.get('User-Agent'))
 
     function_arguments = '('
-    if de_inst.function_data is not None:
-        if 'args_name' in de_inst.function_data and \
-            de_inst.function_data['args_name'] is not None and \
-                de_inst.function_data['args_name'] != '':
-            args_name_list = de_inst.function_data['args_name'].split(",")
-            args_type_list = de_inst.function_data['args_type'].split(",")
-            index = 0
-            for args_name in args_name_list:
-                function_arguments = '{}{} {}, '.format(function_arguments,
-                                                        args_name,
-                                                        args_type_list[index])
-                index += 1
-            # Remove extra comma and space from the arguments list
-            if len(args_name_list) > 0:
-                function_arguments = function_arguments[:-2]
+    if de_inst.function_data is not None and \
+        'args_name' in de_inst.function_data and \
+        de_inst.function_data['args_name'] is not None and \
+            de_inst.function_data['args_name'] != '':
+        args_name_list = de_inst.function_data['args_name'].split(",")
+        args_type_list = de_inst.function_data['args_type'].split(",")
+        index = 0
+        for args_name in args_name_list:
+            function_arguments = '{}{} {}, '.format(function_arguments,
+                                                    args_name,
+                                                    args_type_list[index])
+            index += 1
+        # Remove extra comma and space from the arguments list
+        if len(args_name_list) > 0:
+            function_arguments = function_arguments[:-2]
 
     function_arguments += ')'
 

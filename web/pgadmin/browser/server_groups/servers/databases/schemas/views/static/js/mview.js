@@ -201,8 +201,7 @@ define('pgadmin.node.mview', [
           type: 'text', group: gettext('Storage'), first_empty: false,
           control: 'node-list-by-name', node: 'tablespace', select2: { allowClear: false },
           filter: function(m) {
-            if (m.label == 'pg_global') return false;
-            else return true;
+            return (m.label != 'pg_global');
           },
         },{
           id: 'fillfactor', label: gettext('Fill factor'),
@@ -258,7 +257,7 @@ define('pgadmin.node.mview', [
           if (_.isUndefined(field_name) || _.isNull(field_name) ||
             String(field_name).replace(/^\s+|\s+$/g, '') == '') {
             err['name'] = gettext('Please specify name.');
-            errmsg = errmsg || err['name'];
+            errmsg = err['name'];
             this.errorModel.set('name', errmsg);
             return errmsg;
           }else{
@@ -267,7 +266,7 @@ define('pgadmin.node.mview', [
           if (_.isUndefined(field_def) || _.isNull(field_def) ||
             String(field_def).replace(/^\s+|\s+$/g, '') == '') {
             err['definition'] = gettext('Please enter view definition.');
-            errmsg = errmsg || err['definition'];
+            errmsg = err['definition'];
             this.errorModel.set('definition', errmsg);
             return errmsg;
           }else{
@@ -389,8 +388,8 @@ define('pgadmin.node.mview', [
           i = item || t.selected(),
           d = data || (i && i.length == 1 ? t.itemData(i): undefined),
           node = this || (d && pgAdmin.Browser.Nodes[d._type]),
-          info = node.getTreeNodeHierarchy.apply(node, [i]),
-          version = info.server.version;
+          info = node && node.getTreeNodeHierarchy.apply(node, [i]),
+          version = _.isUndefined(info) ? 0 : info.server.version;
 
         // disable refresh concurrently if server version is 9.3
         return (version >= 90400);

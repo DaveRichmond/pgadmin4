@@ -227,7 +227,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
     })
 
     # Schema Diff: Keys to ignore while comparing
-    keys_to_ignore = ['oid', 'relowner', 'schema',
+    keys_to_ignore = ['oid', 'relowner', 'schema', 'indclass',
                       'indrelid', 'nspname', 'oid-2']
 
     def check_precondition(f):
@@ -588,6 +588,8 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
         # Adding parent into data dict, will be using it while creating sql
         data['schema'] = self.schema
         data['table'] = self.table
+        if len(data['table']) == 0:
+            return gone(gettext("The specified table could not be found."))
 
         try:
             # Start transaction.
@@ -1055,24 +1057,22 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
 
             for key in required_create_keys:
                 if key in diff_dict:
-                    if key == 'columns' and ((
+                    if (key == 'columns' and ((
                             'added' in diff_dict[key] and
                             len(diff_dict[key]['added']) > 0
                     ) or ('changed' in diff_dict[key] and
                           len(diff_dict[key]['changed']) > 0) or (
                             'deleted' in diff_dict[key] and
                             len(diff_dict[key]['deleted']) > 0)
-                    ):
-                        create_req = True
-                    elif key != 'columns':
+                    )) or key != 'columns':
                         create_req = True
 
             if create_req:
-                diff = self.get_sql_from_index_diff(sid=tgt_params['sid'],
-                                                    did=tgt_params['did'],
-                                                    scid=tgt_params['scid'],
-                                                    tid=tgt_params['tid'],
-                                                    idx=target['oid'],
+                diff = self.get_sql_from_index_diff(sid=src_params['sid'],
+                                                    did=src_params['did'],
+                                                    scid=src_params['scid'],
+                                                    tid=src_params['tid'],
+                                                    idx=source['oid'],
                                                     diff_schema=target_schema,
                                                     drop_req=True)
             else:

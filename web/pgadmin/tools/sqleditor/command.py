@@ -21,6 +21,7 @@ from pgadmin.tools.sqleditor.utils.is_query_resultset_updatable \
 from pgadmin.tools.sqleditor.utils.save_changed_data import save_changed_data
 from pgadmin.tools.sqleditor.utils.get_column_types import get_columns_types
 from pgadmin.utils.preferences import Preferences
+from pgadmin.utils.exception import ObjectGone
 
 from config import PG_DEFAULT_DRIVER
 
@@ -187,6 +188,9 @@ class SQLFilter(object):
             status, result = conn.execute_dict(query)
             if not status:
                 raise Exception(result)
+            if len(result['rows']) == 0:
+                raise ObjectGone(
+                    gettext("The specified object could not be found."))
 
             self.nsp_name = result['rows'][0]['nspname']
             self.object_name = result['rows'][0]['relname']
@@ -248,9 +252,9 @@ class SQLFilter(object):
         if self._row_filter is None or self._row_filter == '':
             is_filter_applied = False
 
-        if not is_filter_applied:
-            if self._data_sorting and len(self._data_sorting) > 0:
-                is_filter_applied = True
+        if not is_filter_applied and \
+                self._data_sorting and len(self._data_sorting) > 0:
+            is_filter_applied = True
 
         return is_filter_applied
 

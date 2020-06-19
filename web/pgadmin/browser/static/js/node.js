@@ -631,7 +631,7 @@ define('pgadmin.browser.node', [
               }
             }
 
-            x = (b.offsetWidth - w) / 2,
+            x = (b.offsetWidth - w) / 2;
             y = (b.offsetHeight - h) / 4;
 
             var p = pgBrowser.docker.addPanel(
@@ -687,9 +687,6 @@ define('pgadmin.browser.node', [
             // If it is here, that means - we do have some bug in code.
             return;
           }
-
-          if (!d)
-            return;
 
           l = gettext('Create - %s', this.label);
           p = addPanel();
@@ -815,7 +812,7 @@ define('pgadmin.browser.node', [
                 if (jqx.status == 417 || jqx.status == 410 || jqx.status == 500) {
                   try {
                     var data = JSON.parse(jqx.responseText);
-                    msg = data.errormsg;
+                    msg = data.info || data.errormsg;
                   } catch (e) {
                     console.warn(e.stack || e);
                   }
@@ -834,7 +831,7 @@ define('pgadmin.browser.node', [
       // Callback for creating script(s) & opening them in Query editor
       show_script: function(args, item) {
         var scriptType = args.script,
-          obj = this,
+          obj,
           t = pgBrowser.tree,
           i = item || t.selected(),
           d = i && i.length == 1 ? t.itemData(i) : undefined;
@@ -891,7 +888,7 @@ define('pgadmin.browser.node', [
           return;
 
         // Go further only if node type is a Server
-        if (data && data._type && data._type == 'server') {
+        if (data._type && data._type == 'server') {
           var element = $(item).find('span.aciTreeItem').first() || null,
             // First element will be icon and second will be colour code
             bgcolor = data.icon.split(' ')[1] || null,
@@ -899,7 +896,7 @@ define('pgadmin.browser.node', [
 
           if (bgcolor) {
             // li tag for the current branch
-            var first_level_element = element.parents()[3] || null,
+            var first_level_element = (element && element.parents()[3]) || null,
               dynamic_class = 'pga_server_' + data._id + '_bgcolor',
               style_tag;
 
@@ -1015,7 +1012,7 @@ define('pgadmin.browser.node', [
           data = item && t.itemData(item);
 
         // In case of unload remove the collection counter
-        if (self.is_collection && 'collection_count' in data) {
+        if (self.is_collection &&  data === Object(data) &&'collection_count' in data) {
           delete data.collection_count;
           t.setLabel(item, {
             label: _.escape(data._label),
@@ -1658,7 +1655,6 @@ define('pgadmin.browser.node', [
 
       if (action) {
         if (action == 'create') {
-          onCancelFunc = closePanel;
           onSaveFunc = saveNewNode;
         }
         if (action != 'properties') {

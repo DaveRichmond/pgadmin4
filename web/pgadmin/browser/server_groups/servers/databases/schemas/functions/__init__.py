@@ -1185,9 +1185,8 @@ class FunctionView(PGChildNodeView, DataTypeReader, SchemaDiffObjectCompare):
 
             data['change_func'] = False
             for arg in fun_change_args:
-                if arg == 'arguments' and arg in data and len(data[arg]) > 0:
-                    data['change_func'] = True
-                elif arg in data:
+                if (arg == 'arguments' and arg in data and len(data[arg]) > 0)\
+                        or arg in data:
                     data['change_func'] = True
 
             # If Function Definition/Arguments are changed then merge old
@@ -1508,6 +1507,8 @@ class FunctionView(PGChildNodeView, DataTypeReader, SchemaDiffObjectCompare):
         status, res = self.conn.execute_2darray(SQL)
         if not status:
             return internal_server_error(errormsg=res)
+        if len(res['rows']) == 0:
+            return gone(gettext("The specified function could not be found."))
 
         name = self.qtIdent(
             self.conn, res['rows'][0]['nspname'],

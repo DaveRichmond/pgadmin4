@@ -485,8 +485,8 @@ define('pgadmin.node.database', [
       },
     };
 
-    var connect_to_database = function(obj, data, tree, item) {
-        connect(obj, data, tree, item);
+    var connect_to_database = function(obj, data, tree, item, _wasConnected) {
+        connect(obj, data, tree, item, _wasConnected);
       },
       connect = function (obj, data, tree, item, _wasConnected) {
         var wasConnected = _wasConnected || data.connected,
@@ -574,6 +574,9 @@ define('pgadmin.node.database', [
             return onSuccess(res, obj, data, tree, item, wasConnected);
           }
         }).fail(function(xhr, status, error) {
+          if (xhr.status === 410) {
+            error = gettext('Error: Object not found - %s.', error);
+          }
           return onFailure(
             xhr, status, error, obj, data, tree, item, wasConnected
           );

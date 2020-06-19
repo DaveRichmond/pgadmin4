@@ -33,7 +33,7 @@ export default class SchemaDiffUI {
     this.filters = ['Identical', 'Different', 'Source Only', 'Target Only'];
     this.sel_filters = ['Different', 'Source Only', 'Target Only'];
     this.dataView = null;
-    this.grid = null,
+    this.grid = null;
     this.selection = {};
 
     this.model = new Backbone.Model({
@@ -238,14 +238,8 @@ export default class SchemaDiffUI {
               generated_script = script_header + 'BEGIN;' + '\n' + self.model.get('diff_ddl') + '\n' + 'END;';
             }
 
-            let preferences = pgWindow.pgAdmin.Browser.get_preferences_for_module('schema_diff');
-            if (preferences.schema_diff_new_browser_tab) {
-              pgWindow.pgAdmin.ddl_diff = generated_script;
-              generateScript(server_data, pgWindow.pgAdmin.DataGrid);
-            } else {
-              pgWindow.pgAdmin.ddl_diff = generated_script;
-              generateScript(server_data, pgWindow.pgAdmin.DataGrid);
-            }
+            pgWindow.pgAdmin.ddl_diff = generated_script;
+            generateScript(server_data, pgWindow.pgAdmin.DataGrid);
           }
 
           $('#diff_fetching_data').find('.schema-diff-busy-text').text('');
@@ -556,6 +550,15 @@ export default class SchemaDiffUI {
       fields: [{
         name: 'source_sid', label: false,
         control: SchemaDiffSelect2Control,
+        transform: function(data) {
+          let group_template_options = [];
+          for (let key in data) {
+            if (data.hasOwnProperty(key)) {
+              group_template_options.push({'group': key, 'optval': data[key]});
+            }
+          }
+          return group_template_options;
+        },
         url: url_for('schema_diff.servers'),
         select2: {
           allowClear: true,
@@ -636,6 +639,15 @@ export default class SchemaDiffUI {
       }, {
         name: 'target_sid', label: false,
         control: SchemaDiffSelect2Control,
+        transform: function(data) {
+          let group_template_options = [];
+          for (let key in data) {
+            if (data.hasOwnProperty(key)) {
+              group_template_options.push({'group': key, 'optval': data[key]});
+            }
+          }
+          return group_template_options;
+        },
         group: 'target',
         url: url_for('schema_diff.servers'),
         select2: {
