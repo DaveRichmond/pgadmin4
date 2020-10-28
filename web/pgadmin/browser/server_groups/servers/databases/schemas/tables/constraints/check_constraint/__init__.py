@@ -48,8 +48,8 @@ class CheckConstraintModule(CollectionNodeModule):
       - Load the module script for the Check Constraint, when any of the
         Check node is initialized.
     """
-    NODE_TYPE = 'check_constraint'
-    COLLECTION_LABEL = _("Check Constraints")
+    _NODE_TYPE = 'check_constraint'
+    _COLLECTION_LABEL = _("Check Constraints")
 
     def __init__(self, *args, **kwargs):
         super(CheckConstraintModule, self).__init__(*args, **kwargs)
@@ -75,7 +75,7 @@ class CheckConstraintModule(CollectionNodeModule):
         Load the module script for the Check Constraint, when any of the
         Check node is initialized.
         """
-        return database.DatabaseModule.NODE_TYPE
+        return database.DatabaseModule.node_type
 
     @property
     def module_use_template_javascript(self):
@@ -153,6 +153,7 @@ class CheckConstraintView(PGChildNodeView):
       - Validate check constraint.
     """
     node_type = blueprint.node_type
+    CHECK_CONSTRAINT_PATH = 'check_constraint/sql/#{0}#'
 
     parent_ids = [
         {'type': 'int', 'id': 'gid'},
@@ -201,7 +202,7 @@ class CheckConstraintView(PGChildNodeView):
                 kwargs['did'] in self.manager.db_info else 0
 
             # Set the template path for the SQL scripts
-            self.template_path = 'check_constraint/sql/#{0}#'.format(
+            self.template_path = self.CHECK_CONSTRAINT_PATH.format(
                 self.manager.version)
 
             schema, table = check_utils.get_parent(self.conn, kwargs['tid'])
@@ -265,15 +266,15 @@ class CheckConstraintView(PGChildNodeView):
         self.qtIdent = driver.qtIdent
 
         # Set the template path for the SQL scripts
-        self.template_path = 'check_constraint/sql/#{0}#'.format(
+        self.template_path = self.CHECK_CONSTRAINT_PATH.format(
             self.manager.version)
 
         schema, table = check_utils.get_parent(self.conn, tid)
         self.schema = schema
         self.table = table
 
-        SQL = render_template("/".join([self.template_path, 'properties.sql']),
-                              tid=tid)
+        SQL = render_template("/".join([self.template_path,
+                                        self._PROPERTIES_SQL]), tid=tid)
         status, res = self.conn.execute_dict(SQL)
 
         for row in res['rows']:
@@ -295,7 +296,7 @@ class CheckConstraintView(PGChildNodeView):
             cid: Check constraint Id.
         """
         SQL = render_template("/".join([self.template_path,
-                                        'nodes.sql']),
+                                        self._NODES_SQL]),
                               tid=tid,
                               cid=cid)
         status, rset = self.conn.execute_2darray(SQL)
@@ -337,7 +338,7 @@ class CheckConstraintView(PGChildNodeView):
         """
         res = []
         SQL = render_template("/".join([self.template_path,
-                                        'nodes.sql']),
+                                        self._NODES_SQL]),
                               tid=tid)
         status, rset = self.conn.execute_2darray(SQL)
 
@@ -382,7 +383,7 @@ class CheckConstraintView(PGChildNodeView):
         self.qtIdent = driver.qtIdent
 
         # Set the template path for the SQL scripts
-        self.template_path = 'check_constraint/sql/#{0}#'.format(
+        self.template_path = self.CHECK_CONSTRAINT_PATH.format(
             self.manager.version)
 
         schema, table = check_utils.get_parent(self.conn, tid)
@@ -391,7 +392,7 @@ class CheckConstraintView(PGChildNodeView):
 
         res = []
         SQL = render_template("/".join([self.template_path,
-                                        'nodes.sql']),
+                                        self._NODES_SQL]),
                               tid=tid)
         status, rset = self.conn.execute_2darray(SQL)
 
@@ -446,6 +447,56 @@ class CheckConstraintView(PGChildNodeView):
             status=200
         )
 
+    @staticmethod
+    def _get_req_data():
+        """
+        Get all required data from request data attribute.
+        :return: Request data and Error if any.
+        """
+
+        data = request.form if request.form else json.loads(
+            request.data, encoding='utf-8'
+        )
+        for k, v in data.items():
+            try:
+                # comments should be taken as is because if user enters a
+                # json comment it is parsed by loads which should not happen
+                if k in ('comment',):
+                    data[k] = v
+                else:
+                    data[k] = json.loads(v, encoding='utf-8')
+            except (ValueError, TypeError, KeyError):
+                data[k] = v
+
+        required_args = ['consrc']
+
+        for arg in required_args:
+            if arg not in data or data[arg] == '':
+                return True, make_json_response(
+                    status=400,
+                    success=0,
+                    errormsg=_(
+                        "Could not find the required parameter ({})."
+                    ).format(arg),
+                ), data
+        return False, '', data
+
+    @staticmethod
+    def _check_valid_icon(res):
+        """
+        Check and return icon value and is valid value.
+        :param res: Response data.
+        :return: icon value and valid flag.
+        """
+        if "convalidated" in res['rows'][0] and res['rows'][0]["convalidated"]:
+            icon = "icon-check_constraint_bad"
+            valid = False
+        else:
+            icon = "icon-check_constraint"
+            valid = True
+
+        return icon, valid
+
     @check_precondition
     def create(self, gid, sid, did, scid, tid, cid=None):
         """
@@ -462,55 +513,32 @@ class CheckConstraintView(PGChildNodeView):
         Returns:
 
         """
-        required_args = ['consrc']
-
-        data = request.form if request.form else json.loads(
-            request.data, encoding='utf-8'
-        )
-
-        for k, v in data.items():
-            try:
-                # comments should be taken as is because if user enters a
-                # json comment it is parsed by loads which should not happen
-                if k in ('comment',):
-                    data[k] = v
-                else:
-                    data[k] = json.loads(v, encoding='utf-8')
-            except (ValueError, TypeError, KeyError):
-                data[k] = v
-
-        for arg in required_args:
-            if arg not in data or data[arg] == '':
-                return make_json_response(
-                    status=400,
-                    success=0,
-                    errormsg=_(
-                        "Could not find the required parameter ({})."
-                    ).format(arg)
-                )
+        is_error, errmsg, data = CheckConstraintView._get_req_data()
+        if is_error:
+            return errmsg
 
         data['schema'] = self.schema
         data['table'] = self.table
         # Checking whether the table is deleted via query tool
         if len(data['table']) == 0:
-            return gone(_("The specified table could not be found."))
+            return gone(_(self.not_found_error_msg('Table')))
 
         try:
             if 'name' not in data or data['name'] == "":
-                SQL = "BEGIN;"
+                sql = "BEGIN;"
                 # Start transaction.
-                status, res = self.conn.execute_scalar(SQL)
+                status, res = self.conn.execute_scalar(sql)
                 if not status:
                     self.end_transaction()
                     return internal_server_error(errormsg=res)
 
             # The below SQL will execute CREATE DDL only
-            SQL = render_template(
-                "/".join([self.template_path, 'create.sql']),
+            sql = render_template(
+                "/".join([self.template_path, self._CREATE_SQL]),
                 data=data
             )
 
-            status, msg = self.conn.execute_scalar(SQL)
+            status, msg = self.conn.execute_scalar(sql)
             if not status:
                 self.end_transaction()
                 return internal_server_error(errormsg=msg)
@@ -533,7 +561,7 @@ class CheckConstraintView(PGChildNodeView):
 
             else:
                 sql = render_template(
-                    "/".join([self.template_path, 'get_oid.sql']),
+                    "/".join([self.template_path, self._OID_SQL]),
                     tid=tid,
                     name=data['name']
                 )
@@ -542,13 +570,7 @@ class CheckConstraintView(PGChildNodeView):
                     self.end_transaction()
                     return internal_server_error(errormsg=res)
 
-            if "convalidated" in res['rows'][0] and \
-                    res['rows'][0]["convalidated"]:
-                icon = "icon-check_constraint_bad"
-                valid = False
-            else:
-                icon = "icon-check_constraint"
-                valid = True
+            icon, valid = CheckConstraintView._check_valid_icon(res)
 
             return jsonify(
                 node=self.blueprint.generate_browser_node(
@@ -591,7 +613,7 @@ class CheckConstraintView(PGChildNodeView):
         try:
             for cid in data['ids']:
                 SQL = render_template("/".join([self.template_path,
-                                                'properties.sql']),
+                                                self._PROPERTIES_SQL]),
                                       tid=tid, cid=cid)
                 status, res = self.conn.execute_dict(SQL)
 
@@ -613,7 +635,7 @@ class CheckConstraintView(PGChildNodeView):
                 data = res['rows'][0]
 
                 SQL = render_template("/".join([self.template_path,
-                                                'delete.sql']),
+                                                self._DELETE_SQL]),
                                       data=data)
                 status, res = self.conn.execute_scalar(SQL)
                 if not status:
@@ -698,7 +720,7 @@ class CheckConstraintView(PGChildNodeView):
         """
 
         SQL = render_template("/".join([self.template_path,
-                                        'properties.sql']),
+                                        self._PROPERTIES_SQL]),
                               tid=tid, cid=cid)
         status, res = self.conn.execute_dict(SQL)
         if not status:
@@ -713,13 +735,13 @@ class CheckConstraintView(PGChildNodeView):
         data['table'] = self.table
 
         SQL = render_template("/".join([self.template_path,
-                                        'create.sql']),
+                                        self._CREATE_SQL]),
                               data=data)
 
-        sql_header = u"-- Constraint: {0}\n\n-- ".format(data['name'])
+        sql_header = "-- Constraint: {0}\n\n-- ".format(data['name'])
 
         sql_header += render_template(
-            "/".join([self.template_path, 'delete.sql']),
+            "/".join([self.template_path, self._DELETE_SQL]),
             data=data)
         sql_header += "\n"
 

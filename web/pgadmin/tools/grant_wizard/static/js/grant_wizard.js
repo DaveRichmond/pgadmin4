@@ -111,7 +111,7 @@ define([
           <div class="custom-control custom-checkbox custom-checkbox-no-label">
             <input tabindex="-1" type="checkbox" class="custom-control-input" id="${id}" />
             <label class="custom-control-label" for="${id}">
-              <span class="sr-only">Select All<span>
+              <span class="sr-only">` + gettext('Select All') + `<span>
             </label>
           </div>
         `);
@@ -173,7 +173,7 @@ define([
         callback: 'start_grant_wizard',
         priority: 14,
         label: gettext('Grant Wizard...'),
-        icon: 'fa fa-unlock-alt',
+        icon: 'fa fa-unlock',
         enable: supportedNodes.enabled.bind(
           null, pgBrowser.treeMenu, menuUtils.supportedNodes
         ),
@@ -189,7 +189,7 @@ define([
           callback: 'start_grant_wizard',
           priority: 14,
           label: gettext('Grant Wizard...'),
-          icon: 'fa fa-unlock-alt',
+          icon: 'fa fa-unlock',
           enable: supportedNodes.enabled.bind(
             null, pgBrowser.treeMenu, menuUtils.supportedNodes
           ),
@@ -763,7 +763,7 @@ define([
                 }),
 
                 beforeNext: function(obj) {
-                  var self = this;
+                  var ctx = this;
                   obj.options.disable_next = true;
 
                   /**
@@ -777,10 +777,10 @@ define([
                   }
 
                   // Clean the view
-                  if (self.view) {
-                    self.view.cleanup();
-                    delete self.view;
-                    self.view = null;
+                  if (ctx.view) {
+                    ctx.view.cleanup();
+                    delete ctx.view;
+                    ctx.view = null;
                   }
                   return true;
                 },
@@ -820,7 +820,6 @@ define([
                         Privileges array is generated based on
                         the type of nodes selected.
                        */
-                      var privModel = self.privModel;
                       var PrivModel = pgNode.Model.extend({
                         defaults: {
                           acl: undefined,
@@ -849,8 +848,8 @@ define([
                         present in object privileges array(object_priv)
                        */
                       var data = {};
-                      if (privModel) {
-                        data = privModel.toJSON();
+                      if (self.privModel) {
+                        data = self.privModel.toJSON();
                         var rolePrivs = data['acl'];
                         if (!_.isUndefined(rolePrivs) && rolePrivs.length > 0) {
                           for (var idx in rolePrivs) {
@@ -875,7 +874,7 @@ define([
                       }
 
                       // Instantiate privModel
-                      privModel = self.privModel = new PrivModel(data, {
+                      self.privModel = new PrivModel(data, {
                         node_info: self.info,
                       });
 
@@ -1020,24 +1019,24 @@ define([
                     // This method fetches the modified SQL for the wizard
                     onWizardNextPageChange: function() {
 
-                      var self = this;
+                      var ctx = this;
 
                       // Fetches modified SQL
                       $.ajax({
                         url: this.msql_url,
                         type: 'POST',
                         cache: false,
-                        data: JSON.stringify(self.model.toJSON(true)),
+                        data: JSON.stringify(ctx.model.toJSON(true)),
                         dataType: 'json',
                         contentType: 'application/json',
                       }).done(function(res) {
-                        self.sqlCtrl.clearHistory();
-                        self.sqlCtrl.setValue(res.data);
-                        self.sqlCtrl.refresh();
+                        ctx.sqlCtrl.clearHistory();
+                        ctx.sqlCtrl.setValue(res.data);
+                        ctx.sqlCtrl.refresh();
                       }).fail(function() {
-                        self.model.trigger('pgadmin-view:msql:error');
+                        ctx.model.trigger('pgadmin-view:msql:error');
                       }).always(function() {
-                        self.model.trigger('pgadmin-view:msql:fetched');
+                        ctx.model.trigger('pgadmin-view:msql:fetched');
                       });
                     },
 
@@ -1145,12 +1144,12 @@ define([
                 // Callback for finish button
                 onFinish: function() {
                   var m = newModel,
-                    d = m.toJSON('GET');
+                    grant_data = m.toJSON('GET');
 
                   // Save model
-                  if (d && !_.isEmpty(d) && !_.isUndefined(d.objects)) {
+                  if (grant_data && !_.isEmpty(grant_data) && !_.isUndefined(grant_data.objects)) {
                     m.save({}, {
-                      attrs: d,
+                      attrs: grant_data,
                       validate: false,
                       cache: false,
                       success: function() {
@@ -1159,7 +1158,7 @@ define([
                         self.releaseObjects();
                         self.close();
                       },
-                      error: function(m, jqxhr) {
+                      error: function(model, jqxhr) {
                         Alertify.pgNotifier(
                           'error', jqxhr,
                           gettext('Error saving properties')

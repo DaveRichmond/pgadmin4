@@ -21,13 +21,15 @@ define([
   'jquery', 'underscore', 'pgadmin.alertifyjs',
   'sources/gettext', 'sources/url_for', 'dropzone', 'sources/pgadmin',
   'sources/csrf', 'tablesorter', 'tablesorter-metric',
-], function($, _, Alertify, gettext, url_for, Dropzone, pgAdmin, csrfToken) {
+], function($, _, Alertify, gettext, url_for, Dropzone, pgAdmin, csrf) {
+
+  pgAdmin.Browser = pgAdmin.Browser || {};
 
   /*---------------------------------------------------------
     Define functions used for various operations
   ---------------------------------------------------------*/
   // Set the CSRF Token
-  csrfToken.setPGCSRFToken(pgAdmin.csrf_token_header, pgAdmin.csrf_token);
+  csrf.setPGCSRFToken(pgAdmin.csrf_token_header, pgAdmin.csrf_token);
 
   // Return file extension
   var getFileExtension = function(name) {
@@ -179,14 +181,17 @@ define([
       $('.file_manager').find('button.download').hide();
     } else {
       $('.file_manager').find('button.download').off().on('click', function() {
-        var path;
+        var path,
+          params = {};
+
+        params[pgAdmin.csrf_token_header] = pgAdmin.csrf_token;
+
         if ($('.fileinfo').data('view') == 'grid') {
           path = $('.fileinfo li.selected').find('.clip span').attr('data-alt');
-          window.open(pgAdmin.FileUtils.fileConnector + '?_=' + Date.now() + 'mode=download&path=' + path, '_blank');
         } else {
           path = $('.fileinfo').find('table#contents tbody tr.selected td:first-child').attr('title');
-          window.open(pgAdmin.FileUtils.fileConnector + '?_=' + Date.now() + 'mode=download&path=' + path, '_blank');
         }
+        download_file(path);
       });
     }
   };
@@ -301,10 +306,10 @@ define([
     var isDeleted = false,
       lg = pgAdmin.FileUtils.lg;
 
-    var doDelete = function(data) {
+    var doDelete = function(sel_data) {
       var post_data = {
         'mode': 'delete',
-        'path': data.Path,
+        'path': sel_data.Path,
       };
 
       $.ajax({
@@ -467,9 +472,9 @@ define([
         if (item_data.file_type == 'dir') {
           icon_type = 'fa fa-folder-open fm_folder_grid';
         } else if (item_data.file_type == 'drive') {
-          icon_type = 'fa fa-hdd-o fm_drive';
+          icon_type = 'fa fa-hdd fm_drive';
         } else {
-          icon_type = 'fa fa-file-text-o fm_file_grid';
+          icon_type = 'fa fa-file-alt fm_file_grid';
         }
 
         /* For the html ele */
@@ -567,10 +572,10 @@ define([
           icon_type = 'fa fa-folder-open fm_folder_list';
         } else if (item_data.file_type == 'drive') {
           class_type = 'tbl_drive';
-          icon_type = 'fa fa-hdd-o';
+          icon_type = 'fa fa-hdd';
         } else {
           class_type = 'tbl_file';
-          icon_type = 'fa fa-file-text-o';
+          icon_type = 'fa fa-file-alt';
         }
 
         /* For the html ele */
@@ -589,7 +594,7 @@ define([
         } else {
           item_ele +=
             `<div>
-              <input type="text" class="fm_file_rename"/>
+              <input aria-label="file_rename" type="text" class="fm_file_rename"/>
               <div class="fm_file_name">
                 <div class="d-flex">
                   <span class="fm_file_list ${icon_type}"></span>
@@ -746,10 +751,10 @@ define([
           // if file/folder is protected do nothing
           if ($(this).find('.fa-lock').length)
             return;
-          if ($(this).find('.fa-file-text-o').length)
+          if ($(this).find('.fa-file-alt').length)
             $(this).click();
           // If folder then first select and then double click to open folder/drive
-          else if ($(this).find('.fa-folder-open').length || $(this).find('.fa-hdd-o').length) {
+          else if ($(this).find('.fa-folder-open').length || $(this).find('.fa-hdd').length) {
             $(this).click();
             setTimeout(() => { $(self).trigger('dblclick'); }, 10);
           }
@@ -828,9 +833,9 @@ define([
             $this.find('span').toggle();
 
             // Rename folder/file on pressing enter key
-            $('.file_manager').off().on('keyup', function(e) {
-              if (e.keyCode == 13) {
-                e.stopPropagation();
+            $('.file_manager').off().on('keyup', function(event) {
+              if (event.keyCode == 13) {
+                event.stopPropagation();
                 $('.fileinfo #contents li.selected div').find(
                   'input'
                 ).trigger('blur');
@@ -852,9 +857,9 @@ define([
             $this.find('.fm_file_name').toggle();
 
             // Rename folder/file on pressing enter key
-            $('.file_manager').off().on('keyup', function(e) {
-              if (e.keyCode == 13) {
-                e.stopPropagation();
+            $('.file_manager').off().on('keyup', function(event) {
+              if (event.keyCode == 13) {
+                event.stopPropagation();
                 $('.fileinfo table#contents tr.selected td.tbl_file').find(
                   'fm_file_rename'
                 ).trigger('blur');
@@ -867,10 +872,10 @@ define([
         $('.fileinfo #contents li div').on('blur dblclick', 'input', function(e) {
           e.stopPropagation();
 
-          var old_name = decodeURI($(this).siblings('span').attr('title'));
+          var old_name = decodeURI($(this).siblings('div').find('.less_text').attr('title'));
           newvalue = old_name.substring(0, old_name.indexOf('.'));
           var last = getFileExtension(old_name),
-            data, new_name, path, full_name;
+            file_data, new_name, file_path, full_name;
 
           if (old_name.indexOf('.') == 0) {
             last = '';
@@ -890,17 +895,17 @@ define([
               $(this).siblings('span').toggle().html(full_name);
 
               new_name = decodeURI($(this).val());
-              path = decodeURI($(this).parent().parent().find(
+              file_path = decodeURI($(this).parent().parent().find(
                 'span'
               ).attr('data-alt'));
-              data = {
+              file_data = {
                 'Filename': old_name,
-                'Path': path,
+                'Path': file_path,
                 'NewFilename': new_name,
               };
 
               if (newvalue !== new_name) {
-                renameItem(data);
+                renameItem(file_data);
                 var parent = $('.currentpath').val();
                 getFolderInfo(parent);
               }
@@ -923,17 +928,17 @@ define([
               $(this).siblings('span').toggle().html(full_name);
 
               new_name = decodeURI($(this).val());
-              path = decodeURI($(this).parent().parent().find(
+              file_path = decodeURI($(this).parent().parent().find(
                 'span'
               ).attr('data-alt'));
-              data = {
+              file_data = {
                 'Filename': old_name,
-                'Path': path,
+                'Path': file_path,
                 'NewFilename': new_name,
               };
 
               if (newvalue !== new_name) {
-                renameItem(data);
+                renameItem(file_data);
                 getFolderInfo($('.currentpath').val());
               }
             }
@@ -945,15 +950,15 @@ define([
         $('.fileinfo table#contents tr td div').on(
           'blur dblclick', 'input',
           function(e) {
-            var old_name = decodeURI($(this).siblings('span').attr('title')),
-              newvalue = old_name.substring(0, old_name.indexOf('.')),
+            var old_name = decodeURI($(this).siblings('div').find('.less_text').attr('title')),
+              new_value = old_name.substring(0, old_name.indexOf('.')),
               last = getFileExtension(old_name);
             if (old_name.indexOf('.') == 0) {
               last = '';
             }
 
-            if (newvalue == '') {
-              newvalue = old_name;
+            if (new_value == '') {
+              new_value = old_name;
             }
 
             if (e.type == 'focusout') {
@@ -965,17 +970,16 @@ define([
                 $(this).siblings('span').toggle().html(full_name);
 
                 var new_name = decodeURI($(this).val()),
-                  path = decodeURI($(this).parent().parent().attr('title')),
-                  data = {
+                  file_path = decodeURI($(this).parent().parent().attr('title')),
+                  file_data = {
                     'Filename': old_name,
-                    'Path': path,
+                    'Path': file_path,
                     'NewFilename': new_name,
                   };
 
-                if (newvalue !== new_name) {
-                  renameItem(data);
-                  var parent = path.split('/').reverse().slice(2).reverse().join('/') + '/';
-                  getFolderInfo(parent);
+                if (new_value !== new_name) {
+                  renameItem(file_data);
+                  getFolderInfo($('.currentpath').val());
                 }
               }
             } else {
@@ -996,18 +1000,18 @@ define([
             // Enable/Disable level up button
             enab_dis_level_up();
 
-            var path = decodeURI($(this).find('span').attr('data-alt'));
+            var file_path = decodeURI($(this).find('span').attr('data-alt'));
 
-            if (path.lastIndexOf('/') == path.length - 1 || path.lastIndexOf('\\') == path.length - 1) {
+            if (file_path.lastIndexOf('/') == file_path.length - 1 || file_path.lastIndexOf('\\') == file_path.length - 1) {
               $('.file_manager_ok').addClass('disabled');
               $('.file_manager_ok').attr('disabled', true);
               $('.file_manager button.delete, .file_manager button.rename').attr('disabled', 'disabled');
               $('.file_manager button.download').attr('disabled', 'disabled');
 
-              getFolderInfo(path);
+              getFolderInfo(file_path);
 
             } else {
-              var is_valid_file = getFileInfo(path);
+              var is_valid_file = getFileInfo(file_path);
               if (is_valid_file && check_file_capability(e, data_cap, 'grid')) {
                 $('.file_manager_ok').trigger('click');
               }
@@ -1016,12 +1020,12 @@ define([
 
           $('.fileinfo').find('#contents li').on('click', function(e) {
             e.stopPropagation();
-            var path = decodeURI($(this).find('.clip span').attr('data-alt')),
+            var file_path = decodeURI($(this).find('.clip span').attr('data-alt')),
               is_protected = $(this).find(
                 '.clip span.fm_lock_icon'
               ).attr('data-protected');
 
-            if (path.lastIndexOf('/') == path.length - 1 || path.lastIndexOf('\\') == path.length - 1) {
+            if (file_path.lastIndexOf('/') == file_path.length - 1 || file_path.lastIndexOf('\\') == file_path.length - 1) {
               if (
                 has_capability(data_cap, 'select_folder') &&
               is_protected == undefined
@@ -1031,20 +1035,23 @@ define([
 
                 $('.file_manager_ok').removeClass('disabled');
                 $('.file_manager_ok').attr('disabled', false);
-                $('.file_manager button.delete, .file_manager button.rename').removeAttr(
+                $('.file_manager button.delete').removeAttr(
                   'disabled', 'disabled'
                 );
                 $('.file_manager button.download').attr(
                   'disabled', 'disabled'
                 );
+                $('.file_manager button.rename').attr(
+                  'disabled', 'disabled'
+                );
                 // set selected folder name in breadcrums
                 $('.file_manager #uploader .input-path').hide();
                 $('.file_manager #uploader .show_selected_file').remove();
-                $('<span class="show_selected_file">' + path + '</span>').appendTo(
+                $('<span class="show_selected_file">' + file_path + '</span>').appendTo(
                   '.file_manager #uploader .filemanager-path-group'
                 );
               }
-              pgAdmin.FileUtils.setUploader(path);
+              pgAdmin.FileUtils.setUploader(file_path);
             } else {
               if (
                 has_capability(data_cap, 'select_file') &&
@@ -1061,34 +1068,35 @@ define([
                 $('.file_manager #uploader .show_selected_file').remove();
               }
 
-              getFileInfo(path);
+              getFileInfo(file_path);
             }
           });
         } else {
           $('.fileinfo table#contents tbody tr').on('click', function(e) {
             e.stopPropagation();
-            var path = decodeURI($('td:first-child', this).attr('title')),
+            var file_path = decodeURI($('td:first-child', this).attr('title')),
               is_protected = $('td:first-child', this).find(
                 'i.tbl_lock_icon'
               ).attr('data-protected');
 
-            if (path.lastIndexOf('/') == path.length - 1 || path.lastIndexOf('\\') == path.length - 1) {
+            if (file_path.lastIndexOf('/') == file_path.length - 1 || file_path.lastIndexOf('\\') == file_path.length - 1) {
               if (has_capability(data_cap, 'select_folder') && is_protected == undefined) {
                 $(this).parent().find('tr.selected').removeClass('selected');
                 $('td:first-child', this).parent().addClass('selected');
                 $('.file_manager_ok').removeClass('disabled');
                 $('.file_manager_ok').attr('disabled', false);
                 $('.file_manager button.download').attr('disabled', 'disabled');
-                $('.file_manager button.delete, .file_manager button.rename').removeAttr('disabled');
+                $('.file_manager button.rename').attr('disabled', 'disabled');
+                $('.file_manager button.delete').removeAttr('disabled');
 
                 // set selected folder name in breadcrums
                 $('.file_manager #uploader .input-path').hide();
                 $('.file_manager #uploader .show_selected_file').remove();
-                $('<span class="show_selected_file">' + path + '</span>').appendTo(
+                $('<span class="show_selected_file">' + file_path + '</span>').appendTo(
                   '.file_manager #uploader .filemanager-path-group'
                 );
               }
-              pgAdmin.FileUtils.setUploader(path);
+              pgAdmin.FileUtils.setUploader(file_path);
             } else {
               if (has_capability(data_cap, 'select_file') && is_protected == undefined) {
                 $(this).parent().find('tr.selected').removeClass('selected');
@@ -1100,7 +1108,7 @@ define([
                 $('.file_manager #uploader .show_selected_file').remove();
               }
 
-              getFileInfo(path);
+              getFileInfo(file_path);
             }
           });
 
@@ -1108,16 +1116,16 @@ define([
             e.stopPropagation();
             // Enable/Disable level up button
             enab_dis_level_up();
-            var path = $('td:first-child', this).attr('title');
+            var file_path = $('td:first-child', this).attr('title');
 
-            if (path.lastIndexOf('/') == path.length - 1 || path.lastIndexOf('\\') == path.length - 1) {
+            if (file_path.lastIndexOf('/') == file_path.length - 1 || file_path.lastIndexOf('\\') == file_path.length - 1) {
               $('.file_manager_ok').addClass('disabled');
               $('.file_manager_ok').attr('disabled', true);
               $('.file_manager button.download').attr('disabled', 'disabled');
               $('.file_manager button.delete, .file_manager button.rename').attr('disabled', 'disabled');
-              getFolderInfo(path);
+              getFolderInfo(file_path);
             } else {
-              var is_valid_file = getFileInfo(path);
+              var is_valid_file = getFileInfo(file_path);
               if (
                 is_valid_file && check_file_capability(e, data_cap, 'table')
               ) {
@@ -1167,6 +1175,60 @@ define([
 
     return has_capability(data_cap, 'select_file') &&
       is_protected == undefined;
+  };
+
+  // Download selected file
+  var download_file = function (path) {
+
+    var data = { 'path': path, 'mode': 'download' },
+      params = {};
+
+    params[pgAdmin.csrf_token_header] = pgAdmin.csrf_token;
+
+    $.ajax({
+      type: 'POST',
+      url: pgAdmin.FileUtils.fileConnector,
+      contentType: false,
+      headers: params,
+      xhrFields: {
+        responseType: 'blob',
+      },
+      cache: false,
+      data: JSON.stringify(data),
+      success: function (blob, status, xhr) {
+        // check for a filename
+        var filename = xhr.getResponseHeader('filename');
+
+        if (typeof window.navigator.msSaveBlob !== 'undefined') {
+          // IE workaround for "HTML7007: One or more blob URLs were revoked by closing the blob for which they were created. These URLs will no longer resolve as the data backing the URL has been freed."
+          window.navigator.msSaveBlob(blob, filename);
+        } else {
+          var URL = window.URL || window.webkitURL;
+          var downloadUrl = URL.createObjectURL(blob);
+
+          if (filename) {
+            // use HTML5 a[download] attribute to specify filename
+            var a = document.createElement('a');
+            // safari doesn't support this yet
+            if (typeof a.download === 'undefined') {
+              window.location.href = downloadUrl;
+            } else {
+              a.href = downloadUrl;
+              a.download = filename;
+              document.body.appendChild(a);
+              a.click();
+            }
+          } else {
+            window.location.href = downloadUrl;
+          }
+
+          setTimeout(function () { URL.revokeObjectURL(downloadUrl); }, 100); // cleanup
+        }
+      },
+      error: function (error) {
+        Alertify.error(error);
+      },
+    });
   };
 
   /*---------------------------------------------------------
@@ -1260,11 +1322,11 @@ define([
           select_box = `<div class='change_file_types d-flex align-items-center p-1'>
           <div>` +
             gettext('Show hidden files and folders?') +
-            `<input type='checkbox' id='show_hidden' onclick='pgAdmin.FileUtils.handleClick(this)' tabindex='0'>
+            `<input  aria-label="Show hidden files and folders" type='checkbox' id='show_hidden' onclick='pgAdmin.FileUtils.handleClick(this)' tabindex='0'>
           </div>
           <div class="ml-auto">
             <label class="my-auto">` + gettext('Format') + `</label>
-            <select name='type' tabindex='0'>${fileFormats}</select>
+            <select aria-label="select" name='type' tabindex='0'>${fileFormats}</select>
           <div>`;
         }
 
@@ -1447,12 +1509,13 @@ define([
                 ) {
                   $('.file_manager_ok').removeClass('disabled');
                   $('.file_manager_ok').attr('disabled', false);
-                  $('.file_manager button.delete, .file_manager button.rename').removeAttr(
+                  $('.file_manager button.delete').removeAttr(
                     'disabled', 'disabled'
                   );
                   $('.file_manager button.download').attr(
                     'disabled', 'disabled'
                   );
+                  $('.file_manager button.rename').attr('disabled', 'disabled');
                   // set selected folder name in breadcrums
                   $('.file_manager #uploader .input-path').hide();
                   $('.file_manager #uploader .show_selected_file').remove();
@@ -1542,7 +1605,7 @@ define([
         // we remove simple file upload element
         $('.file-input-container').remove();
         $('.upload').remove();
-        $('.create').before('<button value="Upload" type="button" title="Upload File" name="upload" id="upload" class="btn btn-sm btn-secondary upload" tabindex="0"><span class="fa fa-upload sql-icon-lg"></span></button> ');
+        $('.create').before('<button aria-label="Upload" value="Upload" type="button" title="Upload File" name="upload" id="upload" class="btn btn-sm btn-primary-icon upload" tabindex="0"><span class="fa fa-upload sql-icon-lg"></span></button> ');
 
         $('#uploader .upload').off().on('click', function() {
           // we create prompt

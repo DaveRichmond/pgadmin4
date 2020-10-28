@@ -9,6 +9,7 @@
 
 import json
 import uuid
+from unittest.mock import patch
 
 from pgadmin.utils import server_utils as server_utils
 from pgadmin.browser.server_groups.servers.databases.schemas.tables.tests \
@@ -23,11 +24,6 @@ from regression.python_test_utils import test_utils as utils
 from . import utils as compound_triggers_utils
 
 import sys
-
-if sys.version_info < (3, 3):
-    from mock import patch
-else:
-    from unittest.mock import patch
 
 
 class CompoundTriggersUpdateTestCase(BaseTestGenerator):
@@ -139,8 +135,8 @@ class CompoundTriggersUpdateTestCase(BaseTestGenerator):
                     self.trigger_id = 9999
                 response = self.update_compound_trigger()
 
-        self.assertEquals(response.status_code,
-                          self.expected_data["status_code"])
+        self.assertEqual(response.status_code,
+                         self.expected_data["status_code"])
 
     def tearDown(self):
         # Disconnect the database

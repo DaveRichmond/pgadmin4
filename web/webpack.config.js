@@ -167,9 +167,12 @@ fs.readdirSync(all_themes_dir).map(function(curr_dir) {
   if(stats.isDirectory()) {
     /* Theme directory found */
     let cssfile = 'pgadmin.theme.'+curr_dir;
+
+    let disp_name = curr_dir;
+
     pgadminThemes[curr_dir] = {
       /* For now lets keep it as beta release */
-      disp_name: curr_dir,
+      disp_name: disp_name,
       cssfile: cssfile,
       preview_img: curr_dir + '_preview.png',
     };
@@ -242,13 +245,13 @@ var themeCssRules = function(theme_name) {
       {
         loader: 'sass-resources-loader',
         options: {
-          resources: function(theme_name){
+          resources: function(_theme_name){
             let ret_res = [
-              './pgadmin/static/scss/resources/' + theme_name + '/_theme.variables.scss',
+              './pgadmin/static/scss/resources/' + _theme_name + '/_theme.variables.scss',
               './pgadmin/static/scss/resources/pgadmin.resources.scss',
             ];
-            if(theme_name!='standard') {
-              ret_res.unshift('./pgadmin/static/scss/resources/' + theme_name + '/_theme.variables.scss');
+            if(_theme_name!='standard') {
+              ret_res.unshift('./pgadmin/static/scss/resources/' + _theme_name + '/_theme.variables.scss');
             }
             return ret_res;
           }(theme_name),
@@ -302,11 +305,6 @@ var getThemeWebpackConfig = function(theme_name) {
       // Module and Rules: https://webpack.js.org/configuration/module/
       // Loaders: https://webpack.js.org/loaders/
       //
-      // imports-loader: it adds dependent modules(use:imports-loader?module1)
-      // at the beginning of module it is dependency of like:
-      // var jQuery = require('jquery'); var browser = require('pgadmin.browser')
-      // It solves number of problems
-      // Ref: http:/github.com/webpack-contrib/imports-loader/
       rules: themeCssRules(theme_name),
     },
     resolve: {
@@ -386,12 +384,13 @@ module.exports = [{
     // It solves number of problems
     // Ref: http:/github.com/webpack-contrib/imports-loader/
     rules: [{
-      test: /\.js$/,
+      test: /\.jsx?$/,
       exclude: [/node_modules/, /vendor/],
       use: {
         loader: 'babel-loader',
         options: {
-          presets: [['@babel/preset-env', {'modules': 'commonjs', 'useBuiltIns': 'usage', 'corejs': 3}]],
+          presets: [['@babel/preset-env', {'modules': 'commonjs', 'useBuiltIns': 'usage', 'corejs': 3}], '@babel/preset-react'],
+          plugins: ['@babel/plugin-proposal-class-properties'],
         },
       },
     }, {
@@ -413,6 +412,11 @@ module.exports = [{
       query: webpackShimConfig,
       include: path.join(__dirname, '/pgadmin/browser'),
     }, {
+      // imports-loader: it adds dependent modules(use:imports-loader?module1)
+      // at the beginning of module it is dependency of like:
+      // var jQuery = require('jquery'); var browser = require('pgadmin.browser')
+      // It solves number of problems
+      // Ref: http:/github.com/webpack-contrib/imports-loader/
       test: require.resolve('./pgadmin/tools/datagrid/static/js/datagrid'),
       use: {
         loader: 'imports-loader?' +
@@ -496,6 +500,7 @@ module.exports = [{
         ',pgadmin.tools.debugger.direct' +
         ',pgadmin.node.pga_job' +
         ',pgadmin.tools.schema_diff' +
+        ',pgadmin.tools.storage_manager' +
         ',pgadmin.tools.search_objects',
       },
     }, {
@@ -510,7 +515,7 @@ module.exports = [{
   resolve: {
     alias: webpackShimConfig.resolveAlias,
     modules: ['node_modules', '.'],
-    extensions: ['.js'],
+    extensions: ['.js', '.jsx'],
     unsafeCache: true,
   },
   // Watch mode Configuration: After initial build, webpack will watch for

@@ -49,6 +49,9 @@ Use the fields on the *Display* panel to specify general display preferences:
   the client will display the animated dialogues/notifications otherwise it
   will be unanimated.
 
+* When the *Hide shared servers?* switch is set to *True*, the client will hide
+  all the shared servers from the browser tree.
+
 * Use the *Lock layout* field to lock the UI layout at different levels. This
   can also be changed from File menu on the :ref:`menu bar <menu_bar>`
 
@@ -156,6 +159,8 @@ Expand the *Debugger* node to specify your debugger display preferences.
     :alt: Preferences dialog debugger display options
     :align: center
 
+* Use *Debugger tab title placeholder* field to customize the Debugger tab title.
+
 * When the *Open in new browser tab* switch is set to *True*, the Debugger will
   open in a new browser tab when invoked.
 
@@ -185,6 +190,7 @@ Expand the *Miscellaneous* node to specify miscellaneous display preferences.
 * Use the *Themes* drop-down listbox to select the theme for pgAdmin. You'll also get a preview just below the
   drop down. Note that, to apply the theme you need to refresh the pgAdmin page. You can also submit your
   own themes, check `here <https://git.postgresql.org/gitweb/?p=pgadmin4.git;a=blob_plain;f=README>`_ how.
+  Currently we support Standard, Dark and High Contrast theme.
 
 The Paths Node
 **************
@@ -280,6 +286,10 @@ Tool display.
   a positive value above zero is specified, the notifier will be displayed for
   the specified number of seconds. The default is *5*.
 
+* Use the *Query tool tab title placeholder* field to customize the query tool tab title.
+
+* Use *View/Edit tab title placeholder* field to customize the View/Edit Data tab title.
+
 .. image:: images/preferences_sql_editor.png
     :alt: Preferences dialog sqleditor editor settings
     :align: center
@@ -304,12 +314,6 @@ Use the fields on the *Editor* panel to change settings of the query editor.
 * When the *Plain text mode?* switch is set to *True*, the editor mode will be
   changed to text/plain. Keyword highlighting and code folding will be disabled.
   This will improve editor performance with large files.
-
-* Use the *Tab size* field to specify the number of spaces per tab character in
-  the editor.
-
-* When the *Use spaces* switch is set to *True*, the editor will insert spaces
-  (instead of tab characters) when the tab key or auto-indent are used.
 
 .. image:: images/preferences_sql_explain.png
     :alt: Preferences dialog sqleditor explain options
@@ -374,12 +378,40 @@ preferences for copied data.
 * Use the *Result copy quoting* drop-down listbox to select which type of fields
   require quoting; select *All*, *None*, or *Strings*.
 
-Use the fields on the *Keyboard shortcuts* panel to configure shortcuts for the
-Query Tool window navigation:
-
 .. image:: images/preferences_sql_keyboard_shortcuts.png
     :alt: Preferences dialog sql keyboard shortcuts section
     :align: center
+
+Use the fields on the *Keyboard shortcuts* panel to configure shortcuts for the
+Query Tool window navigation:
+
+.. image:: images/preferences_sql_formatting.png
+    :alt: Preferences dialog SQL Formatting section
+    :align: center
+
+Use the fields on the *SQL formatting* panel to specify your preferences for
+reformatting of SQL.
+
+* Use the *Command-first notation* option to specify whether to place commas
+  before or after column names.
+* Use the *Identifier case* option to specify whether to change identifiers
+  (object names) into upper, lower, or capitalized case.
+* Use the *Keyword case* option to specify whether to change keywords into
+  upper, lower, or capitalized case.
+* Use the *Re-indent aligned?* option to specify that indentations of statements
+  should be changed, aligned by keywords.
+* Use the *Re-indent?* option to specify that indentations of statements should
+  be changed.
+* Use the *Spaces around operators?* option to specify whether or not to include
+  spaces on either side of operators.
+* Use the *Strip comments?* option to specify whether or not comments should be
+  removed.
+* Use the *Tab size* option to specify the number of spaces per tab or indent.
+* Use the *Use spaces?* option to select whether to use spaces or tabs when
+  indenting.
+* Use the *Wrap after N characters* option to specify the column limit for
+  wrapping column separated lists (e.g. of column names in a table). If set to
+  0 (zero), each item will be on it's own line.
 
 The Schema Diff Node
 ********************
@@ -389,6 +421,8 @@ Expand the *Schema Diff* node to specify your display preferences.
 .. image:: images/preferences_schema_diff.png
     :alt: Preferences schema diff
     :align: center
+
+Use the *Ignore owner* switch to ignores the owner while comparing the objects.
 
 Use the *Ignore whitespaces* switch to ignores the whitespaces while comparing
 the string objects. Whitespace includes space, tabs, and CRLF.

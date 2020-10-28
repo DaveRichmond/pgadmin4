@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 import uuid
 from pgadmin.browser.server_groups.servers.databases.tests import \
     utils as database_utils
@@ -64,7 +63,7 @@ class LanguagesDeleteTestCase(BaseTestGenerator):
                 actual_response_code = response.status_code
                 expected_status_code = self.expected_data['status_code']
 
-        self.assertEquals(actual_response_code, expected_status_code)
+        self.assertEqual(actual_response_code, expected_status_code)
 
     def delete_language(self):
         """This function will delete language under test database."""

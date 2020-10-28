@@ -24,8 +24,11 @@
 from flask import render_template
 from flask_babelex import gettext
 from collections import OrderedDict
+from werkzeug.exceptions import InternalServerError
 
 from pgadmin.tools.sqleditor.utils.get_column_types import get_columns_types
+from pgadmin.utils.exception import ExecuteError
+from pgadmin.utils.constants import SERVER_CONNECTION_CLOSED
 
 
 def is_query_resultset_updatable(conn, sql_path):
@@ -72,22 +75,18 @@ def is_query_resultset_updatable(conn, sql_path):
         is_resultset_updatable = has_oids or (primary_keys is not None and
                                               len(primary_keys) != 0)
 
-        if is_resultset_updatable:
-            column_types = get_columns_types(columns_info=columns_info,
-                                             table_oid=table_oid,
-                                             conn=conn,
-                                             has_oids=has_oids,
-                                             is_query_tool=True)
-            return True, has_oids, primary_keys, \
-                pk_names, table_oid, column_types
-        else:
+        if not is_resultset_updatable:
             _set_all_columns_not_editable(columns_info=columns_info)
-            return return_not_updatable()
+
+        column_types = get_columns_types(columns_info=columns_info,
+                                         table_oid=table_oid,
+                                         conn=conn,
+                                         has_oids=has_oids,
+                                         is_query_tool=True)
+        return is_resultset_updatable, has_oids, primary_keys, \
+            pk_names, table_oid, column_types
     else:
-        raise Exception(
-            gettext('Not connected to server or connection with the '
-                    'server has been closed.')
-        )
+        raise InternalServerError(SERVER_CONNECTION_CLOSED)
 
 
 def _check_single_table(columns_info):
@@ -135,7 +134,7 @@ def _check_oids(conn, sql_path, table_oid, columns_info):
 
     status, has_oids = conn.execute_scalar(query)
     if not status:
-        raise Exception(has_oids)
+        raise ExecuteError(has_oids)
 
     # Check that the oid column is selected in results columns
     oid_column_selected = False
@@ -192,7 +191,7 @@ def _get_primary_keys(sql_path, table_oid, conn):
     )
     status, result = conn.execute_dict(query)
     if not status:
-        raise Exception(result)
+        raise ExecuteError(result)
 
     primary_keys_columns = []
     primary_keys = OrderedDict()
@@ -216,7 +215,7 @@ def _get_table_columns(sql_path, table_oid, conn):
     )
     status, result = conn.execute_dict(query)
     if not status:
-        raise Exception(result)
+        raise ExecuteError(result)
 
     columns = {}
     for row in result['rows']:

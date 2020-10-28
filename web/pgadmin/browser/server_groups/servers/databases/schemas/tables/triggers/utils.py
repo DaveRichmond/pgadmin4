@@ -12,7 +12,7 @@
 from flask import render_template
 from flask_babelex import gettext as _
 from pgadmin.utils.ajax import internal_server_error
-from pgadmin.utils.exception import ObjectGone
+from pgadmin.utils.exception import ObjectGone, ExecuteError
 from pgadmin.browser.server_groups.servers.databases.schemas.utils \
     import trigger_definition
 from config import PG_DEFAULT_DRIVER
@@ -52,7 +52,7 @@ def get_parent(conn, tid, template_path=None):
                                     'get_parent.sql']), tid=tid)
     status, rset = conn.execute_2darray(SQL)
     if not status:
-        raise Exception(rset)
+        raise ExecuteError(rset)
 
     schema = ''
     table = ''
@@ -105,6 +105,7 @@ def get_trigger_function_and_columns(conn, data, tid,
     # with schema name.
     if data['lanname'] == 'edbspl':
         data['tfunction'] = 'Inline EDB-SPL'
+        data['tgargs'] = None
     else:
         SQL = render_template("/".join(
             [template_path, 'get_triggerfunctions.sql']),
@@ -131,6 +132,8 @@ def get_trigger_function_and_columns(conn, data, tid,
             formatted_args = ', '.join(formatted_args)
 
             data['tgargs'] = formatted_args
+        else:
+            data['tgargs'] = None
 
         if len(data['tgattr']) >= 1:
             columns = ', '.join(data['tgattr'].split(' '))
@@ -140,21 +143,22 @@ def get_trigger_function_and_columns(conn, data, tid,
 
 
 @get_template_path
-def get_sql(conn, data, tid, trid, datlastsysoid,
-            show_system_objects, is_schema_diff=False, template_path=None):
+def get_sql(conn, **kwargs):
     """
     This function will generate sql from model data.
 
     :param conn: Connection Object
-    :param data: Data
-    :param tid: Table ID
-    :param trid: Trigger ID
-    :param datlastsysoid:
-    :param show_system_objects: Show System Object value True or False
-    :param is_schema_diff:
-    :param template_path: Optional template path
+    :param kwargs
     :return:
     """
+    data = kwargs.get('data')
+    tid = kwargs.get('tid')
+    trid = kwargs.get('trid')
+    datlastsysoid = kwargs.get('datlastsysoid')
+    show_system_objects = kwargs.get('show_system_objects')
+    is_schema_diff = kwargs.get('is_schema_diff', False)
+    template_path = kwargs.get('template_path', None)
+
     name = data['name'] if 'name' in data else None
     if trid is not None:
         sql = render_template("/".join([template_path, 'properties.sql']),
@@ -163,9 +167,8 @@ def get_sql(conn, data, tid, trid, datlastsysoid,
 
         status, res = conn.execute_dict(sql)
         if not status:
-            raise Exception(res)
-
-        if len(res['rows']) == 0:
+            raise ExecuteError(res)
+        elif len(res['rows']) == 0:
             raise ObjectGone(_('Could not find the trigger in the table.'))
 
         old_data = dict(res['rows'][0])
@@ -174,47 +177,21 @@ def get_sql(conn, data, tid, trid, datlastsysoid,
         if 'name' not in data:
             name = data['name'] = old_data['name']
 
-        drop_sql = ''
-        if is_schema_diff:
-            if 'table' not in data:
-                data['table'] = old_data['relname']
-            if 'schema' not in data:
-                data['schema'] = old_data['nspname']
-
-            # If any of the below key is present in data then we need to drop
-            # trigger and re-create it.
-            key_array = ['prosrc', 'is_row_trigger', 'evnt_insert',
-                         'evnt_delete', 'evnt_update', 'fires', 'tgdeferrable',
-                         'whenclause', 'tfunction', 'tgargs', 'columns',
-                         'is_constraint_trigger', 'tginitdeferred']
-
-            is_drop_trigger = False
-            for key in key_array:
-                if key in data:
-                    is_drop_trigger = True
-                    break
-
-            if is_drop_trigger:
-                tmp_data = dict()
-                tmp_data['name'] = data['name']
-                tmp_data['nspname'] = old_data['nspname']
-                tmp_data['relname'] = old_data['relname']
-                drop_sql = render_template("/".join([template_path,
-                                                     'delete.sql']),
-                                           data=tmp_data, conn=conn)
+        drop_sql = _check_schema_diff_sql(is_schema_diff, data, old_data,
+                                          template_path, conn)
 
         old_data = get_trigger_function_and_columns(
             conn, old_data, tid, show_system_objects)
 
         old_data = trigger_definition(old_data)
 
-        SQL = render_template(
+        sql = render_template(
             "/".join([template_path, 'update.sql']),
             data=data, o_data=old_data, conn=conn
         )
 
         if is_schema_diff:
-            SQL = drop_sql + '\n' + SQL
+            sql = drop_sql + '\n' + sql
     else:
         required_args = {
             'name': 'Name',
@@ -226,37 +203,78 @@ def get_sql(conn, data, tid, trid, datlastsysoid,
                 return _('-- definition incomplete')
 
         # If the request for new object which do not have did
-        SQL = render_template("/".join([template_path, 'create.sql']),
+        sql = render_template("/".join([template_path, 'create.sql']),
                               data=data, conn=conn)
-    return SQL, name
+    return sql, name
+
+
+def _check_schema_diff_sql(is_schema_diff, data, old_data, template_path,
+                           conn):
+    """
+    Check for schema diff and perform required actions.
+    is_schema_diff: flag for check req for schema diff.
+    data: Data.
+    old_data: properties sql data.
+    template_path: template path for get correct template location.
+    conn: Connection.
+    return: return deleted sql statement if any.
+    """
+    drop_sql = ''
+    if is_schema_diff:
+        if 'table' not in data:
+            data['table'] = old_data['relname']
+        if 'schema' not in data:
+            data['schema'] = old_data['nspname']
+
+        # If any of the below key is present in data then we need to drop
+        # trigger and re-create it.
+        key_array = ['prosrc', 'is_row_trigger', 'evnt_insert',
+                     'evnt_delete', 'evnt_update', 'fires', 'tgdeferrable',
+                     'whenclause', 'tfunction', 'tgargs', 'columns',
+                     'is_constraint_trigger', 'tginitdeferred']
+
+        is_drop_trigger = False
+        for key in key_array:
+            if key in data:
+                is_drop_trigger = True
+                break
+
+        if is_drop_trigger:
+            tmp_data = dict()
+            tmp_data['name'] = data['name']
+            tmp_data['nspname'] = old_data['nspname']
+            tmp_data['relname'] = old_data['relname']
+            drop_sql = render_template("/".join([template_path,
+                                                 'delete.sql']),
+                                       data=tmp_data, conn=conn)
+    return drop_sql
 
 
 @get_template_path
-def get_reverse_engineered_sql(conn, schema, table, tid, trid,
-                               datlastsysoid, show_system_objects,
-                               template_path=None, with_header=True):
+def get_reverse_engineered_sql(conn, **kwargs):
     """
     This function will return reverse engineered sql for specified trigger.
 
     :param conn: Connection Object
-    :param schema: Schema
-    :param table: Table
-    :param tid: Table ID
-    :param trid: Trigger ID
-    :param datlastsysoid:
-    :param show_system_objects: Show System Object value True or False
-    :param template_path: Optional template path
-    :param with_header: Optional parameter to decide whether the SQL will be
-     returned with header or not
+    :param kwargs:
     :return:
     """
+    schema = kwargs.get('schema')
+    table = kwargs.get('table')
+    tid = kwargs.get('tid')
+    trid = kwargs.get('trid')
+    datlastsysoid = kwargs.get('datlastsysoid')
+    show_system_objects = kwargs.get('show_system_objects')
+    template_path = kwargs.get('template_path', None)
+    with_header = kwargs.get('with_header', True)
+
     SQL = render_template("/".join([template_path, 'properties.sql']),
                           tid=tid, trid=trid,
                           datlastsysoid=datlastsysoid)
 
     status, res = conn.execute_dict(SQL)
     if not status:
-        raise Exception(res)
+        raise ExecuteError(res)
 
     if len(res['rows']) == 0:
         raise ObjectGone(_('Could not find the trigger in the table.'))
@@ -272,11 +290,12 @@ def get_reverse_engineered_sql(conn, schema, table, tid, trid,
 
     data = trigger_definition(data)
 
-    SQL, name = get_sql(conn, data, tid, None, datlastsysoid,
-                        show_system_objects)
+    SQL, name = get_sql(conn, data=data, tid=tid, trid=None,
+                        datlastsysoid=datlastsysoid,
+                        show_system_objects=show_system_objects)
 
     if with_header:
-        sql_header = u"-- Trigger: {0}\n\n-- ".format(data['name'])
+        sql_header = "-- Trigger: {0}\n\n-- ".format(data['name'])
 
         sql_header += render_template("/".join([template_path, 'delete.sql']),
                                       data=data, conn=conn)

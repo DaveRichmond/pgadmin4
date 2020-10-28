@@ -8,6 +8,7 @@
 ##########################################################################
 
 import uuid
+from unittest.mock import patch
 
 from pgadmin.browser.server_groups.servers.databases.schemas.functions.tests \
     import utils as trigger_funcs_utils
@@ -22,11 +23,6 @@ from regression import parent_node_dict
 from regression.python_test_utils import test_utils as utils
 from . import utils as triggers_utils
 import sys
-
-if sys.version_info < (3, 3):
-    from mock import patch
-else:
-    from unittest.mock import patch
 
 
 class TriggersDeleteTestCase(BaseTestGenerator):
@@ -94,8 +90,8 @@ class TriggersDeleteTestCase(BaseTestGenerator):
                        return_value=eval(self.mock_data["return_value"])):
                 response = self.delete_trigger()
 
-        self.assertEquals(response.status_code,
-                          self.expected_data["status_code"])
+        self.assertEqual(response.status_code,
+                         self.expected_data["status_code"])
 
     def tearDown(self):
         # Disconnect the database

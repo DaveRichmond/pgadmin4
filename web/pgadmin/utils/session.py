@@ -68,12 +68,7 @@ class ManagedSession(CallbackDict, SessionMixin):
 
     def sign(self, secret):
         if not self.hmac_digest:
-            if hasattr(string, 'lowercase'):
-                population = string.lowercase
-            # If script is running under python3
-            elif hasattr(string, 'ascii_lowercase'):
-                population = string.ascii_lowercase
-            population += string.digits
+            population = string.ascii_lowercase + string.digits
 
             self.randval = ''.join(random.sample(population, 20))
             self.hmac_digest = _calc_hmac(
@@ -103,11 +98,11 @@ class SessionManager(object):
 
 
 class CachingSessionManager(SessionManager):
-    def __init__(self, parent, num_to_store, skip_paths=[]):
+    def __init__(self, parent, num_to_store, skip_paths=None):
         self.parent = parent
         self.num_to_store = num_to_store
         self._cache = OrderedDict()
-        self.skip_paths = skip_paths
+        self.skip_paths = [] if skip_paths is None else skip_paths
 
     def _normalize(self):
         if len(self._cache) > self.num_to_store:
@@ -187,13 +182,13 @@ class CachingSessionManager(SessionManager):
 
 class FileBackedSessionManager(SessionManager):
 
-    def __init__(self, path, secret, disk_write_delay, skip_paths=[]):
+    def __init__(self, path, secret, disk_write_delay, skip_paths=None):
         self.path = path
         self.secret = secret
         self.disk_write_delay = disk_write_delay
         if not os.path.exists(self.path):
             os.makedirs(self.path)
-        self.skip_paths = skip_paths
+        self.skip_paths = [] if skip_paths is None else skip_paths
 
     def exists(self, sid):
         fname = os.path.join(self.path, sid)
@@ -219,7 +214,7 @@ class FileBackedSessionManager(SessionManager):
 
         # touch the file
         with open(fname, 'wb'):
-            pass
+            return ManagedSession(sid=sid)
 
         return ManagedSession(sid=sid)
 
@@ -316,7 +311,11 @@ class ManagedSessionInterface(SessionInterface):
         response.set_cookie(
             app.session_cookie_name,
             '%s!%s' % (session.sid, session.hmac_digest),
-            expires=cookie_exp, httponly=True, domain=domain
+            expires=cookie_exp,
+            secure=config.SESSION_COOKIE_SECURE,
+            httponly=config.SESSION_COOKIE_HTTPONLY,
+            samesite=config.SESSION_COOKIE_SAMESITE,
+            domain=domain
         )
 
 

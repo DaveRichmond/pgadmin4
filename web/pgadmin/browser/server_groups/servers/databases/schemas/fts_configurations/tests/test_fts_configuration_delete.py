@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 
 import uuid
 
@@ -76,7 +75,16 @@ class FTSConfDeleteTestCase(BaseTestGenerator):
             str(self.schema_id) + '/' +
             str(self.fts_conf_id),
             follow_redirects=True)
-        self.assertEquals(delete_response.status_code, 200)
+        self.assertEqual(delete_response.status_code, 200)
+
+        negative_delete_response = self.tester.delete(
+            self.url + str(utils.SERVER_GROUP) + '/' +
+            str(self.server_id) + '/' +
+            str(self.db_id) + '/' +
+            str(self.schema_id) + '/' +
+            str(0),
+            follow_redirects=True)
+        self.assertEqual(negative_delete_response.status_code, 500)
 
     def tearDown(self):
         """This function disconnect the test database."""

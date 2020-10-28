@@ -320,7 +320,7 @@ define('pgadmin.preferences', [
             switch (eventName) {
             case 'selected':
               if (!d)
-                return true;
+                break;
 
               if (d.preferences) {
                 /*
@@ -330,14 +330,14 @@ define('pgadmin.preferences', [
 
                 renderPreferencePanel(d.preferences);
 
-                return true;
+                break;
               } else {
                 selectFirstCategory(api, item);
               }
               break;
             case 'added':
               if (!d)
-                return true;
+                break;
 
               // We will add the preferences in to the preferences data
               // collection.
@@ -420,7 +420,7 @@ define('pgadmin.preferences', [
               buttons: [{
                 text: '',
                 key: 112,
-                className: 'btn btn-secondary pull-left fa fa-question pg-alertify-icon-button',
+                className: 'btn btn-primary-icon pull-left fa fa-question pg-alertify-icon-button',
                 attrs: {
                   name: 'dialog_help',
                   type: 'button',
@@ -477,6 +477,29 @@ define('pgadmin.preferences', [
                 if(pref.name == 'theme') {
                   requires_refresh = true;
                 }
+
+                if(pref.name == 'hide_shared_server') {
+                  Alertify.confirm(
+                    gettext('Browser tree refresh required'),
+                    gettext('A browser tree refresh is required. Do you wish to refresh the tree?'),
+                    function() {
+                      pgAdmin.Browser.tree.destroy({
+                        success: function() {
+                          pgAdmin.Browser.initializeBrowserTree(pgAdmin.Browser);
+                          return true;
+                        },
+                      });
+                    },
+                    function() {
+                      preferences.reset();
+                      changed = {};
+                      return true;
+                    }
+                  ).set('labels', {
+                    ok: gettext('Refresh'),
+                    cancel: gettext('Later'),
+                  });
+                }
               });
 
               if(requires_refresh) {
@@ -512,7 +535,7 @@ define('pgadmin.preferences', [
 
     },
     show: function() {
-      Alertify.preferencesDlg(true).resizeTo(pgAdmin.Browser.stdW.lg,pgAdmin.Browser.stdH.lg);
+      Alertify.preferencesDlg(true).resizeTo(pgAdmin.Browser.stdW.calc(pgAdmin.Browser.stdW.lg),pgAdmin.Browser.stdH.calc(pgAdmin.Browser.stdH.lg));
     },
   };
 

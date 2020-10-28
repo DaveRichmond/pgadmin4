@@ -17,7 +17,7 @@ CREATE OR REPLACE PROCEDURE {{ conn|qtIdent(o_data.pronamespace, name) }}{% if d
 )
 {% endif %}
 
-    {{ data.provolatile }} {% if ('proleakproof' in data and data.proleakproof) or ('proleakproof' not in data and o_data.proleakproof) %}LEAKPROOF{% else %}NOT LEAKPROOF{% endif %}
+    {% if 'provolatile' in data and data.provolatile %}{{ data.provolatile }} {% elif 'provolatile' not in data and o_data.provolatile %}{{ o_data.provolatile }}{% endif %} {% if ('proleakproof' in data and data.proleakproof) or ('proleakproof' not in data and o_data.proleakproof) %}LEAKPROOF{% else %}NOT LEAKPROOF{% endif %}
 {% if ('proisstrict' in data and data.proisstrict) or ('proisstrict' not in data and o_data.proisstrict) %} STRICT{% endif %}
 {% if ('prosecdef' in data and data.prosecdef) or ('prosecdef' not in data and o_data.prosecdef) %} SECURITY DEFINER{% endif %}
 
@@ -35,7 +35,7 @@ AS {% if data.prosrc %}{{ data.prosrc }}{% else %}{{ o_data.prosrc }}{% endif %}
 {% if data.funcowner %}
 
 ALTER PROCEDURE {{ conn|qtIdent(o_data.pronamespace, name) }}{% if o_data.proargtypenames %}({{ o_data.proargtypenames }}){% endif %}
-    OWNER TO {{ data.funcowner }};
+    OWNER TO {{ conn|qtIdent(data.funcowner) }};
 {% endif -%}
 {# The SQL generated below will change priviledges #}
 {% if data.acl %}

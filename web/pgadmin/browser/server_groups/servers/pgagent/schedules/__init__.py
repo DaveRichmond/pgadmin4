@@ -40,8 +40,8 @@ class JobScheduleModule(CollectionNodeModule):
       - Method is overridden from its base class to make the node as leaf node.
     """
 
-    NODE_TYPE = 'pga_schedule'
-    COLLECTION_LABEL = gettext("Schedules")
+    _NODE_TYPE = 'pga_schedule'
+    _COLLECTION_LABEL = gettext("Schedules")
 
     def get_nodes(self, gid, sid, jid):
         """
@@ -214,7 +214,7 @@ class JobScheduleView(PGChildNodeView):
             jid: Job ID
         """
         sql = render_template(
-            "/".join([self.template_path, 'properties.sql']),
+            "/".join([self.template_path, self._PROPERTIES_SQL]),
             jid=jid
         )
         status, res = self.conn.execute_dict(sql)
@@ -240,7 +240,7 @@ class JobScheduleView(PGChildNodeView):
         """
         res = []
         sql = render_template(
-            "/".join([self.template_path, 'nodes.sql']),
+            "/".join([self.template_path, self._NODES_SQL]),
             jscid=jscid,
             jid=jid
         )
@@ -297,7 +297,7 @@ class JobScheduleView(PGChildNodeView):
             jscid: JobSchedule ID
         """
         sql = render_template(
-            "/".join([self.template_path, 'properties.sql']),
+            "/".join([self.template_path, self._PROPERTIES_SQL]),
             jscid=jscid, jid=jid
         )
         status, res = self.conn.execute_dict(sql)
@@ -325,22 +325,12 @@ class JobScheduleView(PGChildNodeView):
             sid: Server ID
             jid: Job ID
         """
-        data = {}
-        if request.args:
-            for k, v in request.args.items():
-                try:
-                    data[k] = json.loads(
-                        v.decode('utf-8') if hasattr(v, 'decode') else v
-                    )
-                except ValueError:
-                    data[k] = v
-        else:
-            data = json.loads(request.data.decode())
-            # convert python list literal to postgres array literal.
-            format_schedule_data(data)
+        data = json.loads(request.data, encoding='utf-8')
+        # convert python list literal to postgres array literal.
+        format_schedule_data(data)
 
         sql = render_template(
-            "/".join([self.template_path, 'create.sql']),
+            "/".join([self.template_path, self._CREATE_SQL]),
             jid=jid,
             data=data,
             fetch_id=True
@@ -358,7 +348,7 @@ class JobScheduleView(PGChildNodeView):
 
         self.conn.execute_void('END')
         sql = render_template(
-            "/".join([self.template_path, 'properties.sql']),
+            "/".join([self.template_path, self._PROPERTIES_SQL]),
             jscid=res,
             jid=jid
         )
@@ -410,7 +400,7 @@ class JobScheduleView(PGChildNodeView):
             format_schedule_data(data)
 
         sql = render_template(
-            "/".join([self.template_path, 'update.sql']),
+            "/".join([self.template_path, self._UPDATE_SQL]),
             jid=jid,
             jscid=jscid,
             data=data
@@ -422,7 +412,7 @@ class JobScheduleView(PGChildNodeView):
             return internal_server_error(errormsg=res)
 
         sql = render_template(
-            "/".join([self.template_path, 'properties.sql']),
+            "/".join([self.template_path, self._PROPERTIES_SQL]),
             jscid=jscid,
             jid=jid
         )
@@ -462,7 +452,7 @@ class JobScheduleView(PGChildNodeView):
         for jscid in data['ids']:
             status, res = self.conn.execute_void(
                 render_template(
-                    "/".join([self.template_path, 'delete.sql']),
+                    "/".join([self.template_path, self._DELETE_SQL]),
                     jid=jid, jscid=jscid, conn=self.conn
                 )
             )
@@ -495,14 +485,14 @@ class JobScheduleView(PGChildNodeView):
 
         if jscid is None:
             sql = render_template(
-                "/".join([self.template_path, 'create.sql']),
+                "/".join([self.template_path, self._CREATE_SQL]),
                 jid=jid,
                 data=data,
                 fetch_id=False
             )
         else:
             sql = render_template(
-                "/".join([self.template_path, 'update.sql']),
+                "/".join([self.template_path, self._UPDATE_SQL]),
                 jid=jid,
                 jscid=jscid,
                 data=data

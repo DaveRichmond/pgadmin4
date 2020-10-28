@@ -7,11 +7,6 @@
   background-color: $color-gray-light;
 }
 
-#schema-diff-grid {
-  font-family: $font-family-primary;
-  font-size: $tree-font-size;
-}
-
 #schema-diff-grid .slick-header .slick-header-columns {
   background: $color-bg;
   height: 40px;
@@ -25,6 +20,8 @@
 }
 
 #schema-diff-grid {
+  font-family: $font-family-primary;
+  font-size: $tree-font-size;
   .ui-widget-content {
     background-color: $input-bg;
     color: $input-color;
@@ -70,16 +67,20 @@
 
 #schema-diff-grid .different {
   background-color: $schemadiff-diff-row-color !important;
+  color: $schema-diff-color-fg;
 }
 #schema-diff-grid .source {
   background-color: $schemadiff-source-row-color;
+  color: $schema-diff-color-fg;
 }
 #schema-diff-grid .target {
   background-color: $schemadiff-target-row-color !important;
+  color: $schema-diff-color-fg;
 }
 
 #schema-diff-grid .slick-row.active {
     background-color: $table-bg-selected !important;
+    color: $schema-diff-color-fg;
 }
 
 #schema-diff-ddl-comp {
@@ -95,4 +96,40 @@
   margin-right: 1rem;
   vertical-align: middle;
   display: inline-block;
+}
+
+.slick-group-toggle.collapsed::before {
+  font-family: $font-family-icon;
+  content: "\f054";
+  font-size: 0.6rem;
+  border: none;
+  font-weight: 900;
+}
+
+.slick-group-toggle.expanded::before {
+  font-family: $font-family-icon;
+  content: "\f078";
+  font-size: 0.6rem;
+  margin-left: 0rem;
+  font-weight: 900;
+}
+
+#schema-diff-ddl-comp .badge .caret::before {
+  font-family: $font-family-icon;
+  content: "\f078";
+  font-size: 0.7rem;
+  margin-left: 0rem;
+  font-weight: 900;
+}
+
+.slick-group {
+  color: $input-color !important;
+}
+
+.slick-group:hover {
+  color: $schema-diff-color-fg !important;
+}
+
+.slick-group.active {
+  color: $schema-diff-color-fg !important;
 }

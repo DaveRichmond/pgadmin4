@@ -312,8 +312,8 @@ _.extend(NumberFormatter.prototype, {
 
     var decimalParts = rawData.split(this.decimalSeparator);
     rawData = '';
-    for (var i = 0; i < decimalParts.length; i++) {
-      rawData = rawData + decimalParts[i] + '.';
+    for (var j = 0; j < decimalParts.length; j++) {
+      rawData = rawData + decimalParts[j] + '.';
     }
 
     if (rawData[rawData.length - 1] === '.') {
@@ -859,8 +859,8 @@ var Cell = Backgrid.Cell = Backbone.View.extend({
     this.listenTo(model, "backgrid:error", this.renderError);
 
     this.listenTo(column, "change:editable change:sortable change:renderable",
-                  function (column) {
-                    var changed = column.changedAttributes();
+                  function (col) {
+                    var changed = col.changedAttributes();
                     for (var key in changed) {
                       if (changed.hasOwnProperty(key)) {
                         $el.toggleClass(key, changed[key]);
@@ -889,7 +889,8 @@ var Cell = Backgrid.Cell = Backbone.View.extend({
     $el.empty();
     var model = this.model;
     var columnName = this.column.get("name");
-    $el.text(this.formatter.fromRaw(model.get(columnName), model));
+    var value = _.escape(this.formatter.fromRaw(model.get(columnName), model));
+    $el.append($(`<span class="display-text" title="${value}">${value}</span>`));
     $el.addClass(columnName);
     this.updateStateClassesMaybe();
     this.delegateEvents();
@@ -932,9 +933,15 @@ var Cell = Backgrid.Cell = Backbone.View.extend({
 
       // Need to redundantly undelegate events for Firefox
       this.undelegateEvents();
+      var dispText = this.$el.find('.display-text');
+      var width = '100%';
+      if(dispText.length === 1) {
+        width = dispText.width();
+      }
       this.$el.empty();
       this.$el.append(this.currentEditor.$el);
       this.currentEditor.render();
+      this.currentEditor.$el.css('min-width',width);
       this.$el.addClass("editor");
 
       model.trigger("backgrid:editing", model, column, this, this.currentEditor);
@@ -1053,7 +1060,7 @@ var UriCell = Backgrid.UriCell = Cell.extend({
    @class Backgrid.EmailCell
    @extends Backgrid.StringCell
 */
-var EmailCell = Backgrid.EmailCell = StringCell.extend({
+Backgrid.EmailCell = StringCell.extend({
 
   /** @property */
   className: "email-cell",
@@ -1126,7 +1133,7 @@ var NumberCell = Backgrid.NumberCell = Cell.extend({
    @class Backgrid.IntegerCell
    @extends Backgrid.NumberCell
 */
-var IntegerCell = Backgrid.IntegerCell = NumberCell.extend({
+Backgrid.IntegerCell = NumberCell.extend({
 
   /** @property */
   className: "integer-cell",
@@ -1245,7 +1252,7 @@ var DatetimeCell = Backgrid.DatetimeCell = Cell.extend({
    @class Backgrid.DateCell
    @extends Backgrid.DatetimeCell
 */
-var DateCell = Backgrid.DateCell = DatetimeCell.extend({
+Backgrid.DateCell = DatetimeCell.extend({
 
   /** @property */
   className: "date-cell",
@@ -1261,7 +1268,7 @@ var DateCell = Backgrid.DateCell = DatetimeCell.extend({
    @class Backgrid.TimeCell
    @extends Backgrid.DatetimeCell
 */
-var TimeCell = Backgrid.TimeCell = DatetimeCell.extend({
+Backgrid.TimeCell = DatetimeCell.extend({
 
   /** @property */
   className: "time-cell",
@@ -1365,7 +1372,7 @@ var BooleanCellEditor = Backgrid.BooleanCellEditor = CellEditor.extend({
    @class Backgrid.BooleanCell
    @extends Backgrid.Cell
 */
-var BooleanCell = Backgrid.BooleanCell = Cell.extend({
+Backgrid.BooleanCell = Cell.extend({
 
   /** @property */
   className: "boolean-cell",
@@ -1467,12 +1474,11 @@ var SelectCellEditor = Backgrid.SelectCellEditor = CellEditor.extend({
 
     var optionValue = null;
     var optionText = null;
-    var optionValue = null;
     var optgroupName = null;
     var optgroup = null;
 
     for (var i = 0; i < optionValues.length; i++) {
-      var optionValue = optionValues[i];
+      optionValue = optionValues[i];
 
       if (_.isArray(optionValue)) {
         optionText  = optionValue[0];
@@ -1630,7 +1636,7 @@ var SelectCell = Backgrid.SelectCell = Cell.extend({
 
           if (_.isArray(optionValue)) {
             var optionText  = optionValue[0];
-            var optionValue = optionValue[1];
+            optionValue = optionValue[1];
 
             if (optionValue == rawDatum) selectedText.push(optionText);
           }
@@ -1938,24 +1944,24 @@ var Row = Backgrid.Row = Backbone.View.extend({
       cells.push(this.makeCell(columns.at(i), options));
     }
 
-    this.listenTo(columns, "add", function (column, columns) {
-      var i = columns.indexOf(column);
+    this.listenTo(columns, "add", function (column, cols) {
+      var index = cols.indexOf(column);
       var cell = this.makeCell(column, options);
-      cells.splice(i, 0, cell);
+      cells.splice(index, 0, cell);
 
       var $el = this.$el;
-      if (i === 0) {
+      if (index === 0) {
         $el.prepend(cell.render().$el);
       }
-      else if (i === columns.length - 1) {
+      else if (index === cols.length - 1) {
         $el.append(cell.render().$el);
       }
       else {
-        $el.children().eq(i).before(cell.render().$el);
+        $el.children().eq(index).before(cell.render().$el);
       }
     });
 
-    this.listenTo(columns, "remove", function (column, columns, opts) {
+    this.listenTo(columns, "remove", function (column, cols, opts) {
       cells[opts.index].remove();
       cells.splice(opts.index, 1);
     });
@@ -2101,8 +2107,8 @@ var HeaderCell = Backgrid.HeaderCell = Backbone.View.extend({
     var column = this.column, collection = this.collection, $el = this.$el;
 
     this.listenTo(column, "change:editable change:sortable change:renderable",
-                  function (column) {
-                    var changed = column.changedAttributes();
+                  function (col) {
+                    var changed = col.changedAttributes();
                     for (var key in changed) {
                       if (changed.hasOwnProperty(key)) {
                         $el.toggleClass(key, changed[key]);
@@ -2234,7 +2240,7 @@ var EmptyHeaderCell = Backgrid.EmptyHeaderCell = Backbone.View.extend({
    @class Backgrid.HeaderRow
    @extends Backgrid.Row
  */
-var HeaderRow = Backgrid.HeaderRow = Backgrid.Row.extend({
+Backgrid.HeaderRow = Backgrid.Row.extend({
 
   /**
      Initializer.
@@ -2753,7 +2759,7 @@ var Body = Backgrid.Body = Backbone.View.extend({
    @class Backgrid.Footer
    @extends Backbone.View
  */
-var Footer = Backgrid.Footer = Backbone.View.extend({
+Backgrid.Footer = Backbone.View.extend({
 
   /** @property */
   tagName: "tfoot",
@@ -2832,7 +2838,7 @@ var Footer = Backgrid.Footer = Backbone.View.extend({
    - Backgrid.Row
    - Backgrid.Footer
 */
-var Grid = Backgrid.Grid = Backbone.View.extend({
+Backgrid.Grid = Backbone.View.extend({
 
   /** @property */
   tagName: "table",

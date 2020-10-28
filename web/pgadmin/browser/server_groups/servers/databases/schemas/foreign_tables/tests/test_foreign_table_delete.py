@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 
 import uuid
 
@@ -87,7 +86,7 @@ class ForeignTableDeleteTestCase(BaseTestGenerator):
             str(self.ft_id),
             follow_redirects=True)
 
-        self.assertEquals(delete_response.status_code, 200)
+        self.assertEqual(delete_response.status_code, 200)
 
     def tearDown(self):
         """ This function disconnect the test database. """

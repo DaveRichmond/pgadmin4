@@ -9,6 +9,7 @@
 
 import json
 import uuid
+from unittest.mock import patch
 
 from pgadmin.utils import server_utils as server_utils
 from pgadmin.browser.server_groups.servers.databases.schemas.tables.tests \
@@ -23,11 +24,6 @@ from regression.python_test_utils import test_utils as utils
 from . import utils as compound_triggers_utils
 
 import sys
-
-if sys.version_info < (3, 3):
-    from mock import patch
-else:
-    from unittest.mock import patch
 
 
 class CompoundTriggersGetTestCase(BaseTestGenerator):
@@ -114,8 +110,8 @@ class CompoundTriggersGetTestCase(BaseTestGenerator):
                     url + \
                     "?oid=17312&description=commaa&name=code&_=1589522392579"
                 response = self.tester.get(url, follow_redirects=True)
-                self.assertEquals(response.status_code,
-                                  self.expected_data["status_code"])
+                self.assertEqual(response.status_code,
+                                 self.expected_data["status_code"])
             if hasattr(self, "table_nodes"):
                 self.trigger_id = ''
                 response = self.get_compound_trigger()
@@ -141,8 +137,8 @@ class CompoundTriggersGetTestCase(BaseTestGenerator):
                            return_value=eval(self.mock_data["return_value"])):
                     response = self.get_compound_trigger()
 
-        self.assertEquals(response.status_code,
-                          self.expected_data["status_code"])
+        self.assertEqual(response.status_code,
+                         self.expected_data["status_code"])
 
     def tearDown(self):
         # Disconnect the database

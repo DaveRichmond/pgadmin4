@@ -7,8 +7,6 @@
 #
 ##########################################################################
 
-import six
-
 from pgadmin.browser.server_groups.servers\
     .databases.external_tables import ExternalTablesModule
 from pgadmin.utils.route import BaseTestGenerator
@@ -17,7 +15,7 @@ from unittest.mock import MagicMock, Mock
 
 class TestExternalTablesModule(BaseTestGenerator):
     scenarios = [
-        ('#BackendSupported When access the on a Postgresql Database, '
+        ('#backend_supported When access the on a Postgresql Database, '
          'it returns false',
          dict(
              test_type='backend-support',
@@ -27,8 +25,8 @@ class TestExternalTablesModule(BaseTestGenerator):
              ),
              expected_result=False,
          )),
-        ('#BackendSupported When access the on a Postgres Plus Advance Server '
-         'Database, it returns false',
+        ('#backend_supported When access the on a Postgres Plus Advance '
+         'Server Database, it returns false',
          dict(
              test_type='backend-support',
              manager=dict(
@@ -37,7 +35,7 @@ class TestExternalTablesModule(BaseTestGenerator):
              ),
              expected_result=False,
          )),
-        ('#BackendSupported When access the on a GreenPlum Database, '
+        ('#backend_supported When access the on a GreenPlum Database, '
          'it returns true',
          dict(
              test_type='backend-support',
@@ -80,9 +78,9 @@ class TestExternalTablesModule(BaseTestGenerator):
         manager.sversion = self.manager['sversion']
         manager.server_type = self.manager['server_type']
         module = ExternalTablesModule('something')
-        self.assertEquals(
+        self.assertEqual(
             self.expected_result,
-            module.BackendSupported(manager)
+            module.backend_supported(manager)
         )
 
     def __test_get_nodes(self):
@@ -90,7 +88,7 @@ class TestExternalTablesModule(BaseTestGenerator):
         module.generate_browser_collection_node = Mock()
 
         result = module.get_nodes(**self.function_parameters)
-        six.next(result)
+        next(result)
 
         module.generate_browser_collection_node.assert_called_with(
             self.expected_generate_browser_collection_node_called_with
@@ -98,6 +96,6 @@ class TestExternalTablesModule(BaseTestGenerator):
 
     def __test_template_javascript(self):
         module = ExternalTablesModule('something')
-        self.assertEquals(
+        self.assertEqual(
             self.expected_result,
             module.module_use_template_javascript)

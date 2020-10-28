@@ -20,6 +20,8 @@ from pgadmin.utils.ajax import make_json_response, internal_server_error, \
     make_response as ajax_response, gone
 from pgadmin.utils.driver import get_driver
 from config import PG_DEFAULT_DRIVER
+from pgadmin.tools.schema_diff.node_registry import SchemaDiffRegistry
+from pgadmin.tools.schema_diff.compare import SchemaDiffObjectCompare
 
 
 class EventTriggerModule(CollectionNodeModule):
@@ -43,8 +45,8 @@ class EventTriggerModule(CollectionNodeModule):
         is initialized.
     """
 
-    NODE_TYPE = 'event_trigger'
-    COLLECTION_LABEL = gettext("Event Triggers")
+    _NODE_TYPE = 'event_trigger'
+    _COLLECTION_LABEL = gettext("Event Triggers")
 
     def __init__(self, *args, **kwargs):
         """
@@ -80,7 +82,7 @@ class EventTriggerModule(CollectionNodeModule):
         Load the module script for event_trigger, when any of the database node
         is initialized.
         """
-        return database.DatabaseModule.NODE_TYPE
+        return database.DatabaseModule.node_type
 
     @property
     def module_use_template_javascript(self):
@@ -94,7 +96,7 @@ class EventTriggerModule(CollectionNodeModule):
 blueprint = EventTriggerModule(__name__)
 
 
-class EventTriggerView(PGChildNodeView):
+class EventTriggerView(PGChildNodeView, SchemaDiffObjectCompare):
     """
     class EventTriggerView(PGChildNodeView)
 
@@ -147,6 +149,7 @@ class EventTriggerView(PGChildNodeView):
     """
 
     node_type = blueprint.node_type
+    node_icon = "icon-%s" % blueprint.node_type
 
     parent_ids = [
         {'type': 'int', 'id': 'gid'},
@@ -171,6 +174,8 @@ class EventTriggerView(PGChildNodeView):
         'dependent': [{'get': 'dependents'}],
         'fopts': [{'get': 'get_event_funcs'}, {'get': 'get_event_funcs'}]
     })
+
+    keys_to_ignore = ['oid', 'xmin', 'oid-2', 'eventfuncoid']
 
     def check_precondition(f):
         """
@@ -215,7 +220,8 @@ class EventTriggerView(PGChildNodeView):
         Returns:
 
         """
-        sql = render_template("/".join([self.template_path, 'properties.sql']))
+        sql = render_template("/".join([self.template_path,
+                                        self._PROPERTIES_SQL]))
         status, res = self.conn.execute_dict(sql)
 
         if not status:
@@ -242,7 +248,7 @@ class EventTriggerView(PGChildNodeView):
 
         """
         result = []
-        sql = render_template("/".join([self.template_path, 'nodes.sql']))
+        sql = render_template("/".join([self.template_path, self._NODES_SQL]))
         status, res = self.conn.execute_2darray(sql)
         if not status:
             return internal_server_error(errormsg=res)
@@ -253,7 +259,7 @@ class EventTriggerView(PGChildNodeView):
                     row['oid'],
                     did,
                     row['name'],
-                    icon="icon-%s" % self.node_type
+                    self.node_icon
                 ))
 
         return make_json_response(
@@ -275,7 +281,7 @@ class EventTriggerView(PGChildNodeView):
         Returns:
           Json object of trigger node
         """
-        sql = render_template("/".join([self.template_path, 'nodes.sql']),
+        sql = render_template("/".join([self.template_path, self._NODES_SQL]),
                               etid=etid)
         status, res = self.conn.execute_2darray(sql)
         if not status:
@@ -287,7 +293,7 @@ class EventTriggerView(PGChildNodeView):
                     row['oid'],
                     did,
                     row['name'],
-                    icon="icon-%s" % self.node_type
+                    self.node_icon
                 ),
                 status=200
             )
@@ -325,27 +331,39 @@ class EventTriggerView(PGChildNodeView):
         Returns:
 
         """
+        status, res = self._fetch_properties(did, etid)
+        if not status:
+            return res
+
+        return ajax_response(
+            response=res,
+            status=200
+        )
+
+    def _fetch_properties(self, did, etid):
+        """
+        This function fetch the properties of the event trigger.
+        :param did:
+        :param etid:
+        :return:
+        """
         sql = render_template(
-            "/".join([self.template_path, 'properties.sql']),
+            "/".join([self.template_path, self._PROPERTIES_SQL]),
             etid=etid, conn=self.conn
         )
         status, res = self.conn.execute_dict(sql)
         if not status:
-            return internal_server_error(errormsg=res)
+            return False, internal_server_error(errormsg=res)
 
         if len(res['rows']) == 0:
-            return gone(
-                gettext("Could not find the event trigger information.")
-            )
+            return False, gone(
+                gettext("Could not find the event trigger information."))
 
         result = res['rows'][0]
         result['is_sys_obj'] = (result['oid'] <= self.datlastsysoid)
         result = self._formatter(result)
 
-        return ajax_response(
-            response=result,
-            status=200
-        )
+        return True, result
 
     @check_precondition
     def create(self, gid, sid, did):
@@ -385,14 +403,14 @@ class EventTriggerView(PGChildNodeView):
             )
         try:
             sql = render_template(
-                "/".join([self.template_path, 'create.sql']),
+                "/".join([self.template_path, self._CREATE_SQL]),
                 data=data, conn=self.conn
             )
             status, res = self.conn.execute_scalar(sql)
             if not status:
                 return internal_server_error(errormsg=res)
             sql = render_template(
-                "/".join([self.template_path, 'grant.sql']),
+                "/".join([self.template_path, self._GRANT_SQL]),
                 data=data, conn=self.conn
             )
             sql = sql.strip('\n').strip(' ')
@@ -402,7 +420,7 @@ class EventTriggerView(PGChildNodeView):
                 return internal_server_error(errormsg=res)
 
             sql = render_template(
-                "/".join([self.template_path, 'get_oid.sql']),
+                "/".join([self.template_path, self._OID_SQL]),
                 data=data
             )
             status, etid = self.conn.execute_scalar(sql)
@@ -414,7 +432,7 @@ class EventTriggerView(PGChildNodeView):
                     etid,
                     did,
                     data['name'],
-                    icon="icon-%s" % self.node_type
+                    self.node_icon
                 )
             )
         except Exception as e:
@@ -444,14 +462,14 @@ class EventTriggerView(PGChildNodeView):
             # Most probably this is due to error
             if not isinstance(sql, str):
                 return sql
-            sql = sql.strip('\n').strip(' ')
+
             if sql != "":
                 status, res = self.conn.execute_scalar(sql)
                 if not status:
                     return internal_server_error(errormsg=res)
 
                 sql = render_template(
-                    "/".join([self.template_path, 'get_oid.sql']),
+                    "/".join([self.template_path, self._OID_SQL]),
                     data=data
                 )
                 status, etid = self.conn.execute_scalar(sql)
@@ -461,7 +479,7 @@ class EventTriggerView(PGChildNodeView):
                         etid,
                         did,
                         data['name'],
-                        icon="icon-%s" % self.node_type
+                        self.node_icon
                     )
                 )
             else:
@@ -479,8 +497,31 @@ class EventTriggerView(PGChildNodeView):
         except Exception as e:
             return internal_server_error(errormsg=str(e))
 
+    @staticmethod
+    def get_delete_data(cmd, etid, request_object):
+        """
+        This function is used to get the data and cascade information.
+        :param cmd: Command
+        :param etid: Object ID
+        :param request_object: request object
+        :return:
+        """
+        cascade = False
+        # Below will decide if it's simple drop or drop with cascade call
+        if cmd == 'delete':
+            # This is a cascade operation
+            cascade = True
+
+        if etid is None:
+            data = request_object.form if request_object.form else \
+                json.loads(request_object.data, encoding='utf-8')
+        else:
+            data = {'ids': [etid]}
+
+        return cascade, data
+
     @check_precondition
-    def delete(self, gid, sid, did, etid=None):
+    def delete(self, gid, sid, did, etid=None, only_sql=False):
         """
         This function will delete an existing event trigger object.
 
@@ -489,28 +530,18 @@ class EventTriggerView(PGChildNodeView):
           sid: Server ID
           did: Database ID
           etid: Event trigger ID
+          only_sql:
 
         Returns:
 
         """
-
-        if self.cmd == 'delete':
-            # This is a cascade operation
-            cascade = True
-        else:
-            cascade = False
-
-        if etid is None:
-            data = request.form if request.form else json.loads(
-                request.data, encoding='utf-8'
-            )
-        else:
-            data = {'ids': [etid]}
+        # get the value of cascade and data
+        cascade, data = self.get_delete_data(self.cmd, etid, request)
 
         try:
             for etid in data['ids']:
                 sql = render_template(
-                    "/".join([self.template_path, 'delete.sql']),
+                    "/".join([self.template_path, self._DELETE_SQL]),
                     etid=etid
                 )
                 status, name = self.conn.execute_scalar(sql)
@@ -530,9 +561,14 @@ class EventTriggerView(PGChildNodeView):
                     )
 
                 sql = render_template(
-                    "/".join([self.template_path, 'delete.sql']),
+                    "/".join([self.template_path, self._DELETE_SQL]),
                     name=name, cascade=cascade
                 )
+
+                # Used for schema diff tool
+                if only_sql:
+                    return sql
+
                 status, res = self.conn.execute_scalar(sql)
                 if not status:
                     return internal_server_error(errormsg=res)
@@ -571,7 +607,7 @@ class EventTriggerView(PGChildNodeView):
             # Most probably this is due to error
             if not isinstance(sql, str):
                 return sql
-            sql = sql.strip('\n').strip(' ')
+
             sql = re.sub('\n{2,}', '\n\n', sql)
             if sql == '':
                 sql = "--modified SQL"
@@ -600,7 +636,7 @@ class EventTriggerView(PGChildNodeView):
 
         if etid is not None:
             sql = render_template(
-                "/".join([self.template_path, 'properties.sql']),
+                "/".join([self.template_path, self._PROPERTIES_SQL]),
                 etid=etid
             )
             status, res = self.conn.execute_dict(sql)
@@ -619,42 +655,47 @@ class EventTriggerView(PGChildNodeView):
                 if arg not in data:
                     data[arg] = old_data[arg]
             sql = render_template(
-                "/".join([self.template_path, 'update.sql']),
+                "/".join([self.template_path, self._UPDATE_SQL]),
                 data=data, o_data=old_data
             )
         else:
-            required_args = {
-                'name': 'Name',
-                'eventowner': 'Owner',
-                'eventfunname': 'Trigger function',
-                'enabled': 'Enabled status',
-                'eventname': 'Events'
-            }
-            err = []
-            for arg in required_args:
-                if arg not in data:
-                    err.append(required_args.get(arg, arg))
-            if err:
-                return make_json_response(
-                    status=410,
-                    success=0,
-                    errormsg=gettext(
-                        "Could not find the required parameter ({})."
-                    ).format(arg)
-                )
-            sql = render_template(
-                "/".join([self.template_path, 'create.sql']),
-                data=data
+            sql = self._get_create_with_grant_sql(data)
+        return sql.strip('\n')
+
+    def _get_create_with_grant_sql(self, data):
+
+        required_args = {
+            'name': 'Name',
+            'eventowner': 'Owner',
+            'eventfunname': 'Trigger function',
+            'enabled': 'Enabled status',
+            'eventname': 'Events'
+        }
+        err = []
+        for arg in required_args:
+            if arg not in data:
+                err.append(required_args.get(arg, arg))
+        if err:
+            return make_json_response(
+                status=410,
+                success=0,
+                errormsg=gettext(
+                    "Could not find the required parameter ({})."
+                ).format(arg)
             )
-            sql += "\n"
-            sql += render_template(
-                "/".join([self.template_path, 'grant.sql']),
-                data=data
-            )
-        return sql
+        sql = render_template(
+            "/".join([self.template_path, self._CREATE_SQL]),
+            data=data
+        )
+        sql += "\n"
+        sql += render_template(
+            "/".join([self.template_path, self._GRANT_SQL]),
+            data=data
+        )
+        return sql.strip('\n').strip(' ')
 
     @check_precondition
-    def sql(self, gid, sid, did, etid):
+    def sql(self, gid, sid, did, etid, json_resp=True):
         """
         This function will generate sql to show in the sql pane for the
         selected event trigger node.
@@ -664,12 +705,13 @@ class EventTriggerView(PGChildNodeView):
           sid: Server ID
           did: Database ID
           etid: Event trigger ID
+          json_resp:
 
         Returns:
 
         """
         sql = render_template(
-            "/".join([self.template_path, 'properties.sql']),
+            "/".join([self.template_path, self._PROPERTIES_SQL]),
             etid=etid
         )
         status, res = self.conn.execute_dict(sql)
@@ -687,12 +729,12 @@ class EventTriggerView(PGChildNodeView):
         result = self._formatter(result)
 
         sql = render_template(
-            "/".join([self.template_path, 'create.sql']),
+            "/".join([self.template_path, self._CREATE_SQL]),
             data=result, conn=self.conn
         )
         sql += "\n\n"
         sql += render_template(
-            "/".join([self.template_path, 'grant.sql']),
+            "/".join([self.template_path, self._GRANT_SQL]),
             data=result, conn=self.conn
         )
 
@@ -704,17 +746,20 @@ class EventTriggerView(PGChildNodeView):
         if not status:
             return internal_server_error(errormsg=db_name)
 
-        sql_header = u"-- Event Trigger: {0} on database {1}\n\n-- ".format(
+        sql_header = "-- Event Trigger: {0} on database {1}\n\n-- ".format(
             result['name'], db_name
         )
 
         sql_header += render_template(
-            "/".join([self.template_path, 'delete.sql']),
+            "/".join([self.template_path, self._DELETE_SQL]),
             name=result['name'], )
         sql_header += "\n"
 
         sql = sql_header + sql
         sql = re.sub('\n{2,}', '\n\n', sql)
+
+        if not json_resp:
+            return sql
 
         return ajax_response(response=sql)
 
@@ -785,5 +830,62 @@ class EventTriggerView(PGChildNodeView):
             status=200
         )
 
+    @check_precondition
+    def fetch_objects_to_compare(self, sid, did):
+        """
+        This function will fetch the list of all the event triggers for
+        specified database id.
 
+        :param sid: Server Id
+        :param did: Database Id
+        :return:
+        """
+        res = dict()
+
+        last_system_oid = 0
+        if self.manager.db_info is not None and did in self.manager.db_info:
+            last_system_oid = (self.manager.db_info[did])['datlastsysoid']
+
+        sql = render_template(
+            "/".join([self.template_path, 'nodes.sql']),
+            datlastsysoid=last_system_oid,
+            showsysobj=self.blueprint.show_system_objects
+        )
+        status, rset = self.conn.execute_2darray(sql)
+        if not status:
+            return internal_server_error(errormsg=rset)
+
+        for row in rset['rows']:
+            status, data = self._fetch_properties(did, row['oid'])
+            if status:
+                res[row['name']] = data
+
+        return res
+
+    def get_sql_from_diff(self, **kwargs):
+        """
+        This function is used to get the DDL/DML statements.
+        :param kwargs:
+        :return:
+        """
+        gid = kwargs.get('gid')
+        sid = kwargs.get('sid')
+        did = kwargs.get('did')
+        oid = kwargs.get('oid')
+        data = kwargs.get('data', None)
+        drop_sql = kwargs.get('drop_sql', False)
+
+        if data:
+            sql = self.get_sql(data=data, etid=oid)
+        else:
+            if drop_sql:
+                sql = self.delete(gid=gid, sid=sid, did=did,
+                                  etid=oid, only_sql=True)
+            else:
+                sql = self.sql(gid=gid, sid=sid, did=did, etid=oid,
+                               json_resp=False)
+        return sql
+
+
+SchemaDiffRegistry(blueprint.node_type, EventTriggerView, 'Database')
 EventTriggerView.register_node_view(blueprint)

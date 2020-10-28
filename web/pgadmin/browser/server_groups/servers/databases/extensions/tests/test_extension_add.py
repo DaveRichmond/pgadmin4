@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 
 import json
 
@@ -47,7 +46,7 @@ class ExtensionsAddTestCase(BaseTestGenerator):
                 self.db_id) + '/',
             data=json.dumps(self.data),
             content_type='html/json')
-        self.assertEquals(response.status_code, 200)
+        self.assertEqual(response.status_code, 200)
 
     def tearDown(self):
         """This function disconnect the test database and drop added extension.

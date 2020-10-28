@@ -82,9 +82,6 @@ var webpackShimConfig = {
       'deps': ['jquery', 'jquery.ui', 'jquery.event.drag'],
       'exports': 'Slick',
     },
-    'flotr2': {
-      deps: ['bean'],
-    },
     'alertify': {
       'exports': 'alertify',
     },
@@ -141,8 +138,6 @@ var webpackShimConfig = {
     'moment': path.join(__dirname, './node_modules/moment/moment'),
     'jquery.event.drag': path.join(__dirname, './node_modules/slickgrid/lib/jquery.event.drag-2.3.0'),
     'jquery.ui': path.join(__dirname, './node_modules/slickgrid/lib/jquery-ui-1.11.3'),
-    'flotr2': path.join(__dirname, './node_modules/flotr2/flotr2.amd'),
-    'bean': path.join(__dirname, './node_modules/flotr2/lib/bean'),
     'jqueryui.position': path.join(__dirname, './node_modules/jquery-contextmenu/dist/jquery.ui.position'),
     'jquery.contextmenu': path.join(__dirname, './node_modules/jquery-contextmenu/dist/jquery.contextMenu'),
     'dropzone': path.join(__dirname, './node_modules/dropzone/dist/dropzone'),
@@ -279,6 +274,7 @@ var webpackShimConfig = {
     'pgadmin.tools.schema_diff': path.join(__dirname, './pgadmin/tools/schema_diff/static/js/schema_diff'),
     'pgadmin.tools.schema_diff_ui': path.join(__dirname, './pgadmin/tools/schema_diff/static/js/schema_diff_ui'),
     'pgadmin.tools.search_objects': path.join(__dirname, './pgadmin/tools/search_objects/static/js/search_objects'),
+    'pgadmin.tools.storage_manager': path.join(__dirname, './pgadmin/tools/storage_manager/static/js/storage_manager'),
     'pgadmin.search_objects': path.join(__dirname, './pgadmin/tools/search_objects/static/js'),
     'pgadmin.tools.user_management': path.join(__dirname, './pgadmin/tools/user_management/static/js/user_management'),
     'pgadmin.user_management.current_user': '/user_management/current_user',

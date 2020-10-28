@@ -60,9 +60,8 @@ define([
       },
       // listen and respond to changes in dialog settings.
       settingUpdated: function(key, oldValue, newValue) {
-        switch (key) {
-        case 'pg_msg':
-          var doc = iframe.contentWindow || iframe.contentDocument;
+        if(key === 'pg_msg') {
+          let doc = iframe.contentWindow || iframe.contentDocument;
           if (doc.document) {
             doc = doc.document;
           }
@@ -70,8 +69,6 @@ define([
           doc.open();
           doc.write(newValue);
           doc.close();
-
-          break;
         }
       },
       // listen to internal dialog events.
@@ -79,8 +76,7 @@ define([
         // triggered when a dialog option gets update.
         // warning! this will not be triggered for settings updates.
         onupdate: function(option, oldValue, newValue) {
-          switch (option) {
-          case 'resizable':
+          if(option === 'resizable') {
             if (newValue) {
               this.elements.content.removeAttribute('style');
               iframe && iframe.removeAttribute('style');
@@ -88,7 +84,6 @@ define([
               this.elements.content.style.minHeight = 'inherit';
               iframe && (iframe.style.minHeight = 'inherit');
             }
-            break;
           }
         },
       },
@@ -124,13 +119,13 @@ define([
           if (contentType.indexOf('text/html') == 0) {
             var alertMessage = promptmsg;
             if (type === 'error') {
-              alertMessage = '\
-                  <div class="media text-danger text-14">\
-                    <div class="media-body media-middle">\
-                      <div class="alert-text" role="alert">' + promptmsg + '</div><br/>\
-                      <div class="alert-text" role="alert">' + gettext('Click for details.') + '</div>\
-                    </div>\
-                  </div>';
+              alertMessage =
+                  '<div class="media text-danger text-14">'
+                  +  '<div class="media-body media-middle">'
+                  +    '<div class="alert-text" role="alert">' + promptmsg + '</div><br/>'
+                  +    '<div class="alert-text" role="alert">' + gettext('Click for details.') + '</div>'
+                  +  '</div>'
+                  + '</div>';
             }
 
             alertify.notify(
@@ -173,13 +168,13 @@ define([
             }
           }
           if (contentType.indexOf('text/html') >= 0) {
-            var alertMessage = '\
-                   <div class="media text-danger text-14">\
-                     <div class="media-body media-middle">\
-                       <div class="alert-text" role="alert">' + gettext('INTERNAL SERVER ERROR') + '</div><br/>\
-                       <div class="alert-text" role="alert">' + gettext('Click for details.') + '</div>\
-                     </div>\
-                   </div>';
+            var alertMessage =
+                   '<div class="media text-danger text-14">'
+                   +  '<div class="media-body media-middle">'
+                   +  '<div class="alert-text" role="alert">' + gettext('INTERNAL SERVER ERROR') + '</div><br/>'
+                   +    '<div class="alert-text" role="alert">' + gettext('Click for details.') + '</div>'
+                   +  '</div>'
+                   + '</div>';
 
             alertify.notify(
               alertMessage, 'error', 0, () => {
@@ -268,12 +263,12 @@ define([
       $(this.elements.commands.close).attr('aria-label', gettext('Close'));
       $(this.elements.commands.maximize).attr('aria-label', gettext('Maximize'));
       alertifyDialogResized.apply(this, arguments);
-      let self = this;
+      let _self = this;
 
       let cmds = Object.values(this.elements.commands);
       $(cmds).on('keydown', 'button', (event) => {
         if (event.shiftKey && event.keyCode == 9 && $(this).nextAll('button:not([disabled])').length == 0){
-          let container = $(self.elements.footer);
+          let container = $(_self.elements.footer);
           commonUtils.findAndSetFocus(container.find('button:not([disabled]):last'));
         }
       });
@@ -344,7 +339,7 @@ define([
           args: args,
         },
         reconnectServer = function() {
-          var ctx = this,
+          var ctx_local = this,
             onServerConnect = function(_sid, _i, _d) {
               // Yay - server is reconnected.
               if (this.args.info.server._id == _sid) {
@@ -368,7 +363,7 @@ define([
                   );
                 }
               }
-            }.bind(ctx),
+            }.bind(ctx_local),
             onConnectCancel = function(_sid, _item, _data) {
               // User has cancelled the operation in between.
               if (_sid == this.args.info.server.id) {
@@ -381,7 +376,7 @@ define([
                   this.resp.data.database || _data.db, _item, _data
                 );
               }
-            }.bind(ctx);
+            }.bind(ctx_local);
 
           pgBrowser.Events.on('pgadmin:server:connected', onServerConnect);
           pgBrowser.Events.on('pgadmin:server:connect:cancelled', onConnectCancel);
@@ -429,7 +424,8 @@ define([
   };
 
   var alertifySuccess = alertify.success,
-    alertifyError = alertify.error;
+    alertifyError = alertify.error,
+    alertifyWarning = alertify.warning;
 
   /*
   For adding the jasmine test cases, we needed to refer the original success,
@@ -438,6 +434,7 @@ define([
   _.extend(alertify, {
     orig_success: alertifySuccess,
     orig_error: alertifyError,
+    orig_warning: alertifyWarning,
   });
 
   _.extend(alertify, {
@@ -445,9 +442,9 @@ define([
       var alertMessage =
       `<div class="d-flex px-3 py-2">
         <div class="pr-2">
-          <i class="fa fa-check text-success" aria-hidden="true"></i>
+          <i class="fa fa-check" aria-hidden="true"></i>
         </div>
-        <div class="text-body" role="status">${message}</div>
+        <div class="alert-text-body" role="status">${message}</div>
       </div>`;
       return alertify.orig_success(alertMessage, timeout, callback);
     },
@@ -455,9 +452,9 @@ define([
       var alertMessage =
       `<div class="d-flex px-3 py-2">
         <div class="pr-2">
-          <i class="fa fa-exclamation-triangle text-danger" aria-hidden="true"></i>
+          <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
         </div>
-        <div class="text-body" role="status">${message}</div>
+        <div class="alert-text-body" role="status">${message}</div>
       </div>`;
       return alertify.orig_error(alertMessage, timeout, callback);
     },
@@ -465,11 +462,22 @@ define([
       var alertMessage =
       `<div class="d-flex px-3 py-2">
         <div class="mr-3">
-          <i class="fa fa-info text-primary" aria-hidden="true"></i>
+          <i class="fa fa-info-circle" aria-hidden="true"></i>
         </div>
-        <div class="text-body" role="status">${message}</div>
+        <div class="alert-text-body" role="status">${message}</div>
       </div>`;
       var alert = alertify.notify(alertMessage, timeout);
+      return alert;
+    },
+    warning: function(message, timeout) {
+      var alertMessage =
+      `<div class="d-flex px-3 py-2">
+        <div class="mr-3">
+          <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
+        </div>
+        <div class="alert-text-body" role="status">${message}</div>
+      </div>`;
+      var alert = alertify.orig_warning(alertMessage, timeout);
       return alert;
     },
   });

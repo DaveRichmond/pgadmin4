@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 import os
 import json
 import time
@@ -86,10 +85,6 @@ class PGDataypeFeatureTest(BaseFeatureTest):
             NavMenuLocators.file_menu_css)
         file_menu.click()
 
-        # pref_menu_item = self.page.find_by_css_selector(
-        #     NavMenuLocators.preference_menu_item_css)
-        # pref_menu_item.click()
-
         self.page.retry_click(
             (By.CSS_SELECTOR, NavMenuLocators.preference_menu_item_css),
             (By.XPATH, NavMenuLocators.specified_preference_tree_node
@@ -120,18 +115,19 @@ class PGDataypeFeatureTest(BaseFeatureTest):
             NavMenuLocators.maximize_pref_dialogue_css)
         maximize_button.click()
 
+        specified_preference_tree_node_name = 'Query Tool'
         sql_editor = self.page.find_by_xpath(
             NavMenuLocators.specified_preference_tree_node.
-            format('Query Tool'))
+            format(specified_preference_tree_node_name))
         if self.page.find_by_xpath(
             NavMenuLocators.specified_pref_node_exp_status.
-                format('Query Tool')).\
+                format(specified_preference_tree_node_name)).\
                 get_attribute('aria-expanded') == 'false':
             ActionChains(self.driver).double_click(sql_editor).perform()
 
         option_node = self.page.find_by_xpath(
             NavMenuLocators.specified_sub_node_of_pref_tree_node.format(
-                'Query Tool', 'Editor'))
+                specified_preference_tree_node_name, 'Editor'))
         option_node.click()
 
         self.page.set_switch_box_status(

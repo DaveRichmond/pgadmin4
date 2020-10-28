@@ -1,10 +1,41 @@
 {% import 'macros/privilege.macros' as PRIVILEGE %}
 {% if data %}
+{% if (data.fsrvtype is defined and data.fsrvtype != o_data.fsrvtype) or (data.fdwname is defined and data.fdwname != o_data.fdwname) %}
+{% set fsrvtype = o_data.fsrvtype %}
+{% set fdwname = o_data.fdwname %}
+{% set fsrvversion = o_data.fsrvversion %}
+{% if data.fsrvtype is defined %}
+{% set fsrvtype = data.fsrvtype %}
+{% endif %}
+{% if data.fdwname is defined %}
+{% set fdwname = data.fdwname %}
+{% endif %}
+{% if data.fsrvversion is defined %}
+{% set fsrvversion = data.fsrvversion %}
+{% endif %}
+-- WARNING:
+-- We have found the difference in SERVER TYPE OR FOREIGN DATA WRAPPER
+-- so we need to drop the existing foreign server first and re-create it.
+DROP SERVER {{ conn|qtIdent(o_data.name) }};
+
+CREATE SERVER {{ conn|qtIdent(o_data.name) }}{% if fsrvtype %}
+
+    TYPE {{ fsrvtype|qtLiteral }}{% endif %}{% if fsrvversion %}
+
+    VERSION {{ fsrvversion|qtLiteral }}{%-endif %}{% if fdwname %}
+
+    FOREIGN DATA WRAPPER {{ conn|qtIdent(fdwname) }}{% endif %}{% if o_data.fsrvoptions %}
+
+    OPTIONS ({% for variable in o_data.fsrvoptions %}{% if loop.index != 1 %}, {% endif %}
+{{ conn|qtIdent(variable.fsrvoption) }} {{ variable.fsrvvalue|qtLiteral }}{% endfor %}){% endif %};
+
+{% else %}
 {# ============= Update foreign server name ============= #}
 {% if data.name != o_data.name %}
 ALTER SERVER {{ conn|qtIdent(o_data.name) }}
     RENAME TO {{ conn|qtIdent(data.name) }};
 
+{% endif %}
 {% endif %}
 {# ============= Update foreign server owner ============= #}
 {% if data.fsrvowner and data.fsrvowner != o_data.fsrvowner %}
@@ -13,7 +44,7 @@ ALTER SERVER {{ conn|qtIdent(data.name) }}
 
 {% endif %}
 {# ============= Update foreign server version ============= #}
-{% if data.fsrvversion and data.fsrvversion != o_data.fsrvversion %}
+{% if data.fsrvversion is defined and data.fsrvversion is not none and data.fsrvversion != o_data.fsrvversion %}
 ALTER SERVER {{ conn|qtIdent(data.name) }}
     VERSION {{ data.fsrvversion|qtLiteral }};
 

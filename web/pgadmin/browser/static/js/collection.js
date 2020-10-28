@@ -44,7 +44,7 @@ define([
           name: 'refresh', node: this.type, module: this,
           applies: ['object', 'context'], callback: 'refresh',
           priority: 1, label: gettext('Refresh...'),
-          icon: 'fa fa-refresh',
+          icon: 'fa fa-sync-alt',
         }]);
 
         // show query tool only in context menu of supported nodes.
@@ -186,6 +186,10 @@ define([
             headerCell: Backgrid.Extension.SelectAllHeaderCell,
           });
         }
+        /* Columns should be always non-editable  */
+        gridSchema.columns.forEach((col)=>{
+          col.disabled = true;
+        });
         // Initialize a new Grid instance
         that.grid = new Backgrid.Grid({
           emptyText: gettext('No data found'),
@@ -242,8 +246,8 @@ define([
           label: '',
           type: 'delete',
           tooltip: gettext('Delete/Drop'),
-          extraClasses: ['btn-secondary m-1', 'delete_multiple'],
-          icon: 'fa fa-lg fa-trash-o',
+          extraClasses: ['btn-primary-icon m-1', 'delete_multiple'],
+          icon: 'fa fa-trash-alt',
           disabled:  (_.isFunction(that.canDrop)) ? !(that.canDrop.apply(self, [data, item])) : (!that.canDrop),
           register: function(btn) {
             btn.on('click',() => {
@@ -256,7 +260,7 @@ define([
           label: '',
           type: 'delete',
           tooltip: gettext('Drop Cascade'),
-          extraClasses: ['btn-secondary m-1', 'delete_multiple_cascade'],
+          extraClasses: ['btn-primary-icon m-1', 'delete_multiple_cascade'],
           icon: 'pg-font-icon icon-drop-cascade',
           disabled: (_.isFunction(that.canDropCascade)) ? !(that.canDropCascade.apply(self, [data, item])) : (!that.canDropCascade),
           register: function(btn) {

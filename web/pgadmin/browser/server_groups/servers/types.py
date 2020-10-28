@@ -13,6 +13,7 @@ import sys
 from flask import render_template
 from flask_babelex import gettext as _
 from pgadmin.utils.preferences import Preferences
+from werkzeug.exceptions import InternalServerError
 
 import config
 
@@ -78,7 +79,7 @@ class ServerType(object):
             self.stype, self.desc, self.spriority
         )
 
-    def instanceOf(self, version):
+    def instance_of(self, version):
         return True
 
     @property
@@ -114,7 +115,7 @@ class ServerType(object):
         elif operation == 'sql':
             res = 'psql'
         else:
-            raise Exception(
+            raise InternalServerError(
                 _("Could not find the utility for the operation '%s'").format(
                     operation
                 )

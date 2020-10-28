@@ -24,17 +24,17 @@ let _defaultToolBarButtons = [
     text: '',
     toggled: false,
     toggleClass: '',
-    parentClass: 'pg-toolbar-btn btn-secondary',
+    parentClass: 'pg-toolbar-btn btn-primary-icon',
     enabled: false,
   },
   {
     label: gettext('View Data'),
     ariaLabel: gettext('View Data'),
-    btnClass: 'fa fa-table',
+    btnClass: 'pg-font-icon sql-icon-lg icon-view-data',
     text: '',
     toggled: false,
     toggleClass: '',
-    parentClass: 'pg-toolbar-btn btn-secondary',
+    parentClass: 'pg-toolbar-btn btn-primary-icon',
     enabled: false,
   },
   {
@@ -44,7 +44,7 @@ let _defaultToolBarButtons = [
     text: '',
     toggled: false,
     toggleClass: '',
-    parentClass: 'pg-toolbar-btn btn-secondary',
+    parentClass: 'pg-toolbar-btn btn-primary-icon',
     enabled: false,
   },
   {
@@ -54,7 +54,7 @@ let _defaultToolBarButtons = [
     text: '',
     toggled: false,
     toggleClass: '',
-    parentClass: 'pg-toolbar-btn btn-secondary',
+    parentClass: 'pg-toolbar-btn btn-primary-icon',
     enabled: false,
   },
 ];
@@ -110,9 +110,9 @@ export function initializeToolbar(panel, wcDocker) {
 
 // This function is used to enable/disable the specific button
 // based on their label.
-export function enable(label, enable) {
+export function enable(label, enable_btn) {
   if (label in _toolbarButtons) {
-    _browserPanel.buttonEnable(label, enable);
+    _browserPanel.buttonEnable(label, enable_btn);
   } else {
     console.warn('Developer warning: No tool button found with label: ' + label);
   }

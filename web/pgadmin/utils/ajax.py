@@ -31,12 +31,12 @@ class DataTypeJSONEncoder(json.JSONEncoder):
 
 
 class ColParamsJSONDecoder(json.JSONDecoder):
-    def decode(self, obj):
+    def decode(self, obj, **kwargs):
         retval = obj
         try:
             retval = json.JSONDecoder.decode(self, obj)
-            if type(retval) == str:
-                retVal = obj
+            if isinstance(retval, str):
+                retval = obj
         except (ValueError, TypeError, KeyError):
             retval = obj
 

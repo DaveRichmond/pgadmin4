@@ -12,11 +12,10 @@
 #ifndef TRAYICON_H
 #define TRAYICON_H
 
-#include "pgAdmin4.h"
-
-// QT headers
-#include <QWidget>
 #include "MenuActions.h"
+
+#include <QWidget>
+#include <QSystemTrayIcon>
 
 class TrayIcon : public QWidget
 {
@@ -26,7 +25,11 @@ public:
     TrayIcon();
 
     void Init();
-    void enableShutdownMenu();
+    void enablePostStartOptions();
+    void enableViewLogOption();
+    void disableViewLogOption();
+    void enableConfigOption();
+    void disableConfigOption();
     void setMenuActions(MenuActions * menuActions);
 
 private:
@@ -39,10 +42,10 @@ private:
     QAction *m_logAction = Q_NULLPTR;
     QAction *m_quitAction = Q_NULLPTR;
 
-    QSystemTrayIcon *m_trayIcon;
-    QMenu *m_trayIconMenu;
+    QSystemTrayIcon *m_trayIcon = Q_NULLPTR;
+    QMenu *m_trayIconMenu = Q_NULLPTR;
 
-    MenuActions *m_menuActions;
+    MenuActions *m_menuActions = Q_NULLPTR;
 };
 
 #endif // TRAYICON_H

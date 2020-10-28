@@ -14,6 +14,7 @@ from collections import OrderedDict
 import six
 from flask import render_template
 from flask_babelex import gettext
+from werkzeug.exceptions import InternalServerError
 from pgadmin.utils.ajax import forbidden
 from pgadmin.utils.driver import get_driver
 from pgadmin.tools.sqleditor.utils.is_query_resultset_updatable \
@@ -21,8 +22,8 @@ from pgadmin.tools.sqleditor.utils.is_query_resultset_updatable \
 from pgadmin.tools.sqleditor.utils.save_changed_data import save_changed_data
 from pgadmin.tools.sqleditor.utils.get_column_types import get_columns_types
 from pgadmin.utils.preferences import Preferences
-from pgadmin.utils.exception import ObjectGone
-
+from pgadmin.utils.exception import ObjectGone, ExecuteError
+from pgadmin.utils.constants import SERVER_CONNECTION_CLOSED
 from config import PG_DEFAULT_DRIVER
 
 VIEW_FIRST_100_ROWS = 1
@@ -45,15 +46,15 @@ class ObjectRegistry(ABCMeta):
 
     registry = dict()
 
-    def __init__(cls, name, bases, d):
+    def __init__(self, name, bases, d):
         """
         This method is used to register the objects based on object type.
         """
 
         if d and 'object_type' in d:
-            ObjectRegistry.registry[d['object_type']] = cls
+            ObjectRegistry.registry[d['object_type']] = self
 
-        ABCMeta.__init__(cls, name, bases, d)
+        ABCMeta.__init__(self, name, bases, d)
 
     @classmethod
     def get_object(cls, name, **kwargs):
@@ -168,7 +169,7 @@ class SQLFilter(object):
         self.did = kwargs['did']
         self.obj_id = kwargs['obj_id']
         sql_filter = kwargs.get('sql_filter', None)
-        self._row_filter = sql_filter if type(sql_filter) is str else None
+        self._row_filter = sql_filter if isinstance(sql_filter, str) else None
         self._data_sorting = kwargs.get('data_sorting', None)
         self._set_sorting_from_filter_dialog = False
 
@@ -187,7 +188,7 @@ class SQLFilter(object):
 
             status, result = conn.execute_dict(query)
             if not status:
-                raise Exception(result)
+                raise ExecuteError(result)
             if len(result['rows']) == 0:
                 raise ObjectGone(
                     gettext("The specified object could not be found."))
@@ -195,10 +196,7 @@ class SQLFilter(object):
             self.nsp_name = result['rows'][0]['nspname']
             self.object_name = result['rows'][0]['relname']
         else:
-            raise Exception(gettext(
-                'Not connected to server or connection with the server '
-                'has been closed.')
-            )
+            raise InternalServerError(SERVER_CONNECTION_CLOSED)
 
     def get_filter(self):
         """
@@ -214,7 +212,7 @@ class SQLFilter(object):
         Args:
             row_filter: sql query
         """
-        if type(row_filter) is not str:
+        if not isinstance(row_filter, str):
             row_filter = None
 
         status, msg = self.validate_filter(row_filter)
@@ -363,6 +361,7 @@ class GridCommand(BaseCommand, SQLFilter, FetchedRowTracker):
         self.conn_id = kwargs['conn_id'] if 'conn_id' in kwargs else None
         self.cmd_type = kwargs['cmd_type'] if 'cmd_type' in kwargs else None
         self.limit = -1
+        self._OBJECT_QUERY_SQL = 'objectquery.sql'
 
         if self.cmd_type in (VIEW_FIRST_100_ROWS, VIEW_LAST_100_ROWS):
             self.limit = 100
@@ -401,15 +400,13 @@ class GridCommand(BaseCommand, SQLFilter, FetchedRowTracker):
             )
             status, result = conn.execute_dict(query)
             if not status:
-                raise Exception(result)
+                raise ExecuteError(result)
 
             for row in result['rows']:
                 all_columns.append(row['attname'])
         else:
-            raise Exception(
-                gettext('Not connected to server or connection with the '
-                        'server has been closed.')
-            )
+            raise InternalServerError(SERVER_CONNECTION_CLOSED)
+
         # If user has custom data sorting then pass as it as it is
         if data_sorting and len(data_sorting) > 0:
             all_sorted_columns = data_sorting
@@ -503,14 +500,14 @@ class TableCommand(GridCommand):
 
         if sql_filter is None:
             sql = render_template(
-                "/".join([self.sql_path, 'objectquery.sql']),
+                "/".join([self.sql_path, self._OBJECT_QUERY_SQL]),
                 object_name=self.object_name,
                 nsp_name=self.nsp_name, limit=self.limit, has_oids=has_oids,
                 data_sorting=data_sorting
             )
         else:
             sql = render_template(
-                "/".join([self.sql_path, 'objectquery.sql']),
+                "/".join([self.sql_path, self._OBJECT_QUERY_SQL]),
                 object_name=self.object_name,
                 nsp_name=self.nsp_name, limit=self.limit, has_oids=has_oids,
                 sql_filter=sql_filter, data_sorting=data_sorting
@@ -542,7 +539,7 @@ class TableCommand(GridCommand):
 
             status, result = conn.execute_dict(query)
             if not status:
-                raise Exception(result)
+                raise ExecuteError(result)
 
             for row in result['rows']:
                 pk_names += driver.qtIdent(conn, row['attname']) + ','
@@ -552,10 +549,7 @@ class TableCommand(GridCommand):
                 # Remove last character from the string
                 pk_names = pk_names[:-1]
         else:
-            raise Exception(
-                gettext('Not connected to server or connection with the '
-                        'server has been closed.')
-            )
+            raise InternalServerError(SERVER_CONNECTION_CLOSED)
 
         return pk_names, primary_keys
 
@@ -590,7 +584,7 @@ class TableCommand(GridCommand):
         status, result = conn.execute_dict(query)
 
         if not status:
-            raise Exception(result)
+            raise ExecuteError(result)
 
         for row in result['rows']:
             all_columns.append(row['attname'])
@@ -602,7 +596,7 @@ class TableCommand(GridCommand):
         )
         status, result = conn.execute_dict(query)
         if not status:
-            raise Exception(result)
+            raise ExecuteError(result)
 
         for row in result['rows']:
             # Only append if not already present in the list
@@ -646,13 +640,10 @@ class TableCommand(GridCommand):
 
             status, has_oids = conn.execute_scalar(query)
             if not status:
-                raise Exception(has_oids)
+                raise ExecuteError(has_oids)
 
         else:
-            raise Exception(
-                gettext('Not connected to server or connection with the '
-                        'server has been closed.')
-            )
+            raise InternalServerError(SERVER_CONNECTION_CLOSED)
 
         return has_oids
 
@@ -726,13 +717,13 @@ class ViewCommand(GridCommand):
 
         if sql_filter is None:
             sql = render_template(
-                "/".join([self.sql_path, 'objectquery.sql']),
+                "/".join([self.sql_path, self._OBJECT_QUERY_SQL]),
                 object_name=self.object_name, nsp_name=self.nsp_name,
                 limit=self.limit, data_sorting=data_sorting
             )
         else:
             sql = render_template(
-                "/".join([self.sql_path, 'objectquery.sql']),
+                "/".join([self.sql_path, self._OBJECT_QUERY_SQL]),
                 object_name=self.object_name, nsp_name=self.nsp_name,
                 sql_filter=sql_filter, limit=self.limit,
                 data_sorting=data_sorting
@@ -787,13 +778,13 @@ class ForeignTableCommand(GridCommand):
 
         if sql_filter is None:
             sql = render_template(
-                "/".join([self.sql_path, 'objectquery.sql']),
+                "/".join([self.sql_path, self._OBJECT_QUERY_SQL]),
                 object_name=self.object_name, nsp_name=self.nsp_name,
                 limit=self.limit, data_sorting=data_sorting
             )
         else:
             sql = render_template(
-                "/".join([self.sql_path, 'objectquery.sql']),
+                "/".join([self.sql_path, self._OBJECT_QUERY_SQL]),
                 object_name=self.object_name, nsp_name=self.nsp_name,
                 sql_filter=sql_filter, limit=self.limit,
                 data_sorting=data_sorting
@@ -838,13 +829,13 @@ class CatalogCommand(GridCommand):
 
         if sql_filter is None:
             sql = render_template(
-                "/".join([self.sql_path, 'objectquery.sql']),
+                "/".join([self.sql_path, self._OBJECT_QUERY_SQL]),
                 object_name=self.object_name, nsp_name=self.nsp_name,
                 limit=self.limit, data_sorting=data_sorting
             )
         else:
             sql = render_template(
-                "/".join([self.sql_path, 'objectquery.sql']),
+                "/".join([self.sql_path, self._OBJECT_QUERY_SQL]),
                 object_name=self.object_name, nsp_name=self.nsp_name,
                 sql_filter=sql_filter, limit=self.limit,
                 data_sorting=data_sorting
@@ -919,7 +910,7 @@ class QueryToolCommand(BaseCommand, FetchedRowTracker):
         conn = manager.connection(did=self.did, conn_id=self.conn_id)
 
         # Get the driver version as a float
-        driver_version = float('.'.join(driver.Version().split('.')[:2]))
+        driver_version = float('.'.join(driver.version().split('.')[:2]))
 
         # Checking for updatable resultsets uses features in psycopg 2.8
         if driver_version < 2.8:
@@ -996,12 +987,9 @@ class QueryToolCommand(BaseCommand, FetchedRowTracker):
 
             status, result = conn.execute_dict(query)
             if not status:
-                raise Exception(result)
+                raise ExecuteError(result)
 
             self.nsp_name = result['rows'][0]['nspname']
             self.object_name = result['rows'][0]['relname']
         else:
-            raise Exception(gettext(
-                'Not connected to server or connection with the server '
-                'has been closed.')
-            )
+            raise InternalServerError(SERVER_CONNECTION_CLOSED)

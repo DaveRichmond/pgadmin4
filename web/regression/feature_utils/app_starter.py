@@ -49,7 +49,7 @@ class AppStarter:
                     random_server_port
                 )
 
-            except WebDriverException as e:
+            except WebDriverException:
                 # In case of WebDriverException sleep for 1 second and retry
                 # again. Retry 10 times and if still app will not start then
                 # raise exception.
@@ -58,8 +58,8 @@ class AppStarter:
                     retry_count = retry_count + 1
                     launch_browser(retry_count)
                 else:
-                    raise Exception('Unable to start python server even after '
-                                    'retrying 60 times.')
+                    raise RuntimeError('Unable to start python server even '
+                                       'after retrying 60 times.')
 
         if self.driver is not None:
             launch_browser(0)

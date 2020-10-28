@@ -155,10 +155,10 @@ define([
       if (deps && _.isArray(deps)) {
         _.each(deps, function(d) {
 
-          var attrArr = d.split('.');
-          var name = attrArr.shift();
+          var attrArray = d.split('.');
+          var depname = attrArray.shift();
 
-          self.stopListening(self.model, 'change:' + name, self.render);
+          self.stopListening(self.model, 'change:' + depname, self.render);
         });
       }
 
@@ -758,8 +758,8 @@ define([
         tmpls = this.template,
         self = this,
         idx = (this.tabIndex * 100),
-        evalF = function(f, d, m) {
-          return (_.isFunction(f) ? !!f.apply(d, [m]) : !!f);
+        evalF = function(f, d, model) {
+          return (_.isFunction(f) ? !!f.apply(d, [model]) : !!f);
         };
 
       this.$el
@@ -804,13 +804,13 @@ define([
           function() {
             self.hidden_tab = $(this).data('tabIndex');
           }).on('shown.bs.tab', function() {
-          var self = this;
-          self.shown_tab = $(self).data('tabIndex');
+          var ctx = this;
+          ctx.shown_tab = $(ctx).data('tabIndex');
           m.trigger('pg-property-tab-changed', {
             'model': m,
-            'shown': self.shown_tab,
-            'hidden': self.hidden_tab,
-            'tab': self,
+            'shown': ctx.shown_tab,
+            'hidden': ctx.hidden_tab,
+            'tab': ctx,
           });
         });
       });
@@ -894,8 +894,8 @@ define([
           'collapse': _.result(this, 'collapse'),
         },
         idx = (this.tabIndex * 100),
-        evalF = function(f, d, m) {
-          return (_.isFunction(f) ? !!f.apply(d, [m]) : !!f);
+        evalF = function(f, d, model) {
+          return (_.isFunction(f) ? !!f.apply(d, [model]) : !!f);
         };
 
       this.$el.empty();
@@ -970,8 +970,8 @@ define([
           'collapse': _.result(this, 'collapse'),
         },
         idx = (this.tabIndex * 100),
-        evalF = function(f, d, m) {
-          return (_.isFunction(f) ? !!f.apply(d, [m]) : !!f);
+        evalF = function(f, d, model) {
+          return (_.isFunction(f) ? !!f.apply(d, [model]) : !!f);
         };
 
       this.$el.empty();
@@ -1298,7 +1298,7 @@ define([
         gridHeader = _.template([
           '<div class="subnode-header">',
           '  <span  class="control-label pg-el-sm-10" id="<%=cId%>"><%-label%></span>',
-          '  <button aria-label="' + gettext('Add new row') + '" class="btn btn-sm-sq btn-secondary add fa fa-plus" <%=canAdd ? "" : "disabled=\'disabled\'"%> title="' + gettext('Add new row') + '"><%-add_label%></button>',
+          '  <button aria-label="' + gettext('Add new row') + '" class="btn btn-sm-sq btn-primary-icon add fa fa-plus" <%=canAdd ? "" : "disabled=\'disabled\'"%> title="' + gettext('Add new row') + '"><%-add_label%></button>',
           '</div>',
         ].join('\n')),
         gridBody = $('<div class="pgadmin-control-group backgrid form-group pg-el-12 object subnode "></div>').append(
@@ -1363,11 +1363,11 @@ define([
             var idx = that.indexOf(m);
             if (idx > -1) {
               var row = self.grid.body.rows[idx],
-                editCell = row.$el.find('.subnode-edit-in-process').parent();
+                rowEditCell = row.$el.find('.subnode-edit-in-process').parent();
               // Only close row if it's open.
-              if (editCell.length > 0) {
+              if (rowEditCell.length > 0) {
                 var event = new Event('click');
-                editCell[0].dispatchEvent(event);
+                rowEditCell[0].dispatchEvent(event);
               }
             }
           }
@@ -1420,11 +1420,11 @@ define([
           if (canAddRow) {
             // Close any existing expanded row before adding new one.
             _.each(self.grid.body.rows, function(row) {
-              var editCell = row.$el.find('.subnode-edit-in-process').parent();
+              var rowEditCell = row.$el.find('.subnode-edit-in-process').parent();
               // Only close row if it's open.
-              if (editCell.length > 0) {
+              if (rowEditCell.length > 0) {
                 var event = new Event('click');
-                editCell[0].dispatchEvent(event);
+                rowEditCell[0].dispatchEvent(event);
               }
             });
 
@@ -1585,7 +1585,7 @@ define([
       var self = this,
         gridHeader = ['<div class=\'subnode-header\'>',
           '  <span class=\'control-label pg-el-sm-10\'>' + data.label + '</span>',
-          '  <button aria-label="' + gettext('Add') + '" class=\'btn btn-sm-sq btn-secondary add fa fa-plus\' title=\'' + gettext('Add new row') + '\'></button>',
+          '  <button aria-label="' + gettext('Add') + '" class=\'btn btn-sm-sq btn-primary-icon add fa fa-plus\' title=\'' + gettext('Add new row') + '\'></button>',
           '</div>',
         ].join('\n'),
         gridBody = $('<div class=\'pgadmin-control-group backgrid form-group pg-el-12 object subnode\'></div>').append(gridHeader);
@@ -1652,20 +1652,20 @@ define([
       }
 
       var cellEditing = function(args) {
-        var self = this,
+        var ctx = this,
           cell = args[0];
         // Search for any other rows which are open.
         this.each(function(m) {
           // Check if row which we are about to close is not current row.
           if (cell.model != m) {
-            var idx = self.indexOf(m);
+            var idx = ctx.indexOf(m);
             if (idx > -1) {
               var row = grid.body.rows[idx],
-                editCell = row.$el.find('.subnode-edit-in-process').parent();
+                rowEditCell = row.$el.find('.subnode-edit-in-process').parent();
               // Only close row if it's open.
-              if (editCell.length > 0) {
+              if (rowEditCell.length > 0) {
                 var event = new Event('click');
-                editCell[0].dispatchEvent(event);
+                rowEditCell[0].dispatchEvent(event);
               }
             }
           }
@@ -1716,11 +1716,11 @@ define([
         if (canAddRow) {
           // Close any existing expanded row before adding new one.
           _.each(grid.body.rows, function(row) {
-            var editCell = row.$el.find('.subnode-edit-in-process').parent();
+            var rowEditCell = row.$el.find('.subnode-edit-in-process').parent();
             // Only close row if it's open.
-            if (editCell.length > 0) {
+            if (rowEditCell.length > 0) {
               var event = new Event('click');
-              editCell[0].dispatchEvent(event);
+              rowEditCell[0].dispatchEvent(event);
             }
           });
 
@@ -1810,15 +1810,13 @@ define([
       // Use the Backform Control's render function
       Backform.Control.prototype.render.apply(this, arguments);
 
-      var field = _.defaults(this.field.toJSON(), this.defaults);
-
       this.sqlCtrl = CodeMirror.fromTextArea(
         (this.$el.find('textarea')[0]), {
           lineNumbers: true,
           mode: 'text/x-pgsql',
           readOnly: true,
           extraKeys: pgAdmin.Browser.editor_shortcut_keys,
-          screenReaderLabel: field.label,
+          screenReaderLabel: 'SQL',
         });
 
       this.reflectPreferences();
@@ -2681,7 +2679,7 @@ define([
       text: '',
       extraClasses: ['pg-el-12', 'd-flex'],
       noteClass: 'backform-note',
-      faIcon: 'fa-file-text-o',
+      faIcon: 'fa-file-alt',
       faExtraClass: 'fa-rotate-180 fa-flip-vertical',
       iconWidthClass: 'col-0 pr-2',
       textWidthClass: 'col-sm',
@@ -2728,7 +2726,7 @@ define([
       '<div class="input-group">',
       '<input type="<%=type%>" id="<%=cId%>" class="form-control <%=extraClasses.join(\' \')%>" name="<%=name%>" min="<%=min%>" max="<%=max%>"maxlength="<%=maxlength%>" value="<%-value%>" placeholder="<%-placeholder%>" <%=disabled ? "disabled" : ""%> <%=readonly ? "readonly aria-readonly=true" : ""%> <%=required ? "required" : ""%> />',
       '<div class="input-group-append">',
-      '<button class="btn btn-secondary fa fa-ellipsis-h select_item" <%=disabled ? "disabled" : ""%> <%=readonly ? "disabled" : ""%> aria-hidden="true" aria-label="' + gettext('Select file') + '" title="' + gettext('Select file') + '"></button>',
+      '<button class="btn btn-primary-icon fa fa-ellipsis-h select_item" <%=disabled ? "disabled" : ""%> <%=readonly ? "disabled" : ""%> aria-hidden="true" aria-label="' + gettext('Select file') + '" title="' + gettext('Select file') + '"></button>',
       '</div>',
       '</div>',
       '<% if (helpMessage && helpMessage.length) { %>',
@@ -2806,7 +2804,10 @@ define([
         options: {
           format: 'YYYY-MM-DD HH:mm:ss Z',
           icons: {
-            clear: 'fa fa-trash',
+            time: 'fa fa-clock',
+            data: 'fa fa-calendar-alt',
+            today: 'fa fa-calendar-check',
+            clear: 'fa fa-trash-alt',
           },
           buttons: {
             showToday: true,
@@ -2847,7 +2848,7 @@ define([
         '<div class="input-group  <%=Backform.controlsClassName%>">',
         ' <input id="<%=cId%>" type="text" class="<%=Backform.controlClassName%> datetimepicker-input <%=extraClasses.join(\' \')%>" name="<%=name%>" value="<%-value%>" placeholder="<%-placeholder%>" <%=disabled ? "disabled" : ""%> <%=readonly ? "readonly aria-readonly=true" : ""%> <%=required ? "required" : ""%> data-toggle="datetimepicker"/>',
         ' <div class="input-group-append">',
-        '   <span class="input-group-text fa fa-calendar"></span>',
+        '   <span class="input-group-text fa fa-calendar-alt"></span>',
         ' </div>',
         '</div>',
         '<% if (helpMessage && helpMessage.length) { %>',
@@ -2938,21 +2939,21 @@ define([
 
       timePicker:function() {
         if (this.$el.find('.timepicker').is(':visible')){
-          this.$el.find('.fa-calendar').click();
+          this.$el.find('.fa-calendar-alt').click();
         }else{
-          this.$el.find('.fa-clock-o').click();
+          this.$el.find('.fa-clock').click();
         }
       },
 
       controlUp:function() {
-        this.$el.find('.fa-clock-o').click();
+        this.$el.find('.fa-clock').click();
         let $el = this.$el.find('.datetimepicker-input');
         let currdate = $el.data('datetimepicker').date().clone();
         $el.datetimepicker('date', currdate.add(1, 'h'));
       },
 
       controlDown:function() {
-        this.$el.find('.fa-clock-o').click();
+        this.$el.find('.fa-clock').click();
         let $el = this.$el.find('.datetimepicker-input');
         let currdate = $el.data('datetimepicker').date().clone();
         $el.datetimepicker('date', currdate.subtract(1, 'h'));
@@ -3360,8 +3361,8 @@ define([
 
       var $container = $(self.$el.find('.pgadmin-controls'));
 
-      _.each(innerFields, function(field) {
-        initial_value[field['name']] = value[field['name']];
+      _.each(innerFields, function(inField) {
+        initial_value[inField['name']] = value[inField['name']];
       });
 
       self.innerModel.set(initial_value);

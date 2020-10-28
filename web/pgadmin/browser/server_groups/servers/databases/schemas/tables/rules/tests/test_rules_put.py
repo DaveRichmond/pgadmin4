@@ -9,6 +9,7 @@
 
 import json
 import uuid
+from unittest.mock import patch
 
 from pgadmin.browser.server_groups.servers.databases.schemas.tables.tests \
     import utils as tables_utils
@@ -21,10 +22,6 @@ from regression import parent_node_dict
 from regression.python_test_utils import test_utils as utils
 from . import utils as rules_utils
 import sys
-if sys.version_info < (3, 3):
-    from mock import patch
-else:
-    from unittest.mock import patch
 
 
 class RulesUpdateTestCase(BaseTestGenerator):
@@ -88,8 +85,8 @@ class RulesUpdateTestCase(BaseTestGenerator):
                     self.rule_id = 9999
                 response = self.update_rule(data)
 
-        self.assertEquals(response.status_code,
-                          self.expected_data["status_code"])
+        self.assertEqual(response.status_code,
+                         self.expected_data["status_code"])
 
     def tearDown(self):
         # Disconnect the database

@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 
 import json
 import uuid
@@ -85,7 +84,18 @@ class FtsTemplatePutTestCase(BaseTestGenerator):
             data=json.dumps(data),
             follow_redirects=True)
 
-        self.assertEquals(put_response.status_code, 200)
+        self.assertEqual(put_response.status_code, 200)
+
+        negative_put_response = self.tester.put(
+            self.url + str(utils.SERVER_GROUP) + '/' +
+            str(self.server_id) + '/' +
+            str(self.db_id) + '/' +
+            str(self.schema_id) + '/' +
+            str(0),
+            data=json.dumps(data),
+            follow_redirects=True)
+
+        self.assertEqual(negative_put_response.status_code, 500)
 
     def tearDown(self):
         """This function delete the fts_template and disconnect the test

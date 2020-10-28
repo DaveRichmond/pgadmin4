@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 import time
 import sys
 
@@ -29,6 +28,8 @@ class PgadminPage:
     """
     Helper class for interacting with the page, given a selenium driver
     """
+    # Common argument passed for scrolling
+    js_executor_scrollintoview_arg = "arguments[0].scrollIntoView()"
 
     def __init__(self, driver, app_config):
         self.driver = driver
@@ -100,17 +101,18 @@ class PgadminPage:
             (By.CSS_SELECTOR, "button[type='save'].btn.btn-primary")))
         self.find_by_css_selector("button[type='save'].btn.btn-primary").\
             click()
+
+        server_tree_xpath = \
+            "//*[@id='tree']//*[.='" + server_config['name'] + "']"
         try:
             WebDriverWait(self.driver, 10).until(
                 EC.visibility_of_element_located(
-                    (By.XPATH,
-                     "//*[@id='tree']//*[.='" + server_config['name'] + "']")))
+                    (By.XPATH, server_tree_xpath)))
         except TimeoutException:
             self.toggle_open_servers_group()
             WebDriverWait(self.driver, 10).until(
                 EC.visibility_of_element_located(
-                    (By.XPATH,
-                     "//*[@id='tree']//*[.='" + server_config['name'] + "']")))
+                    (By.XPATH, server_tree_xpath)))
 
     def open_query_tool(self):
         self.driver.find_element_by_link_text("Tools").click()
@@ -223,34 +225,28 @@ class PgadminPage:
         if expanded == "false":
             query_options.click()
 
-        retry = 3
+        def update_execute_option_setting(
+                css_selector_of_option_status, css_selector_of_option,):
+            retry = 3
+            check_status = self.driver.find_element_by_css_selector(
+                css_selector_of_option_status)
+            if 'visibility-hidden' in check_status.get_attribute('class'):
+                while retry > 0:
+                    self.find_by_css_selector(css_selector_of_option).click()
+                    time.sleep(0.2)
+                    if 'visibility-hidden' not in \
+                            check_status.get_attribute('class'):
+                        break
+                    else:
+                        retry -= 1
         if option == 'auto_commit':
-            check_status = self.driver.find_element_by_css_selector(
-                QueryToolLocators.btn_auto_commit_check_status)
-            if 'visibility-hidden' in check_status.get_attribute('class'):
-                while retry > 0:
-                    self.find_by_css_selector(
-                        QueryToolLocators.btn_auto_commit).click()
-                    time.sleep(0.2)
-                    if 'visibility-hidden' not in \
-                            check_status.get_attribute('class'):
-                        break
-                    else:
-                        retry -= 1
-
+            update_execute_option_setting(
+                QueryToolLocators.btn_auto_commit_check_status,
+                QueryToolLocators.btn_auto_commit)
         if option == 'auto_rollback':
-            check_status = self.driver.find_element_by_css_selector(
-                QueryToolLocators.btn_auto_rollback_check_status)
-            if 'visibility-hidden' in check_status.get_attribute('class'):
-                while retry > 0:
-                    self.find_by_css_selector(
-                        QueryToolLocators.btn_auto_rollback).click()
-                    time.sleep(0.2)
-                    if 'visibility-hidden' not in \
-                            check_status.get_attribute('class'):
-                        break
-                    else:
-                        retry -= 1
+            update_execute_option_setting(
+                QueryToolLocators.btn_auto_rollback_check_status,
+                QueryToolLocators.btn_auto_rollback)
 
     def uncheck_execute_option(self, option):
         """"This function will uncheck auto commit or auto roll back based on
@@ -261,33 +257,30 @@ class PgadminPage:
         if expanded == "false":
             query_options.click()
 
-        retry = 3
+        def update_execute_option_setting(
+                css_selector_of_option_status, css_selector_of_option):
+            retry = 3
+            check_status = self.driver.find_element_by_css_selector(
+                css_selector_of_option_status)
+            if 'visibility-hidden' not in check_status.get_attribute('class'):
+                while retry > 0:
+                    self.find_by_css_selector(
+                        css_selector_of_option).click()
+                    time.sleep(0.2)
+                    if 'visibility-hidden' in \
+                            check_status.get_attribute('class'):
+                        break
+                    else:
+                        retry -= 1
+
         if option == 'auto_commit':
-            check_status = self.driver.find_element_by_css_selector(
-                QueryToolLocators.btn_auto_commit_check_status)
-            if 'visibility-hidden' not in check_status.get_attribute('class'):
-                while retry > 0:
-                    self.find_by_css_selector(
-                        QueryToolLocators.btn_auto_commit).click()
-                    time.sleep(0.2)
-                    if 'visibility-hidden' in \
-                            check_status.get_attribute('class'):
-                        break
-                    else:
-                        retry -= 1
+            update_execute_option_setting(
+                QueryToolLocators.btn_auto_commit_check_status,
+                QueryToolLocators.btn_auto_commit)
         if option == 'auto_rollback':
-            check_status = self.driver.find_element_by_css_selector(
-                QueryToolLocators.btn_auto_rollback_check_status)
-            if 'visibility-hidden' not in check_status.get_attribute('class'):
-                while retry > 0:
-                    self.find_by_css_selector(
-                        QueryToolLocators.btn_auto_rollback).click()
-                    time.sleep(0.2)
-                    if 'visibility-hidden' in \
-                            check_status.get_attribute('class'):
-                        break
-                    else:
-                        retry -= 1
+            update_execute_option_setting(
+                QueryToolLocators.btn_auto_rollback_check_status,
+                QueryToolLocators.btn_auto_rollback)
 
     def close_data_grid(self):
         self.driver.switch_to_default_content()
@@ -300,7 +293,7 @@ class PgadminPage:
             "//*[@id='tree']//*[.='" + server_config['name'] +
             "' and @class='aciTreeItem']")
         self.driver.execute_script(
-            "arguments[0].scrollIntoView()", server_to_remove)
+            self.js_executor_scrollintoview_arg, server_to_remove)
         self.click_element(server_to_remove)
         object_menu_item = self.find_by_partial_link_text("Object")
         self.click_element(object_menu_item)
@@ -312,7 +305,7 @@ class PgadminPage:
         item = self.find_by_xpath(
             "//*[@id='tree']//*[contains(text(), '" + tree_item_text + "')]"
             "/parent::span[@class='aciTreeItem']")
-        self.driver.execute_script("arguments[0].scrollIntoView()", item)
+        self.driver.execute_script(self.js_executor_scrollintoview_arg, item)
         # unexpected exception like element overlapping, click attempts more
         # than one time
         attempts = 3
@@ -324,7 +317,7 @@ class PgadminPage:
                 attempts -= 1
                 time.sleep(.4)
                 if attempts == 0:
-                    raise Exception(e)
+                    raise e
 
     def click_a_tree_node(self, element_name, list_of_element):
         """It will click a tree node eg. server, schema, table name etc
@@ -337,7 +330,7 @@ class PgadminPage:
                 elements, element_name)
             if index_of_element >= 0:
                 self.driver.execute_script(
-                    "arguments[0].scrollIntoView()",
+                    self.js_executor_scrollintoview_arg,
                     list_of_element[index_of_element])
                 self.wait_for_elements_to_appear(
                     self.driver, list_of_element[index_of_element])
@@ -397,36 +390,57 @@ class PgadminPage:
                 index_of_server_node = self.get_index_of_element(
                     subnodes_of_servers, server_name)
 
-                if not self.check_server_is_connected(
-                        index_of_server_node):
-                    if self.click_and_connect_server(
-                        subnodes_of_servers[index_of_server_node],
-                            server_password):
-                        server_node_expansion_status = True
-                    else:
-                        print(
-                            "(expand_server_node)The server node is "
-                            "not expanded",
-                            file=sys.stderr)
-                else:
-                    if not self.get_expansion_status_of_node_element(
-                        subnodes_of_servers_expansion_status[
-                            index_of_server_node]):
-                        webdriver.ActionChains(self.driver).double_click(
-                            subnodes_of_servers[
-                                index_of_server_node]).perform()
-                        if self.wait_for_elements_to_appear(
-                            self.driver, TreeAreaLocators.
-                                sub_nodes_of_a_server_node(server_name),
-                                30):
-                            server_node_expansion_status = True
-                    else:
-                        server_node_expansion_status = True
+                server_node_expansion_status = self.click_expand_server_node(
+                    subnodes_of_servers_expansion_status,
+                    index_of_server_node,
+                    subnodes_of_servers,
+                    server_name,
+                    server_password)
         else:
             print(
                 "(expand_server_node) The Servers node is"
                 " not expanded",
                 file=sys.stderr)
+        return server_node_expansion_status
+
+    def click_expand_server_node(self, subnodes_of_servers_expansion_status,
+                                 index_of_server_node, subnodes_of_servers,
+                                 server_name, server_password):
+        """
+        Method actually clicks on server node to expand
+        :param subnodes_of_servers_expansion_status:
+        :param index_of_server_node:
+        :param subnodes_of_servers:
+        :param server_name:
+        :param server_password:
+        :return: True is click action is successful & server node expanded
+        """
+        server_node_expansion_status = False
+        if not self.check_server_is_connected(
+                index_of_server_node):
+            if self.click_and_connect_server(
+                subnodes_of_servers[index_of_server_node],
+                    server_password):
+                server_node_expansion_status = True
+            else:
+                print(
+                    "(expand_server_node)The server node is "
+                    "not expanded",
+                    file=sys.stderr)
+        else:
+            if not self.get_expansion_status_of_node_element(
+                subnodes_of_servers_expansion_status[
+                    index_of_server_node]):
+                webdriver.ActionChains(self.driver).double_click(
+                    subnodes_of_servers[
+                        index_of_server_node]).perform()
+                if self.wait_for_elements_to_appear(
+                    self.driver, TreeAreaLocators.
+                        sub_nodes_of_a_server_node(server_name),
+                        30):
+                    server_node_expansion_status = True
+            else:
+                server_node_expansion_status = True
         return server_node_expansion_status
 
     def expand_databases_node(self, server_name, server_password):
@@ -448,20 +462,11 @@ class PgadminPage:
                 expansion_status = self.get_expansion_status_of_node_element(
                     subnode_of_server_node_exp_status[index_of_databases_node])
                 if not expansion_status:
-                    retry = 5
-                    while retry > 0:
-                        webdriver.ActionChains(self.driver).double_click(
-                            subnodes_of_server_node[
-                                index_of_databases_node].find_element_by_xpath(
-                                ".//*[@class='aciTreeItem']")
-                        ).perform()
-                        if self.wait_for_elements_to_appear(
-                            self.driver, TreeAreaLocators.
-                                sub_nodes_of_databases_node(server_name), 3):
-                            databases_node_expanded = True
-                            break
-                        else:
-                            retry -= 1
+                    databases_node_expanded = \
+                        self.click_to_expand_databases_node(
+                            subnodes_of_server_node,
+                            index_of_databases_node,
+                            server_name)
                 else:
                     databases_node_expanded = True
         else:
@@ -469,11 +474,73 @@ class PgadminPage:
                   file=sys.stderr)
         return databases_node_expanded
 
+    def click_to_expand_databases_node(self, subnodes_of_server_node,
+                                       index_of_databases_node, server_name):
+        """
+        Method clicks on databases node of specified server to expand
+        :param subnodes_of_server_node:
+        :param index_of_databases_node:
+        :param server_name:
+        :return: True if database node click is successful & expanded
+        """
+        retry = 5
+        databases_node_expanded = False
+        while retry > 0:
+            webdriver.ActionChains(self.driver).double_click(
+                subnodes_of_server_node[
+                    index_of_databases_node].find_element_by_xpath(
+                    ".//*[@class='aciTreeItem']")
+            ).perform()
+            if self.wait_for_elements_to_appear(
+                self.driver, TreeAreaLocators.
+                    sub_nodes_of_databases_node(server_name), 3):
+                databases_node_expanded = True
+                break
+            else:
+                retry -= 1
+        return databases_node_expanded
+
+    def click_to_expand_database_node(self, sub_nodes_of_databases_node,
+                                      index_of_required_db_node,
+                                      name_of_database):
+        """
+        Method clicks on specified database name from expanded databases node
+        of server.
+        :param sub_nodes_of_databases_node:
+        :param index_of_required_db_node:
+        :param name_of_database:
+        :return: True if particular database click is successful & expanded
+        """
+        retry = 5
+        db_node_expanded_status = False
+        self.driver.execute_script(self.js_executor_scrollintoview_arg,
+                                   sub_nodes_of_databases_node[
+                                       index_of_required_db_node])
+        while retry > 0:
+            webdriver.ActionChains(self.driver).double_click(
+                sub_nodes_of_databases_node[
+                    index_of_required_db_node]).perform()
+            if self.check_if_element_exist_by_xpath(
+                "//div[@class='ajs-header'and text()='INTERNAL SERVER "
+                    "ERROR']", 1):
+                try:
+                    self.click_modal('OK')
+                except Exception:
+                    pass
+                retry -= 1
+            else:
+                break
+        if self.wait_for_elements_to_appear(
+            self.driver, TreeAreaLocators.
+                sub_nodes_of_database_node(
+                name_of_database)):
+            db_node_expanded_status = True
+        return db_node_expanded_status
+
     def expand_database_node(self, server_name, server_password,
                              name_of_database):
         """will expand database node under databases node"""
         db_node_expanded_status = False
-        retry = 5
         if self.expand_databases_node(server_name, server_password):
             sub_nodes_of_databases_node = self.find_by_xpath_list(
                 TreeAreaLocators.sub_nodes_of_databases_node(server_name))
@@ -487,28 +554,9 @@ class PgadminPage:
                         server_name))[
                     index_of_required_db_node])
             if not expansion_status:
-                self.driver.execute_script("arguments[0].scrollIntoView()",
-                                           sub_nodes_of_databases_node[
-                                               index_of_required_db_node])
-                while retry > 0:
-                    webdriver.ActionChains(self.driver).double_click(
-                        sub_nodes_of_databases_node[
-                            index_of_required_db_node]).perform()
-                    if self.check_if_element_exist_by_xpath(
-                        "//div[@class='ajs-header'and text()='INTERNAL SERVER "
-                            "ERROR']", 1):
-                        try:
-                            self.click_modal('OK')
-                        except Exception:
-                            pass
-                        retry -= 1
-                    else:
-                        break
-                if self.wait_for_elements_to_appear(
-                    self.driver, TreeAreaLocators.
-                        sub_nodes_of_database_node(
-                        name_of_database)):
-                    db_node_expanded_status = True
+                db_node_expanded_status = self.click_to_expand_database_node(
+                    sub_nodes_of_databases_node, index_of_required_db_node,
+                    name_of_database)
             else:
                 db_node_expanded_status = True
         else:
@@ -534,7 +582,7 @@ class PgadminPage:
                     index_of_schemas_node])
             if not expansion_status:
                 self.driver.execute_script(
-                    "arguments[0].scrollIntoView()",
+                    self.js_executor_scrollintoview_arg,
                     sub_nodes_db_node[index_of_schemas_node])
                 webdriver.ActionChains(self.driver).double_click(
                     sub_nodes_db_node[index_of_schemas_node]).perform()
@@ -571,7 +619,7 @@ class PgadminPage:
                     index_of_schema_node])
             if not expansion_status:
                 self.driver.execute_script(
-                    "arguments[0].scrollIntoView()",
+                    self.js_executor_scrollintoview_arg,
                     sub_nodes_schemas_node[index_of_schema_node])
                 webdriver.ActionChains(self.driver).double_click(
                     sub_nodes_schemas_node[index_of_schema_node]).perform()
@@ -607,7 +655,7 @@ class PgadminPage:
             expansion_status = self.get_expansion_status_of_node_element(
                 sub_nodes_of_schema_node_exp_status[index_of_tables_node])
             if not expansion_status:
-                self.driver.execute_script("arguments[0].scrollIntoView()",
+                self.driver.execute_script(self.js_executor_scrollintoview_arg,
                                            sub_nodes_of_schema_node[
                                                index_of_tables_node])
                 webdriver.ActionChains(self.driver).double_click(
@@ -779,7 +827,7 @@ class PgadminPage:
         item_with_text = self.find_by_xpath(
             TreeAreaLocators.specified_tree_node.format(tree_item_text))
 
-        self.driver.execute_script("arguments[0].scrollIntoView()",
+        self.driver.execute_script(self.js_executor_scrollintoview_arg,
                                    item_with_text)
 
         if item_with_text.find_element_by_xpath(
@@ -798,7 +846,6 @@ class PgadminPage:
                 break
             except TimeoutException:
                 retry -= 1
-                pass
 
     def toggle_open_server(self, tree_item_text):
         def check_for_password_dialog_or_tree_open(driver):
@@ -894,7 +941,7 @@ class PgadminPage:
         except Exception as e:
             time.sleep(.2)
             if attempt == 2:
-                raise Exception(e)
+                raise e
         # Use send keys if input_keys true, else use javascript to set content
         if input_keys:
             backspaces = [Keys.BACKSPACE] * len(field.get_attribute('value'))
@@ -964,9 +1011,10 @@ class PgadminPage:
                 codemirror_ele.click()
                 retry = 0
             except WebDriverException as e:
-                print("Exception in filling code mirror {0} ".format(retry))
+                print("Exception in filling code mirror {0} ".format(retry),
+                      file=sys.stderr)
                 print(str(e))
-                if retry == 0:
+                if retry == 1:
                     raise e
                 retry -= 1
 
@@ -1020,7 +1068,7 @@ class PgadminPage:
             WebDriverWait(self.driver, timeout, .01).until(
                 EC.visibility_of_element_located((By.XPATH, xpath)))
             element_found = True
-        except Exception as e:
+        except Exception:
             pass
         return element_found
 
@@ -1141,7 +1189,7 @@ class PgadminPage:
                     EC.visibility_of_any_elements_located((
                         By.XPATH, locator))):
                 elements_located_status = True
-        except Exception as e:
+        except Exception:
             pass
         return elements_located_status
 
@@ -1171,32 +1219,45 @@ class PgadminPage:
         switch_box_element = self.find_by_xpath(switch_box)
 
         if required_status == 'Yes':
-            if 'off' in switch_box_element.get_attribute("class"):
-                switch_box_element.click()
-                time.sleep(1)
-                if 'success' in switch_box_element.get_attribute("class"):
-                    status_changed_successfully = True
-                else:
-                    print(
-                        "(set_switch_box_status)Clicked the "
-                        "element to change its status but "
-                        "it did not changed",
-                        file=sys.stderr)
-            elif 'success' in switch_box_element.get_attribute("class"):
-                status_changed_successfully = True
+            status_changed_successfully = \
+                self.toggle_switch_box(switch_box_element,
+                                       expected_attr_in_class_tag='success',
+                                       unexpected_attr_in_class_tag='off')
         else:
-            if 'success' in switch_box_element.get_attribute("class"):
-                switch_box_element.click()
-                if 'off' in switch_box_element.get_attribute("class"):
-                    status_changed_successfully = True
-                else:
-                    print(
-                        "(set_switch_box_status)Clicked the element to "
-                        "change its status but it did not changed",
-                        file=sys.stderr)
-            elif 'off' in switch_box_element.get_attribute("class"):
-                status_changed_successfully = True
+            status_changed_successfully = \
+                self.toggle_switch_box(switch_box_element,
+                                       expected_attr_in_class_tag='off',
+                                       unexpected_attr_in_class_tag='success')
         return status_changed_successfully
+
+    def toggle_switch_box(self, switch_box_ele, expected_attr_in_class_tag,
+                          unexpected_attr_in_class_tag):
+        """
+        Method toggles switch box status using attributes from class tag
+        :param switch_box_ele:
+        :param expected_attr_in_class_tag: e.g. 'off', success
+        :param unexpected_attr_in_class_tag: e.g. 'off', success
+        :return: True if class tag attribute is to expected attribute value
+        in class tag.
+        """
+        status_changed = False
+        if unexpected_attr_in_class_tag in switch_box_ele.get_attribute(
+                "class"):
+            switch_box_ele.click()
+            time.sleep(1)
+            if expected_attr_in_class_tag in switch_box_ele.get_attribute(
+                    "class"):
+                status_changed = True
+            else:
+                print(
+                    "(set_switch_box_status)Clicked the "
+                    "element to change its status but "
+                    "it did not changed",
+                    file=sys.stderr)
+        elif expected_attr_in_class_tag in switch_box_ele.get_attribute(
+                "class"):
+            status_changed = True
+        return status_changed
 
     def retry_click(self, click_locator, verify_locator):
         click_status = False

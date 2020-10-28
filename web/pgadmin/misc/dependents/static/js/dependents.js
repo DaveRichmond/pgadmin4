@@ -100,7 +100,7 @@ define('misc.dependents', [
           },
           {
             name: 'field',
-            label: '', // label kept blank, it will change dynamically
+            label: gettext('field'),
             cell: 'string',
             editable: false,
           },
@@ -224,8 +224,8 @@ define('misc.dependents', [
                 Alertify.pgNotifier(
                   error, xhr,
                   gettext('Error retrieving data from the server: %s', message || _label),
-                  function(msg) {
-                    if(msg === 'CRYPTKEY_SET') {
+                  function(alertMsg) {
+                    if(alertMsg === 'CRYPTKEY_SET') {
                       self.showDependents(item, data, node);
                     } else {
                       console.warn(arguments);
@@ -236,7 +236,8 @@ define('misc.dependents', [
               $msgContainer.text(gettext('Failed to retrieve data from the server.'));
             });
         }
-      } if (msg != '') {
+      }
+      if (msg != '') {
         $msgContainer.text(msg);
         $msgContainer.removeClass('d-none');
         if (!$gridContainer.hasClass('d-none')) {

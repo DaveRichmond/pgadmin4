@@ -48,12 +48,15 @@ class BaseFeatureTest(BaseTestGenerator):
             raise
 
     def runTest(self):
+        # To be implemented by child classes
         pass
 
     def before(self):
+        # To be implemented by child classes
         pass
 
     def after(self):
+        # To be implemented by child classes
         pass
 
     def tearDown(self):
@@ -107,7 +110,5 @@ class BaseFeatureTest(BaseTestGenerator):
         try:
             os.mkdir(path)
         except OSError as e:
-            if e.errno == errno.EEXIST:
-                pass
-            else:
+            if e.errno != errno.EEXIST:
                 raise

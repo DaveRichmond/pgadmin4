@@ -10,9 +10,9 @@
 define([
   'sources/gettext', 'sources/url_for', 'jquery', 'underscore', 'backbone',
   'pgadmin.alertifyjs', 'sources/pgadmin', 'pgadmin.browser',
-  'pgadmin.backgrid', 'sources/window', 'wcdocker',
+  'pgadmin.backgrid', 'sources/window', 'pgadmin.tools.debugger.utils', 'wcdocker',
 ], function(
-  gettext, url_for, $, _, Backbone, Alertify, pgAdmin, pgBrowser, Backgrid, pgWindow
+  gettext, url_for, $, _, Backbone, Alertify, pgAdmin, pgBrowser, Backgrid, pgWindow, debuggerUtils
 ) {
 
   var wcDocker = window.wcDocker;
@@ -163,7 +163,7 @@ define([
     }
   };
 
-  var res = function(debug_info, restart_debug, is_edb_proc, trans_id) {
+  var res = function(debugInfo, restartDebug, isEdbProc, transId) {
     if (!Alertify.debuggerInputArgsDialog) {
       Alertify.dialog('debuggerInputArgsDialog', function factory() {
         return {
@@ -242,16 +242,16 @@ define([
               method: 'GET',
               async: false,
             })
-              .done(function(res) {
-                if (res.data.args_count != 0) {
-                  for (i = 0; i < res.data.result.length; i++) {
+              .done(function(res_get) {
+                if (res_get.data.args_count != 0) {
+                  for (i = 0; i < res_get.data.result.length; i++) {
                   // Below will format the data to be stored in sqlite database
                     func_args_data.push({
-                      'arg_id': res.data.result[i]['arg_id'],
-                      'is_null': res.data.result[i]['is_null'],
-                      'is_expression': res.data.result[i]['is_expression'],
-                      'use_default': res.data.result[i]['use_default'],
-                      'value': res.data.result[i]['value'],
+                      'arg_id': res_get.data.result[i]['arg_id'],
+                      'is_null': res_get.data.result[i]['is_null'],
+                      'is_expression': res_get.data.result[i]['is_expression'],
+                      'use_default': res_get.data.result[i]['use_default'],
+                      'value': res_get.data.result[i]['value'],
                     });
                   }
                 }
@@ -366,8 +366,8 @@ define([
               // It will assign default values to "Default value" column
               for (j = (argname.length - 1); j >= 0; j--) {
                 if (debug_info['proargmodes'] != null) {
-                  if (argmode[j] == 'i' || argmode[j] == 'b' ||
-                    (is_edb_proc && argmode[j] == 'o')) {
+                  if (argmode && (argmode[j] == 'i' || argmode[j] == 'b' ||
+                    (is_edb_proc && argmode[j] == 'o'))) {
                     if (arg_cnt) {
                       arg_cnt = arg_cnt - 1;
                       def_val_list[j] = default_args[arg_cnt];
@@ -386,8 +386,8 @@ define([
               if (argtype.length != 0) {
                 for (i = 0; i < argtype.length; i++) {
                   if (debug_info['proargmodes'] != null) {
-                    if (argmode[i] == 'i' || argmode[i] == 'b' ||
-                      (is_edb_proc && argmode[i] == 'o')) {
+                    if (argmode && (argmode[i] == 'i' || argmode[i] == 'b' ||
+                      (is_edb_proc && argmode[i] == 'o'))) {
                       use_def_value = false;
                       if (def_val_list[i] != '<no default>') {
                         use_def_value = true;
@@ -419,7 +419,7 @@ define([
                 for (i = 0; i < func_args_data.length; i++) {
                   index = func_args_data[i]['arg_id'];
                   if (debug_info['proargmodes'] != null &&
-                    (argmode[index] == 'o' && !is_edb_proc)) {
+                    (argmode && argmode[index] == 'o' && !is_edb_proc)) {
                     continue;
                   }
 
@@ -493,8 +493,8 @@ define([
                       'default_value': def_val_list[i],
                     });
                   } else {
-                    if (argmode[i] == 'i' || argmode[i] == 'b' ||
-                      (is_edb_proc && argmode[i] == 'o')) {
+                    if (argmode && (argmode[i] == 'i' || argmode[i] == 'b' ||
+                      (is_edb_proc && argmode[i] == 'o'))) {
                       use_def_value = false;
                       if (def_val_list[i] != '<No default value>') {
                         use_def_value = true;
@@ -706,7 +706,7 @@ define([
 
               // If debugging is not started again then we should initialize the target otherwise not
               if (self.setting('restart_debug') == 0) {
-                if (d._type == 'function') {
+                if (d && d._type == 'function') {
                   baseUrl = url_for('debugger.initialize_target_for_function', {
                     'debug_type': 'direct',
                     'trans_id': self.setting('trans_id'),
@@ -715,7 +715,7 @@ define([
                     'scid': treeInfo.schema._id,
                     'func_id': treeInfo.function._id,
                   });
-                } else if (d._type == 'procedure') {
+                } else if (d && d._type == 'procedure') {
                   baseUrl = url_for('debugger.initialize_target_for_function', {
                     'debug_type': 'direct',
                     'trans_id': self.setting('trans_id'),
@@ -724,7 +724,7 @@ define([
                     'scid': treeInfo.schema._id,
                     'func_id': treeInfo.procedure._id,
                   });
-                } else if (d._type == 'edbfunc') {
+                } else if (d && d._type == 'edbfunc') {
                   baseUrl = url_for('debugger.initialize_target_for_function', {
                     'debug_type': 'direct',
                     'trans_id': self.setting('trans_id'),
@@ -733,7 +733,7 @@ define([
                     'scid': treeInfo.schema._id,
                     'func_id': treeInfo.edbfunc._id,
                   });
-                } else if (d._type == 'edbproc') {
+                } else if (d && d._type == 'edbproc') {
                   baseUrl = url_for('debugger.initialize_target_for_function', {
                     'debug_type': 'direct',
                     'trans_id': self.setting('trans_id'),
@@ -751,11 +751,11 @@ define([
                     'data': JSON.stringify(args_value_list),
                   },
                 })
-                  .done(function(res) {
+                  .done(function(res_post) {
 
                     var url = url_for(
                       'debugger.direct', {
-                        'trans_id': res.data.debuggerTransId,
+                        'trans_id': res_post.data.debuggerTransId,
                       }
                     );
 
@@ -773,31 +773,47 @@ define([
                         panel = pgBrowser.docker.addPanel(
                           'frm_debugger', wcDocker.DOCK.STACKED, dashboardPanel[0]
                         );
+                      debuggerUtils.setDebuggerTitle(panel, self.preferences, treeInfo.function.label, treeInfo.schema.label, treeInfo.database.label);
 
                       panel.focus();
 
                       // Panel Closed event
                       panel.on(wcDocker.EVENT.CLOSED, function() {
                         var closeUrl = url_for('debugger.close', {
-                          'trans_id': res.data.debuggerTransId,
+                          'trans_id': res_post.data.debuggerTransId,
                         });
                         $.ajax({
                           url: closeUrl,
                           method: 'DELETE',
                         });
                       });
+
+                      // Panel Rename event
+                      panel.on(wcDocker.EVENT.RENAME, function(panel_data) {
+                        Alertify.prompt('', panel_data.$titleText[0].textContent,
+                          // We will execute this function when user clicks on the OK button
+                          function(evt, value) {
+                            if(value) {
+                              debuggerUtils.setDebuggerTitle(panel, self.preferences, treeInfo.function.label, treeInfo.schema.label, treeInfo.database.label, value);
+                            }
+                          },
+                          // We will execute this function when user clicks on the Cancel
+                          // button.  Do nothing just close it.
+                          function(evt) { evt.cancel = false; }
+                        ).set({'title': gettext('Rename Panel')});
+                      });
                     }
-                    var _Url;
+                    var _url;
 
                     if (d._type == 'function') {
-                      _Url = url_for('debugger.set_arguments', {
+                      _url = url_for('debugger.set_arguments', {
                         'sid': treeInfo.server._id,
                         'did': treeInfo.database._id,
                         'scid': treeInfo.schema._id,
                         'func_id': treeInfo.function._id,
                       });
                     } else if (d._type == 'procedure') {
-                      _Url = url_for('debugger.set_arguments', {
+                      _url = url_for('debugger.set_arguments', {
                         'sid': treeInfo.server._id,
                         'did': treeInfo.database._id,
                         'scid': treeInfo.schema._id,
@@ -805,7 +821,7 @@ define([
                       });
                     } else if (d._type == 'edbfunc') {
                     // Get the existing function parameters available from sqlite database
-                      _Url = url_for('debugger.set_arguments', {
+                      _url = url_for('debugger.set_arguments', {
                         'sid': treeInfo.server._id,
                         'did': treeInfo.database._id,
                         'scid': treeInfo.schema._id,
@@ -813,7 +829,7 @@ define([
                       });
                     } else if (d._type == 'edbproc') {
                     // Get the existing function parameters available from sqlite database
-                      _Url = url_for('debugger.set_arguments', {
+                      _url = url_for('debugger.set_arguments', {
                         'sid': treeInfo.server._id,
                         'did': treeInfo.database._id,
                         'scid': treeInfo.schema._id,
@@ -822,7 +838,7 @@ define([
                     }
 
                     $.ajax({
-                      url: _Url,
+                      url: _url,
                       method: 'POST',
                       data: {
                         'data': JSON.stringify(sqlite_func_args_list),
@@ -836,10 +852,10 @@ define([
                         );
                       });
                   })
-                  .fail(function(e) {
+                  .fail(function(er) {
                     Alertify.alert(
                       gettext('Debugger Target Initialization Error'),
-                      e.responseJSON.errormsg
+                      er.responseJSON.errormsg
                     );
                   });
               } else {
@@ -857,10 +873,10 @@ define([
                   },
                 })
                   .done(function() {})
-                  .fail(function(e) {
+                  .fail(function(er) {
                     Alertify.alert(
                       gettext('Debugger Listener Startup Error'),
-                      e.responseJSON.errormsg
+                      er.responseJSON.errormsg
                     );
                   });
 
@@ -902,50 +918,50 @@ define([
             }
 
             if (e.button.text === gettext('Clear All')) {
-              let self = this;
-              let baseUrl = null;
+              let _self = this;
+              let base_url = null;
 
-              if (self.setting('restart_debug') == 0) {
+              if (_self.setting('restart_debug') == 0) {
                 let selected_item = pgBrowser.tree.selected();
                 let item_data = pgBrowser.tree.itemData(selected_item);
                 if (!item_data)
                   return;
 
-                let node = pgBrowser.Nodes[item_data._type];
-                let treeInfo = node.getTreeNodeHierarchy.call(node, selected_item);
+                let node_ele = pgBrowser.Nodes[item_data._type];
+                let tree_info = node_ele.getTreeNodeHierarchy.call(node_ele, selected_item);
 
-                baseUrl = url_for('debugger.clear_arguments', {
-                  'sid': treeInfo.server._id,
-                  'did': treeInfo.database._id,
-                  'scid': treeInfo.schema._id,
+                base_url = url_for('debugger.clear_arguments', {
+                  'sid': tree_info.server._id,
+                  'did': tree_info.database._id,
+                  'scid': tree_info.schema._id,
                   'func_id': item_data._id,
                 });
               } else {
-                baseUrl = url_for('debugger.clear_arguments', {
-                  'sid': self.setting('debug_info').server_id,
-                  'did': self.setting('debug_info').database_id,
-                  'scid': self.setting('debug_info').schema_id,
-                  'func_id': self.setting('debug_info').function_id,
+                base_url = url_for('debugger.clear_arguments', {
+                  'sid': _self.setting('debug_info').server_id,
+                  'did': _self.setting('debug_info').database_id,
+                  'scid': _self.setting('debug_info').schema_id,
+                  'func_id': _self.setting('debug_info').function_id,
                 });
               }
               $.ajax({
-                url: baseUrl,
+                url: base_url,
                 method: 'POST',
                 data: {
                   'data': JSON.stringify(args_value_list),
                 },
               }).done(function() {
                 /* Disable debug button */
-                self.__internal.buttons[2].element.disabled = true;
-                self.main(self.setting('title'), self.setting('debug_info'),
-                  self.setting('restart_debug'), self.setting('is_edb_proc'),
-                  self.setting('trans_id')
+                _self.__internal.buttons[2].element.disabled = true;
+                _self.main(_self.setting('title'), _self.setting('debug_info'),
+                  _self.setting('restart_debug'), _self.setting('is_edb_proc'),
+                  _self.setting('trans_id')
                 );
-                self.prepare();
-              }).fail(function(e) {
+                _self.prepare();
+              }).fail(function(er) {
                 Alertify.alert(
                   gettext('Clear failed'),
-                  e.responseJSON.errormsg
+                  er.responseJSON.errormsg
                 );
               });
 
@@ -1023,7 +1039,7 @@ define([
     }
 
     Alertify.debuggerInputArgsDialog(
-      gettext('Debugger'), debug_info, restart_debug, is_edb_proc, trans_id
+      gettext('Debugger'), debugInfo, restartDebug, isEdbProc, transId
     ).resizeTo(pgBrowser.stdW.md,pgBrowser.stdH.md);
 
   };

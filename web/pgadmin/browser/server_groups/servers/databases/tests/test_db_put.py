@@ -41,14 +41,15 @@ class DatabasesUpdateTestCase(BaseTestGenerator):
             try:
                 data = {
                     "comments": "This is db update comment",
-                    "id": self.db_id
+                    "id": self.db_id,
+                    "schema_res": ["public"]
                 }
                 response = self.tester.put(
                     self.url + str(utils.SERVER_GROUP) + '/' + str(
                         self.server_id) + '/' +
                     str(self.db_id), data=json.dumps(data),
                     follow_redirects=True)
-                self.assertEquals(response.status_code, 200)
+                self.assertEqual(response.status_code, 200)
             except Exception as exception:
                 from traceback import print_exc
                 print_exc()

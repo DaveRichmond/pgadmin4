@@ -22,12 +22,12 @@ from pgadmin.browser.server_groups.servers.databases.schemas.utils \
 from pgadmin.browser.server_groups.servers.utils import parse_priv_from_db, \
     parse_priv_to_db
 from pgadmin.browser.utils import PGChildNodeView
+from pgadmin.tools.schema_diff.compare import SchemaDiffObjectCompare
+from pgadmin.tools.schema_diff.node_registry import SchemaDiffRegistry
 from pgadmin.utils.ajax import make_json_response, \
     make_response as ajax_response, internal_server_error, \
     precondition_required, gone
 from pgadmin.utils.driver import get_driver
-from pgadmin.tools.schema_diff.node_registry import SchemaDiffRegistry
-from pgadmin.tools.schema_diff.compare import SchemaDiffObjectCompare
 
 
 class PackageModule(SchemaChildModule):
@@ -53,8 +53,8 @@ class PackageModule(SchemaChildModule):
 
     """
 
-    NODE_TYPE = 'package'
-    COLLECTION_LABEL = _("Packages")
+    _NODE_TYPE = 'package'
+    _COLLECTION_LABEL = _("Packages")
 
     def __init__(self, *args, **kwargs):
         super(PackageModule, self).__init__(*args, **kwargs)
@@ -74,7 +74,7 @@ class PackageModule(SchemaChildModule):
         Load the module script for schema, when any of the database node is
         initialized.
         """
-        return database.DatabaseModule.NODE_TYPE
+        return database.DatabaseModule.node_type
 
 
 blueprint = PackageModule(__name__)
@@ -82,6 +82,8 @@ blueprint = PackageModule(__name__)
 
 class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
     node_type = blueprint.node_type
+    node_label = "Package"
+    node_icon = "icon-%s" % node_type
 
     parent_ids = [
         {'type': 'int', 'id': 'gid'},
@@ -139,11 +141,11 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
                 self.template_path = 'packages/ppas/#{0}#'.format(
                     self.manager.version)
 
-                SQL = render_template(
+                sql = render_template(
                     "/".join([self.template_path, 'get_schema.sql']),
                     scid=kwargs['scid']
                 )
-                status, rset = self.conn.execute_scalar(SQL)
+                status, rset = self.conn.execute_scalar(sql)
                 if not status:
                     return internal_server_error(errormsg=rset)
 
@@ -172,7 +174,8 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
         Returns:
 
         """
-        SQL = render_template("/".join([self.template_path, 'properties.sql']),
+        SQL = render_template("/".join([self.template_path,
+                                        self._PROPERTIES_SQL]),
                               scid=scid)
         status, res = self.conn.execute_dict(SQL)
 
@@ -200,19 +203,19 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
 
         """
         res = []
-        SQL = render_template(
-            "/".join([self.template_path, 'nodes.sql']),
+        sql = render_template(
+            "/".join([self.template_path, self._NODES_SQL]),
             scid=scid,
             pkgid=pkgid
         )
-        status, rset = self.conn.execute_dict(SQL)
+        status, rset = self.conn.execute_dict(sql)
         if not status:
             return internal_server_error(errormsg=rset)
 
         if pkgid is not None:
             if len(rset['rows']) == 0:
                 return gone(
-                    errormsg=_("Could not find the package.")
+                    errormsg=self.not_found_error_msg()
                 )
 
             row = rset['rows'][0]
@@ -221,7 +224,7 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
                     row['oid'],
                     scid,
                     row['name'],
-                    icon="icon-%s" % self.node_type
+                    icon=self.node_icon
                 )
             )
 
@@ -231,7 +234,7 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
                     row['oid'],
                     scid,
                     row['name'],
-                    icon="icon-%s" % self.node_type
+                    icon=self.node_icon
                 ))
 
         return make_json_response(
@@ -255,18 +258,18 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
 
         """
         res = []
-        SQL = render_template(
-            "/".join([self.template_path, 'properties.sql']),
+        sql = render_template(
+            "/".join([self.template_path, self._PROPERTIES_SQL]),
             scid=scid, pkgid=pkgid
         )
-        status, rset = self.conn.execute_dict(SQL)
+        status, rset = self.conn.execute_dict(sql)
 
         if not status:
             return internal_server_error(errormsg=rset)
 
         if len(rset['rows']) == 0:
             return gone(
-                errormsg=_("Could not find the package in the database.")
+                errormsg=self.not_found_error_msg()
             )
 
         for row in rset['rows']:
@@ -275,7 +278,7 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
                     row['oid'],
                     scid,
                     row['name'],
-                    icon="icon-%s" % self.node_type
+                    icon=self.node_icon
                 ))
 
         return make_json_response(
@@ -314,16 +317,17 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
         :param pkgid:
         :return:
         """
-        SQL = render_template("/".join([self.template_path, 'properties.sql']),
+        sql = render_template("/".join([self.template_path,
+                                        self._PROPERTIES_SQL]),
                               scid=scid, pkgid=pkgid)
-        status, res = self.conn.execute_dict(SQL)
+        status, res = self.conn.execute_dict(sql)
 
         if not status:
             return False, internal_server_error(errormsg=res)
 
         if len(res['rows']) == 0:
             return False, gone(
-                errormsg=_("Could not find the package in the database.")
+                errormsg=self.not_found_error_msg()
             )
 
         res['rows'][0]['pkgheadsrc'] = self.get_inner(
@@ -331,10 +335,10 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
         res['rows'][0]['pkgbodysrc'] = self.get_inner(
             res['rows'][0]['pkgbodysrc'])
 
-        SQL = render_template("/".join([self.template_path, 'acl.sql']),
+        sql = render_template("/".join([self.template_path, self._ACL_SQL]),
                               scid=scid,
                               pkgid=pkgid)
-        status, rset1 = self.conn.execute_dict(SQL)
+        status, rset1 = self.conn.execute_dict(sql)
 
         if not status:
             return False, internal_server_error(errormsg=rset1)
@@ -362,8 +366,8 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
 
         """
         required_args = [
-            u'name',
-            u'pkgheadsrc'
+            'name',
+            'pkgheadsrc'
         ]
 
         data = request.form if request.form else json.loads(
@@ -381,23 +385,23 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
                 )
         data['schema'] = self.schema
 
-        SQL, name = self.getSQL(gid, sid, did, data, scid, None)
+        sql, name = self.getSQL(data=data, scid=scid, pkgid=None)
 
-        status, msg = self.conn.execute_scalar(SQL)
+        status, msg = self.conn.execute_scalar(sql)
         if not status:
             return internal_server_error(errormsg=msg)
 
         # We need oid of newly created package.
-        SQL = render_template(
+        sql = render_template(
             "/".join([
-                self.template_path, 'get_oid.sql'
+                self.template_path, self._OID_SQL
             ]),
             name=data['name'], scid=scid
         )
 
-        SQL = SQL.strip('\n').strip(' ')
-        if SQL and SQL != "":
-            status, pkgid = self.conn.execute_scalar(SQL)
+        sql = sql.strip('\n').strip(' ')
+        if sql and sql != "":
+            status, pkgid = self.conn.execute_scalar(sql)
             if not status:
                 return internal_server_error(errormsg=pkgid)
 
@@ -406,7 +410,7 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
                 pkgid,
                 scid,
                 data['name'],
-                icon="icon-%s" % self.node_type
+                icon=self.node_icon
             )
         )
 
@@ -435,44 +439,39 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
             data = {'ids': [pkgid]}
 
         # Below will decide if it's simple drop or drop with cascade call
-        if self.cmd == 'delete':
-            # This is a cascade operation
-            cascade = True
-        else:
-            cascade = False
+
+        cascade = self._check_cascade_operation()
 
         try:
             for pkgid in data['ids']:
-                SQL = render_template(
-                    "/".join([self.template_path, 'properties.sql']),
+                sql = render_template(
+                    "/".join([self.template_path, self._PROPERTIES_SQL]),
                     scid=scid,
                     pkgid=pkgid)
-                status, res = self.conn.execute_dict(SQL)
+                status, res = self.conn.execute_dict(sql)
                 if not status:
                     return internal_server_error(errormsg=res)
 
-                if not res['rows']:
+                elif not res['rows']:
                     return make_json_response(
                         success=0,
                         errormsg=_(
                             'Error: Object not found.'
                         ),
-                        info=_(
-                            'The specified package could not be found.\n'
-                        )
+                        info=self.not_found_error_msg()
                     )
 
                 res['rows'][0]['schema'] = self.schema
 
-                SQL = render_template("/".join([self.template_path,
-                                                'delete.sql']),
+                sql = render_template("/".join([self.template_path,
+                                                self._DELETE_SQL]),
                                       data=res['rows'][0],
                                       cascade=cascade)
 
                 if only_sql:
-                    return SQL
+                    return sql
 
-                status, res = self.conn.execute_scalar(SQL)
+                status, res = self.conn.execute_scalar(sql)
                 if not status:
                     return internal_server_error(errormsg=res)
 
@@ -503,13 +502,13 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
             request.data, encoding='utf-8'
         )
 
-        SQL, name = self.getSQL(gid, sid, did, data, scid, pkgid)
+        sql, name = self.getSQL(data=data, scid=scid, pkgid=pkgid)
         # Most probably this is due to error
-        if not isinstance(SQL, str):
-            return SQL
+        if not isinstance(sql, str):
+            return sql
 
-        SQL = SQL.strip('\n').strip(' ')
-        status, res = self.conn.execute_scalar(SQL)
+        sql = sql.strip('\n').strip(' ')
+        status, res = self.conn.execute_scalar(sql)
         if not status:
             return internal_server_error(errormsg=res)
 
@@ -518,7 +517,7 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
                 pkgid,
                 scid,
                 name,
-                icon="icon-%s" % self.node_type
+                icon=self.node_icon
             )
         )
 
@@ -558,112 +557,126 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
                         ).format(arg)
                     )
 
-        SQL, name = self.getSQL(gid, sid, did, data, scid, pkgid)
+        sql, name = self.getSQL(data=data, scid=scid, pkgid=pkgid)
         # Most probably this is due to error
-        if not isinstance(SQL, str):
-            return SQL
+        if not isinstance(sql, str):
+            return sql
 
-        SQL = SQL.strip('\n').strip(' ')
-        if SQL == '':
-            SQL = "--modified SQL"
+        sql = sql.strip('\n').strip(' ')
+        if sql == '':
+            sql = "--modified SQL"
         return make_json_response(
-            data=SQL,
+            data=sql,
             status=200
         )
 
-    def getSQL(self, gid, sid, did, data, scid, pkgid=None, sqltab=False,
-               diff_schema=None):
+    def getSQL(self, **kwargs):
         """
         This function will generate sql from model data.
-
-        Args:
-            gid: Server Group ID
-            sid: Server ID
-            did: Database ID
-            scid: Schema ID
-            pkgid: Package ID
-            sqltab: True
-            diff_schema: Target Schema
+        :param kwargs
+        :return:
         """
 
-        required_args = [
-            u'name'
-        ]
+        scid = kwargs.get('scid')
+        data = kwargs.get('data')
+        pkgid = kwargs.get('pkgid', None)
+        sqltab = kwargs.get('sqltab', False)
+        is_schema_diff = kwargs.get('is_schema_diff', None)
+        target_schema = kwargs.get('target_schema', None)
 
-        if diff_schema:
-            data['schema'] = diff_schema
+        if target_schema:
+            data['schema'] = target_schema
         else:
             data['schema'] = self.schema
 
         if pkgid is not None and not sqltab:
-            SQL = render_template(
-                "/".join([self.template_path, 'properties.sql']), scid=scid,
-                pkgid=pkgid)
-            status, res = self.conn.execute_dict(SQL)
-            if not status:
-                return internal_server_error(errormsg=res)
-            if len(res['rows']) == 0:
-                return gone(
-                    errormsg=_("Could not find the package in the database.")
-                )
-
-            res['rows'][0]['pkgheadsrc'] = self.get_inner(
-                res['rows'][0]['pkgheadsrc'])
-            res['rows'][0]['pkgbodysrc'] = self.get_inner(
-                res['rows'][0]['pkgbodysrc'])
-
-            SQL = render_template("/".join([self.template_path, 'acl.sql']),
-                                  scid=scid,
-                                  pkgid=pkgid)
-
-            status, rset1 = self.conn.execute_dict(SQL)
-
-            if not status:
-                return internal_server_error(errormsg=rset1)
-
-            for row in rset1['rows']:
-                priv = parse_priv_from_db(row)
-                res['rows'][0].setdefault(row['deftype'], []).append(priv)
-
-            # Making copy of output for further processing
-            old_data = dict(res['rows'][0])
-
-            # To format privileges data coming from client
-            for key in ['pkgacl']:
-                if key in data and data[key] is not None:
-                    if 'added' in data[key]:
-                        data[key]['added'] = parse_priv_to_db(
-                            data[key]['added'], self.acl)
-                    if 'changed' in data[key]:
-                        data[key]['changed'] = parse_priv_to_db(
-                            data[key]['changed'], self.acl)
-                    if 'deleted' in data[key]:
-                        data[key]['deleted'] = parse_priv_to_db(
-                            data[key]['deleted'], self.acl)
-
-            # If name is not present with in update data then copy it
-            # from old data
-            for arg in required_args:
-                if arg not in data:
-                    data[arg] = old_data[arg]
-
-            SQL = render_template("/".join([self.template_path, 'update.sql']),
-                                  data=data, o_data=old_data, conn=self.conn,
-                                  is_schema_diff=diff_schema)
-            return SQL, data['name'] if 'name' in data else old_data['name']
+            return self.get_sql_with_pkgid(scid, pkgid, data, is_schema_diff)
         else:
             # To format privileges coming from client
             if 'pkgacl' in data:
                 data['pkgacl'] = parse_priv_to_db(data['pkgacl'], self.acl)
 
-            SQL = render_template("/".join([self.template_path, 'create.sql']),
+            sql = render_template("/".join([self.template_path,
+                                            self._CREATE_SQL]),
                                   data=data, conn=self.conn)
 
-            return SQL, data['name']
+            return sql, data['name']
+
+    def format_privilege_data(self, data):
+        # To format privileges data coming from client
+        for key in ['pkgacl']:
+            if key in data and data[key] is not None:
+                if 'added' in data[key]:
+                    data[key]['added'] = parse_priv_to_db(
+                        data[key]['added'], self.acl)
+                if 'changed' in data[key]:
+                    data[key]['changed'] = parse_priv_to_db(
+                        data[key]['changed'], self.acl)
+                if 'deleted' in data[key]:
+                    data[key]['deleted'] = parse_priv_to_db(
+                        data[key]['deleted'], self.acl)
+
+    def get_sql_with_pkgid(self, scid, pkgid, data, is_schema_diff):
+        """
+
+        :param scid:
+        :param pkgid:
+        :param data:
+        :param is_schema_diff:
+        :return:
+        """
+        required_args = [
+            'name'
+        ]
+        sql = render_template(
+            "/".join([self.template_path, self._PROPERTIES_SQL]), scid=scid,
+            pkgid=pkgid)
+        status, res = self.conn.execute_dict(sql)
+        if not status:
+            return internal_server_error(errormsg=res)
+        elif len(res['rows']) == 0:
+            return gone(
+                errormsg=self.not_found_error_msg()
+            )
+
+        res['rows'][0]['pkgheadsrc'] = self.get_inner(
+            res['rows'][0]['pkgheadsrc'])
+        res['rows'][0]['pkgbodysrc'] = self.get_inner(
+            res['rows'][0]['pkgbodysrc'])
+
+        sql = render_template("/".join([self.template_path, self._ACL_SQL]),
+                              scid=scid,
+                              pkgid=pkgid)
+
+        status, rset1 = self.conn.execute_dict(sql)
+
+        if not status:
+            return internal_server_error(errormsg=rset1)
+
+        for row in rset1['rows']:
+            priv = parse_priv_from_db(row)
+            res['rows'][0].setdefault(row['deftype'], []).append(priv)
+
+        # Making copy of output for further processing
+        old_data = dict(res['rows'][0])
+
+        # To format privileges data coming from client
+        self.format_privilege_data(data)
+
+        # If name is not present with in update data then copy it
+        # from old data
+        for arg in required_args:
+            if arg not in data:
+                data[arg] = old_data[arg]
+
+        sql = render_template("/".join([self.template_path,
+                                        self._UPDATE_SQL]),
+                              data=data, o_data=old_data, conn=self.conn,
+                              is_schema_diff=is_schema_diff)
+        return sql, data['name'] if 'name' in data else old_data['name']
 
     @check_precondition(action="sql")
-    def sql(self, gid, sid, did, scid, pkgid, diff_schema=None,
-            json_resp=True):
+    def sql(self, gid, sid, did, scid, pkgid, **kwargs):
         """
         This function will generate sql for sql panel
 
@@ -673,19 +686,23 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
             did: Database ID
             scid: Schema ID
             pkgid: Package ID
-            diff_schema:  Schema diff target schema name
+            is_schema_diff:
             json_resp: json response or plain text response
         """
+        is_schema_diff = kwargs.get('is_schema_diff', None)
+        json_resp = kwargs.get('json_resp', True)
+        target_schema = kwargs.get('target_schema', None)
+
         try:
-            SQL = render_template(
-                "/".join([self.template_path, 'properties.sql']), scid=scid,
-                pkgid=pkgid)
-            status, res = self.conn.execute_dict(SQL)
+            sql = render_template(
+                "/".join([self.template_path, self._PROPERTIES_SQL]),
+                scid=scid, pkgid=pkgid)
+            status, res = self.conn.execute_dict(sql)
             if not status:
                 return internal_server_error(errormsg=res)
             if len(res['rows']) == 0:
                 return gone(
-                    errormsg=_("Could not find the package in the database.")
+                    errormsg=self.not_found_error_msg()
                 )
 
             res['rows'][0]['pkgheadsrc'] = self.get_inner(
@@ -693,10 +710,11 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
             res['rows'][0]['pkgbodysrc'] = self.get_inner(
                 res['rows'][0]['pkgbodysrc'])
 
-            SQL = render_template("/".join([self.template_path, 'acl.sql']),
+            sql = render_template("/".join([self.template_path,
+                                            self._ACL_SQL]),
                                   scid=scid,
                                   pkgid=pkgid)
-            status, rset1 = self.conn.execute_dict(SQL)
+            status, rset1 = self.conn.execute_dict(sql)
 
             if not status:
                 return internal_server_error(errormsg=rset1)
@@ -706,8 +724,14 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
                 res['rows'][0].setdefault(row['deftype'], []).append(priv)
 
             result = res['rows'][0]
-            sql, name = self.getSQL(gid, sid, did, result, scid, pkgid, True,
-                                    diff_schema)
+            if target_schema:
+                result['schema'] = target_schema
+
+            sql, name = self.getSQL(data=result, scid=scid, pkgid=pkgid,
+                                    sqltab=True,
+                                    is_schema_diff=is_schema_diff,
+                                    target_schema=target_schema)
+
             # Most probably this is due to error
             if not isinstance(sql, str):
                 return sql
@@ -718,11 +742,11 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
             if not json_resp:
                 return sql
 
-            sql_header = u"-- Package: {0}.{1}\n\n-- ".format(
+            sql_header = "-- Package: {0}.{1}\n\n-- ".format(
                 self.schema, result['name'])
 
             sql_header += render_template(
-                "/".join([self.template_path, 'delete.sql']),
+                "/".join([self.template_path, self._DELETE_SQL]),
                 data=result)
             sql_header += "\n\n"
 
@@ -805,9 +829,9 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
         if self.manager.server_type != 'ppas':
             return res
 
-        SQL = render_template("/".join([self.template_path,
-                                        'nodes.sql']), scid=scid)
-        status, rset = self.conn.execute_2darray(SQL)
+        sql = render_template("/".join([self.template_path,
+                                        self._NODES_SQL]), scid=scid)
+        status, rset = self.conn.execute_2darray(sql)
         if not status:
             return internal_server_error(errormsg=res)
 
@@ -818,35 +842,36 @@ class PackageView(PGChildNodeView, SchemaDiffObjectCompare):
 
         return res
 
-    def get_sql_from_diff(self, gid, sid, did, scid, oid, data=None,
-                          diff_schema=None, drop_sql=False):
+    def get_sql_from_diff(self, **kwargs):
         """
         This function is used to get the DDL/DML statements.
-        :param gid: Group ID
-        :param sid: Serve ID
-        :param did: Database ID
-        :param scid: Schema ID
-        :param oid: Package ID
-        :param data: Difference data
-        :param diff_schema: Target Schema
-        :param drop_sql: True if need to drop the domains
+        :param kwargs
         :return:
         """
-        sql = ''
+        gid = kwargs.get('gid')
+        sid = kwargs.get('sid')
+        did = kwargs.get('did')
+        scid = kwargs.get('scid')
+        oid = kwargs.get('oid')
+        data = kwargs.get('data', None)
+        drop_sql = kwargs.get('drop_sql', False)
+        target_schema = kwargs.get('target_schema', None)
+
         if data:
-            if diff_schema:
-                data['schema'] = diff_schema
-            sql, name = self.getSQL(gid, sid, did, data, scid, oid)
+            if target_schema:
+                data['schema'] = target_schema
+            sql, name = self.getSQL(data=data, scid=scid, pkgid=oid)
         else:
             if drop_sql:
                 sql = self.delete(gid=gid, sid=sid, did=did,
                                   scid=scid, pkgid=oid, only_sql=True)
-            elif diff_schema:
+            elif target_schema:
                 sql = self.sql(gid=gid, sid=sid, did=did, scid=scid, pkgid=oid,
-                               diff_schema=diff_schema, json_resp=False)
+                               is_schema_diff=True, json_resp=False,
+                               target_schema=target_schema)
             else:
                 sql = self.sql(gid=gid, sid=sid, did=did, scid=scid, pkgid=oid,
-                               json_resp=False)
+                               is_schema_diff=True, json_resp=False)
         return sql
 
 

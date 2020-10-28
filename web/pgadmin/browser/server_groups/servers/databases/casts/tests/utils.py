@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 from regression.python_test_utils.test_utils import *
 import os
 import json
@@ -122,13 +121,13 @@ def get_database_connection(self):
 def assert_status_code(self, response):
     act_res = response.status_code
     exp_res = self.expected_data["status_code"]
-    return self.assertEquals(act_res, exp_res)
+    return self.assertEqual(act_res, exp_res)
 
 
 def assert_error_message(self, response):
     act_res = response.json["errormsg"]
     exp_res = self.expected_data["error_msg"]
-    return self.assertEquals(act_res, exp_res)
+    return self.assertEqual(act_res, exp_res)
 
 
 def assert_cast_created(self):

@@ -52,8 +52,8 @@ class ExternalTablesModule(CollectionNodeModule):
         the database node is initialized.
     """
 
-    NODE_TYPE = 'external_table'
-    COLLECTION_LABEL = gettext("External Tables")
+    _NODE_TYPE = 'external_table'
+    _COLLECTION_LABEL = gettext("External Tables")
 
     def __init__(self, *args, **kwargs):
         """
@@ -80,7 +80,7 @@ class ExternalTablesModule(CollectionNodeModule):
 
         Returns: node type of the database module.
         """
-        return databases.DatabaseModule.NODE_TYPE
+        return databases.DatabaseModule.node_type
 
     @property
     def module_use_template_javascript(self):
@@ -167,7 +167,7 @@ class ExternalTablesView(PGChildNodeView):
 
         result = self.get_external_tables(database_id, sql_statement)
 
-        if type(result) is not list:
+        if not isinstance(result, list):
             return result
 
         return make_json_response(
@@ -191,16 +191,16 @@ class ExternalTablesView(PGChildNodeView):
         sql_statement = render_template(
             template_name_or_list=os.path.join(
                 self.sql_template_path,
-                'node.sql'
+                self._NODE_SQL
             ),
             external_table_id=external_table_id
         )
         result = self.get_external_tables(database_id, sql_statement)
 
-        if type(result) is not list:
+        if not isinstance(result, list):
             return result
 
-        if len(result) == 0:
+        if not result:
             return make_json_response(
                 data=gettext('Could not find the external table.'),
                 status=404

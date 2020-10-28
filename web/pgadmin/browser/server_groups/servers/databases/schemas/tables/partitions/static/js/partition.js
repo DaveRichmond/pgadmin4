@@ -82,7 +82,7 @@ function(
           name: 'reset_table_stats', node: 'partition', module: this,
           applies: ['object', 'context'], callback: 'reset_table_stats',
           category: 'Reset', priority: 4, label: gettext('Reset Statistics'),
-          icon: 'fa fa-bar-chart', enable : 'canCreate',
+          icon: 'fa fa-chart-bar', enable : 'canCreate',
         },{
           name: 'detach_partition', node: 'partition', module: this,
           applies: ['object', 'context'], callback: 'detach_partition',
@@ -461,12 +461,12 @@ function(
               var self = this,
                 collection = self.model.get(self.field.get('name'));
 
-              collection.on('change:is_primary_key', function(m) {
+              collection.on('change:is_primary_key', function(local_model) {
                 var primary_key_coll = self.model.get('primary_key'),
-                  column_name = m.get('name'),
+                  column_name = local_model.get('name'),
                   primary_key, primary_key_column_coll;
 
-                if(m.get('is_primary_key')) {
+                if(local_model.get('is_primary_key')) {
                 // Add column to primary key.
                   if (primary_key_coll.length < 1) {
                     primary_key = new (primary_key_coll.model)({}, {
@@ -995,6 +995,16 @@ function(
           id: 'vacuum_settings_str', label: gettext('Storage settings'),
           type: 'multiline', group: gettext('Advanced'), mode: ['properties'],
         }],
+        sessChanged: function() {
+          /* If only custom autovacuum option is enabled then check if the options table is also changed. */
+          if(_.size(this.sessAttrs) == 2 && this.sessAttrs['autovacuum_custom'] && this.sessAttrs['toast_autovacuum']) {
+            return this.get('vacuum_table').sessChanged() || this.get('vacuum_toast').sessChanged();
+          }
+          if(_.size(this.sessAttrs) == 1 && (this.sessAttrs['autovacuum_custom'] || this.sessAttrs['toast_autovacuum'])) {
+            return this.get('vacuum_table').sessChanged() || this.get('vacuum_toast').sessChanged();
+          }
+          return pgBrowser.DataModel.prototype.sessChanged.apply(this);
+        },
         validate: function(keys) {
           var msg,
             name = this.get('name'),
@@ -1048,16 +1058,12 @@ function(
         },
         isInheritedTable: function(m) {
           if(!m.inSchema.apply(this, [m])) {
-            if(
-              (!_.isUndefined(m.get('coll_inherits')) && m.get('coll_inherits').length != 0)
-                ||
-                  (!_.isUndefined(m.get('typname')) && String(m.get('typname')).replace(/^\s+|\s+$/g, '') !== '')
-            ) {
-              // Either of_types or coll_inherits has value
-              return false;
-            } else {
-              return true;
-            }
+            // Either of_types or coll_inherits has value
+            return (
+              (_.isUndefined(m.get('coll_inherits')) || m.get('coll_inherits').length == 0)
+                &&
+                  (_.isUndefined(m.get('typname')) || String(m.get('typname')).replace(/^\s+|\s+$/g, '') === '')
+            );
           }
           return false;
         },
@@ -1137,11 +1143,7 @@ function(
           if(this.node_info &&  'schema' in this.node_info)
           {
             // We will disbale control if it's in 'edit' mode
-            if (m.isNew()) {
-              return false;
-            } else {
-              return true;
-            }
+            return !m.isNew();
           }
           return true;
         },

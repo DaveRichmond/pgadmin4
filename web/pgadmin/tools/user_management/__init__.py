@@ -17,13 +17,15 @@ from flask import render_template, request, \
 from flask_babelex import gettext as _
 from flask_security import login_required, roles_required, current_user
 from flask_security.utils import encrypt_password
+from werkzeug.exceptions import InternalServerError
 
 import config
 from pgadmin.utils import PgAdminModule
 from pgadmin.utils.ajax import make_response as ajax_response, \
-    make_json_response, bad_request, internal_server_error
+    make_json_response, bad_request, internal_server_error, forbidden
 from pgadmin.utils.csrf import pgCSRFProtect
-
+from pgadmin.utils.constants import MIMETYPE_APP_JS
+from pgadmin.utils.validation_utils import validate_email
 from pgadmin.model import db, Role, User, UserPreference, Server, \
     ServerGroup, Process, Setting
 
@@ -85,27 +87,32 @@ blueprint = UserManagementModule(
 )
 
 
-def validate_user(data):
-    new_data = dict()
-    email_filter = re.compile(
-        "^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9]"
-        "(?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9]"
-        "(?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$"
-    )
-
+def validate_password(data, new_data):
+    """
+    Check password new and confirm password match. If both passwords are not
+    match raise exception.
+    :param data: Data.
+    :param new_data: new data dict.
+    """
     if ('newPassword' in data and data['newPassword'] != "" and
             'confirmPassword' in data and data['confirmPassword'] != ""):
 
         if data['newPassword'] == data['confirmPassword']:
             new_data['password'] = encrypt_password(data['newPassword'])
         else:
-            raise Exception(_("Passwords do not match."))
+            raise InternalServerError(_("Passwords do not match."))
+
+
+def validate_user(data):
+    new_data = dict()
+
+    validate_password(data, new_data)
 
     if 'email' in data and data['email'] and data['email'] != "":
-        if email_filter.match(data['email']):
+        if validate_email(data['email']):
             new_data['email'] = data['email']
         else:
-            raise Exception(_("Invalid email address."))
+            raise InternalServerError(_("Invalid email address."))
 
     if 'role' in data and data['role'] != "":
         new_data['roles'] = int(data['role'])
@@ -139,7 +146,7 @@ def script():
             user_id=current_user.id
         ),
         status=200,
-        mimetype="application/javascript"
+        mimetype=MIMETYPE_APP_JS
     )
 
 
@@ -167,7 +174,7 @@ def current_user_info():
             auth_sources=config.AUTHENTICATION_SOURCES,
         ),
         status=200,
-        mimetype="application/javascript"
+        mimetype=MIMETYPE_APP_JS
     )
 
 
@@ -240,6 +247,36 @@ def create():
     )
 
 
+def _create_new_user(new_data):
+    """
+    Create new user.
+    :param new_data: Data from user creation.
+    :return: Return new created user.
+    """
+    auth_source = new_data['auth_source'] if 'auth_source' in new_data \
+        else current_app.PGADMIN_DEFAULT_AUTH_SOURCE
+    username = new_data['username'] if \
+        'username' in new_data and auth_source != \
+        current_app.PGADMIN_DEFAULT_AUTH_SOURCE else new_data['email']
+    email = new_data['email'] if 'email' in new_data else None
+    password = new_data['password'] if 'password' in new_data else None
+
+    usr = User(username=username,
+               email=email,
+               roles=new_data['roles'],
+               active=new_data['active'],
+               password=password,
+               auth_source=auth_source)
+    db.session.add(usr)
+    db.session.commit()
+    # Add default server group for new user.
+    server_group = ServerGroup(user_id=usr.id, name="Servers")
+    db.session.add(server_group)
+    db.session.commit()
+
+    return usr
+
+
 def create_user(data):
     if 'auth_source' in data and data['auth_source'] != \
             current_app.PGADMIN_DEFAULT_AUTH_SOURCE:
@@ -264,27 +301,7 @@ def create_user(data):
         return False, str(e)
 
     try:
-
-        auth_source = new_data['auth_source'] if 'auth_source' in new_data \
-            else current_app.PGADMIN_DEFAULT_AUTH_SOURCE
-        username = new_data['username'] if \
-            'username' in new_data and auth_source !=\
-            current_app.PGADMIN_DEFAULT_AUTH_SOURCE else new_data['email']
-        email = new_data['email'] if 'email' in new_data else None
-        password = new_data['password'] if 'password' in new_data else None
-
-        usr = User(username=username,
-                   email=email,
-                   roles=new_data['roles'],
-                   active=new_data['active'],
-                   password=password,
-                   auth_source=auth_source)
-        db.session.add(usr)
-        db.session.commit()
-        # Add default server group for new user.
-        server_group = ServerGroup(user_id=usr.id, name="Servers")
-        db.session.add(server_group)
-        db.session.commit()
+        usr = _create_new_user(new_data)
     except Exception as e:
         return False, str(e)
 
@@ -361,6 +378,18 @@ def update(uid):
     data = request.form if request.form else json.loads(
         request.data, encoding='utf-8'
     )
+
+    # Username and email can not be changed for internal users
+    if usr.auth_source == current_app.PGADMIN_DEFAULT_AUTH_SOURCE:
+        non_editable_params = ('username', 'email')
+
+        for f in non_editable_params:
+            if f in data:
+                return forbidden(
+                    errmsg=_(
+                        "'{0}' is not allowed to modify."
+                    ).format(f)
+                )
 
     try:
         new_data = validate_user(data)

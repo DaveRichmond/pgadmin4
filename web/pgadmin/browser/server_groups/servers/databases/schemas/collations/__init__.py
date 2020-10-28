@@ -50,8 +50,8 @@ class CollationModule(SchemaChildModule):
         initialized.
     """
 
-    NODE_TYPE = 'collation'
-    COLLECTION_LABEL = gettext("Collations")
+    _NODE_TYPE = 'collation'
+    _COLLECTION_LABEL = gettext("Collations")
 
     def __init__(self, *args, **kwargs):
         """
@@ -79,7 +79,7 @@ class CollationModule(SchemaChildModule):
         Load the module script for database, when any of the database node is
         initialized.
         """
-        return database.DatabaseModule.NODE_TYPE
+        return database.DatabaseModule.node_type
 
     @property
     def node_inode(self):
@@ -148,6 +148,7 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
     """
 
     node_type = blueprint.node_type
+    node_label = "Collation"
 
     parent_ids = [
         {'type': 'int', 'id': 'gid'},
@@ -225,7 +226,7 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
         """
 
         SQL = render_template("/".join([self.template_path,
-                                        'properties.sql']), scid=scid)
+                                        self._PROPERTIES_SQL]), scid=scid)
         status, res = self.conn.execute_dict(SQL)
 
         if not status:
@@ -254,7 +255,7 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
 
         res = []
         SQL = render_template("/".join([self.template_path,
-                                        'nodes.sql']), scid=scid)
+                                        self._NODES_SQL]), scid=scid)
         status, rset = self.conn.execute_2darray(SQL)
         if not status:
             return internal_server_error(errormsg=rset)
@@ -290,7 +291,7 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
         """
 
         SQL = render_template("/".join([self.template_path,
-                                        'nodes.sql']), coid=coid)
+                                        self._NODES_SQL]), coid=coid)
         status, rset = self.conn.execute_2darray(SQL)
         if not status:
             return internal_server_error(errormsg=rset)
@@ -306,7 +307,7 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
                 status=200
             )
 
-        return gone(gettext("Could not find the specified collation."))
+        return gone(self.not_found_error_msg())
 
     @check_precondition
     def properties(self, gid, sid, did, scid, coid):
@@ -343,7 +344,7 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
         """
 
         SQL = render_template("/".join([self.template_path,
-                                        'properties.sql']),
+                                        self._PROPERTIES_SQL]),
                               scid=scid, coid=coid,
                               datlastsysoid=self.datlastsysoid)
         status, res = self.conn.execute_dict(SQL)
@@ -352,8 +353,7 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
             return False, internal_server_error(errormsg=res)
 
         if len(res['rows']) == 0:
-            return False, gone(gettext("Could not find the collation "
-                                       "object in the database."))
+            return False, gone(self.not_found_error_msg())
 
         res['rows'][0]['is_sys_obj'] = (
             res['rows'][0]['oid'] <= self.datlastsysoid)
@@ -474,7 +474,7 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
             )
 
         SQL = render_template(
-            "/".join([self.template_path, 'create.sql']),
+            "/".join([self.template_path, self._CREATE_SQL]),
             data=data, conn=self.conn
         )
         status, res = self.conn.execute_scalar(SQL)
@@ -483,7 +483,7 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
 
         # We need oid to to add object in tree at browser
         SQL = render_template(
-            "/".join([self.template_path, 'get_oid.sql']), data=data
+            "/".join([self.template_path, self._OID_SQL]), data=data
         )
         status, coid = self.conn.execute_scalar(SQL)
         if not status:
@@ -491,7 +491,7 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
 
         # Get updated schema oid
         SQL = render_template(
-            "/".join([self.template_path, 'get_oid.sql']), coid=coid
+            "/".join([self.template_path, self._OID_SQL]), coid=coid
         )
 
         status, new_scid = self.conn.execute_scalar(SQL)
@@ -520,19 +520,12 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
            coid: Collation ID
            only_sql: Return only sql if True
         """
-        if coid is None:
-            data = request.form if request.form else json.loads(
-                request.data, encoding='utf-8'
-            )
-        else:
-            data = {'ids': [coid]}
+        data = json.loads(request.data, encoding='utf-8') if coid is None \
+            else {'ids': [coid]}
 
         # Below will decide if it's simple drop or drop with cascade call
-        if self.cmd == 'delete':
-            # This is a cascade operation
-            cascade = True
-        else:
-            cascade = False
+
+        cascade = self._check_cascade_operation()
 
         try:
             for coid in data['ids']:
@@ -544,14 +537,12 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
                     return internal_server_error(errormsg=res)
 
                 if len(res['rows']) == 0:
-                    return gone(gettext(
-                        "Could not find the collation object in the database."
-                    ))
+                    return gone(self.not_found_error_msg())
 
                 data = res['rows'][0]
 
                 SQL = render_template("/".join([self.template_path,
-                                                'delete.sql']),
+                                                self._DELETE_SQL]),
                                       name=data['name'],
                                       nspname=data['schema'],
                                       cascade=cascade,
@@ -600,7 +591,7 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
 
         # We need oid to to add object in tree at browser
         SQL = render_template("/".join([self.template_path,
-                                        'get_oid.sql']), coid=coid)
+                                        self._OID_SQL]), coid=coid)
 
         status, res = self.conn.execute_2darray(SQL)
         if not status:
@@ -662,20 +653,17 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
         """
         if coid is not None:
             SQL = render_template("/".join([self.template_path,
-                                            'properties.sql']),
+                                            self._PROPERTIES_SQL]),
                                   scid=scid, coid=coid)
             status, res = self.conn.execute_dict(SQL)
             if not status:
                 return internal_server_error(errormsg=res)
             if len(res['rows']) == 0:
-                return gone(
-                    gettext(
-                        "Could not find the collation object in the database.")
-                )
+                return gone(self.not_found_error_msg())
 
             old_data = res['rows'][0]
             SQL = render_template(
-                "/".join([self.template_path, 'update.sql']),
+                "/".join([self.template_path, self._UPDATE_SQL]),
                 data=data, o_data=old_data, conn=self.conn
             )
             return SQL.strip('\n'), data['name'] if 'name' in data else \
@@ -693,13 +681,12 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
                 return "-- missing definition"
 
             SQL = render_template("/".join([self.template_path,
-                                            'create.sql']),
+                                            self._CREATE_SQL]),
                                   data=data, conn=self.conn)
             return SQL.strip('\n'), data['name']
 
     @check_precondition
-    def sql(self, gid, sid, did, scid, coid, diff_schema=None,
-            json_resp=True):
+    def sql(self, gid, sid, did, scid, coid, **kwargs):
         """
         This function will generates reverse engineered sql for collation
         object
@@ -710,33 +697,32 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
            did: Database ID
            scid: Schema ID
            coid: Collation ID
-           diff_schema: Target Schema for schema diff
            json_resp: True then return json response
         """
+        json_resp = kwargs.get('json_resp', True)
+        target_schema = kwargs.get('target_schema', None)
+
         SQL = render_template("/".join([self.template_path,
-                                        'properties.sql']),
+                                        self._PROPERTIES_SQL]),
                               scid=scid, coid=coid)
         status, res = self.conn.execute_dict(SQL)
         if not status:
             return internal_server_error(errormsg=res)
         if len(res['rows']) == 0:
-            return gone(
-                gettext("Could not find the collation object in the database.")
-            )
+            return gone(self.not_found_error_msg())
 
         data = res['rows'][0]
-
-        if diff_schema:
-            data['schema'] = diff_schema
+        if target_schema:
+            data['schema'] = target_schema
 
         SQL = render_template("/".join([self.template_path,
-                                        'create.sql']),
+                                        self._CREATE_SQL]),
                               data=data, conn=self.conn)
 
-        sql_header = u"-- Collation: {0};\n\n-- ".format(data['name'])
+        sql_header = "-- Collation: {0};\n\n-- ".format(data['name'])
 
         sql_header += render_template("/".join([self.template_path,
-                                                'delete.sql']),
+                                                self._DELETE_SQL]),
                                       name=data['name'],
                                       nspname=data['schema'])
         SQL = sql_header + '\n\n' + SQL.strip('\n')
@@ -803,7 +789,7 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
         """
         res = dict()
         SQL = render_template("/".join([self.template_path,
-                                        'nodes.sql']), scid=scid)
+                                        self._NODES_SQL]), scid=scid)
         status, rset = self.conn.execute_2darray(SQL)
         if not status:
             return internal_server_error(errormsg=res)
@@ -815,33 +801,33 @@ class CollationView(PGChildNodeView, SchemaDiffObjectCompare):
 
         return res
 
-    def get_sql_from_diff(self, gid, sid, did, scid, oid, data=None,
-                          diff_schema=None, drop_sql=False):
+    def get_sql_from_diff(self, **kwargs):
         """
         This function is used to get the DDL/DML statements.
-        :param gid: Group ID
-        :param sid: Serve ID
-        :param did: Database ID
-        :param scid: Schema ID
-        :param oid: Collation ID
-        :param data: Difference data
-        :param diff_schema: Target Schema
-        :param drop_sql: True if need to drop the collation
+        :param kwargs
         :return:
         """
-        sql = ''
+        gid = kwargs.get('gid')
+        sid = kwargs.get('sid')
+        did = kwargs.get('did')
+        scid = kwargs.get('scid')
+        oid = kwargs.get('oid')
+        data = kwargs.get('data', None)
+        drop_sql = kwargs.get('drop_sql', False)
+        target_schema = kwargs.get('target_schema', None)
+
         if data:
-            if diff_schema:
-                data['schema'] = diff_schema
+            if target_schema:
+                data['schema'] = target_schema
             sql, name = self.get_sql(gid=gid, sid=sid, data=data, scid=scid,
                                      coid=oid)
         else:
             if drop_sql:
                 sql = self.delete(gid=gid, sid=sid, did=did,
                                   scid=scid, coid=oid, only_sql=True)
-            elif diff_schema:
+            elif target_schema:
                 sql = self.sql(gid=gid, sid=sid, did=did, scid=scid, coid=oid,
-                               diff_schema=diff_schema, json_resp=False)
+                               target_schema=target_schema, json_resp=False)
             else:
                 sql = self.sql(gid=gid, sid=sid, did=did, scid=scid, coid=oid,
                                json_resp=False)

@@ -9,6 +9,7 @@
 
 import json
 import uuid
+from unittest.mock import patch
 
 from pgadmin.browser.server_groups.servers.databases.schemas.functions.tests \
     import utils as trigger_funcs_utils
@@ -23,11 +24,6 @@ from regression import parent_node_dict
 from regression.python_test_utils import test_utils as utils
 from . import utils as triggers_utils
 import sys
-
-if sys.version_info < (3, 3):
-    from mock import patch
-else:
-    from unittest.mock import patch
 
 
 class TriggersUpdateTestCase(BaseTestGenerator):
@@ -116,8 +112,8 @@ class TriggersUpdateTestCase(BaseTestGenerator):
                     self.trigger_id = 9999
                 response = self.update_trigger()
 
-        self.assertEquals(response.status_code,
-                          self.expected_data["status_code"])
+        self.assertEqual(response.status_code,
+                         self.expected_data["status_code"])
 
     def tearDown(self):
         # Disconnect the database

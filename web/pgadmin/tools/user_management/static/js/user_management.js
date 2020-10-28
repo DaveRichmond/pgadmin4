@@ -45,6 +45,7 @@ define([
       },
       dependentChanged: function () {
         this.$el.empty();
+        this.render();
         var model = this.model,
           column = this.column,
           editable = this.column.get('editable'),
@@ -88,10 +89,10 @@ define([
       if (!alertify.ChangePassword) {
         alertify.dialog('ChangePassword', function factory() {
           return {
-            main: function(title, url) {
+            main: function(alertTitle, alertUrl) {
               this.set({
-                'title': title,
-                'url': url,
+                'title': alertTitle,
+                'url': alertUrl,
               });
             },
             build: function() {
@@ -105,7 +106,7 @@ define([
                 buttons: [{
                   text: '',
                   key: 112,
-                  className: 'btn btn-secondary pull-left fa fa-question pg-alertify-icon-button',
+                  className: 'btn btn-primary-icon pull-left fa fa-question pg-alertify-icon-button',
                   attrs: {
                     name: 'dialog_help',
                     type: 'button',
@@ -194,10 +195,10 @@ define([
       if(!alertify.PgaLogin) {
         alertify.dialog('PgaLogin' ,function factory() {
           return {
-            main: function(title, url) {
+            main: function(alertTitle, alertUrl) {
               this.set({
-                'title': title,
-                'url': url,
+                'title': alertTitle,
+                'url': alertUrl,
               });
             },
             build: function() {
@@ -240,11 +241,11 @@ define([
               // create the iframe element
               var self = this,
                 iframe = document.createElement('iframe'),
-                url = this.setting('url');
+                frameUrl = this.setting('url');
 
               iframe.onload = function() {
                 var doc = this.contentDocument || this.contentWindow.document;
-                if (doc.location.href.indexOf(url) == -1) {
+                if (doc.location.href.indexOf(frameUrl) == -1) {
                   // login successful.
 
                   this.contentWindow.stop();
@@ -259,7 +260,7 @@ define([
               iframe.frameBorder = 'no';
               iframe.width = '100%';
               iframe.height = '100%';
-              iframe.src = url;
+              iframe.src = frameUrl;
               // add it to the dialog
               self.elements.content.appendChild(iframe);
             },
@@ -315,11 +316,7 @@ define([
               if (m instanceof Backbone.Collection) {
                 return true;
               }
-              if (m.isNew() && !m.get('authOnlyInternal')) {
-                return true;
-              } else {
-                return false;
-              }
+              return (m.isNew() && !m.get('authOnlyInternal'));
             },
           }, {
             id: 'username',
@@ -395,11 +392,7 @@ define([
               if (m instanceof Backbone.Collection) {
                 return true;
               }
-              if (m.get('id') == userInfo['id']) {
-                return false;
-              } else {
-                return true;
-              }
+              return (m.get('id') != userInfo['id']);
             },
           }, {
             id: 'active',
@@ -412,11 +405,7 @@ define([
               if (m instanceof Backbone.Collection) {
                 return true;
               }
-              if (m.get('id') == userInfo['id']) {
-                return false;
-              } else {
-                return true;
-              }
+              return (m.get('id') != userInfo['id']);
             },
           }, {
             id: 'newPassword',
@@ -429,11 +418,7 @@ define([
             deps: ['auth_source'],
             sortable: false,
             editable: function(m) {
-              if (m.get('auth_source') == DEFAULT_AUTH_SOURCE) {
-                return true;
-              } else {
-                return false;
-              }
+              return (m.get('auth_source') == DEFAULT_AUTH_SOURCE);
             },
           }, {
             id: 'confirmPassword',
@@ -446,11 +431,7 @@ define([
             deps: ['auth_source'],
             sortable: false,
             editable: function(m) {
-              if (m.get('auth_source') == DEFAULT_AUTH_SOURCE) {
-                return true;
-              } else {
-                return false;
-              }
+              return (m.get('auth_source') == DEFAULT_AUTH_SOURCE);
             },
           }],
           validate: function() {
@@ -555,8 +536,8 @@ define([
               } else {
                 if ((_.isUndefined(this.get('newPassword')) || _.isNull(this.get('newPassword')) ||
                     this.get('newPassword') == '') &&
-                  ((_.isUndefined(this.get('confirmPassword')) || _.isNull(this.get('confirmPassword')) ||
-                    this.get('confirmPassword') == ''))) {
+                  (_.isUndefined(this.get('confirmPassword')) || _.isNull(this.get('confirmPassword')) ||
+                    this.get('confirmPassword') == '')) {
 
                   this.errorModel.unset('newPassword');
                   if (this.get('newPassword') == '') {
@@ -705,7 +686,7 @@ define([
                 buttons: [{
                   text: '',
                   key: 112,
-                  className: 'btn btn-secondary pull-left fa fa-question pg-alertify-icon-button',
+                  className: 'btn btn-primary-icon pull-left fa fa-question pg-alertify-icon-button',
                   attrs: {
                     name: 'dialog_help',
                     type: 'button',
@@ -972,28 +953,31 @@ define([
               this.$content.find('button.add').first().on('click',(e) => {
                 e.preventDefault();
                 // There should be only one empty row.
+                let anyNew = false;
                 for(const [idx, model] of userCollection.models.entries()) {
                   if(model.isNew()) {
                     let row = view.body.rows[idx].$el;
                     row.addClass('new');
                     $(row).pgMakeVisible('backgrid');
                     $(row).find('.email').trigger('click');
-                    return false;
+                    anyNew = true;
                   }
                 }
 
-                $(view.body.$el.find($('tr.new'))).removeClass('new');
-                var m = new(UserModel)(null, {
-                  handler: userCollection,
-                  top: userCollection,
-                  collection: userCollection,
-                });
-                userCollection.add(m);
+                if(!anyNew) {
+                  $(view.body.$el.find($('tr.new'))).removeClass('new');
+                  var m = new(UserModel)(null, {
+                    handler: userCollection,
+                    top: userCollection,
+                    collection: userCollection,
+                  });
+                  userCollection.add(m);
 
-                var newRow = view.body.rows[userCollection.indexOf(m)].$el;
-                newRow.addClass('new');
-                $(newRow).pgMakeVisible('backgrid');
-                $(newRow).find('.email').trigger('click');
+                  var newRow = view.body.rows[userCollection.indexOf(m)].$el;
+                  newRow.addClass('new');
+                  $(newRow).pgMakeVisible('backgrid');
+                  $(newRow).find('.email').trigger('click');
+                }
                 return false;
               });
 

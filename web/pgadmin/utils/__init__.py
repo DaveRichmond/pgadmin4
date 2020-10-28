@@ -52,6 +52,7 @@ class PgAdminModule(Blueprint):
         self.before_app_first_request(create_module_preference)
 
     def register_preferences(self):
+        # To be implemented by child classes
         pass
 
     def register(self, app, options, first_registration=False):
@@ -173,7 +174,7 @@ if not fs_encoding or fs_encoding == 'ascii':
     fs_encoding = 'utf-8'
 
 
-def u(_s, _encoding=sys_encoding):
+def u_encode(_s, _encoding=sys_encoding):
     return _s
 
 
@@ -234,7 +235,7 @@ else:
         return _path
 
     def document_dir():
-        return os.path.realpath(os.path.expanduser(u'~/'))
+        return os.path.realpath(os.path.expanduser('~/'))
 
 
 def get_complete_file_path(file):
@@ -256,7 +257,7 @@ def get_complete_file_path(file):
     if storage_dir:
         file = os.path.join(
             storage_dir,
-            file.lstrip(u'/').lstrip(u'\\')
+            file.lstrip('/').lstrip('\\')
         )
         if IS_WIN:
             file = file.replace('\\', '/')
@@ -272,8 +273,8 @@ def does_utility_exist(file):
     """
     error_msg = None
     if not os.path.exists(file):
-        error_msg = gettext(u"'%s' file not found. Please correct the Binary"
-                            u" Path in the Preferences dialog" % file)
+        error_msg = gettext("'%s' file not found. Please correct the Binary"
+                            " Path in the Preferences dialog" % file)
     return error_msg
 
 

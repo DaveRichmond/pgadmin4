@@ -10,7 +10,7 @@
 import {getTreeNodeHierarchyFromIdentifier} from '../../../../static/js/tree/pgadmin_tree_node';
 import gettext from 'sources/gettext';
 
-function getDatabaseLabel(parentData) {
+export function getDatabaseLabel(parentData) {
   return parentData.database ? parentData.database.label
     : parentData.server.db;
 }
@@ -19,7 +19,8 @@ function isServerInformationAvailable(parentData) {
   return parentData.server === undefined;
 }
 
-export function getPanelTitle(pgBrowser, selected_item=null) {
+export function getPanelTitle(pgBrowser, selected_item=null, custom_title=null) {
+  var preferences = pgBrowser.get_preferences_for_module('sqleditor');
   if(selected_item == null) {
     selected_item = pgBrowser.treeMenu.selected();
   }
@@ -31,8 +32,18 @@ export function getPanelTitle(pgBrowser, selected_item=null) {
   }
 
   const db_label = getDatabaseLabel(parentData);
+  var qt_title_placeholder = '';
+  if (custom_title) {
+    qt_title_placeholder = custom_title;
+  } else {
+    qt_title_placeholder = preferences['qt_tab_title_placeholder'];
+  }
 
-  return `${db_label}/${parentData.server.user.name}@${parentData.server.label}`;
+  qt_title_placeholder = qt_title_placeholder.replace(new RegExp('%DATABASE%'), db_label);
+  qt_title_placeholder = qt_title_placeholder.replace(new RegExp('%USERNAME%'), parentData.server.user.name);
+  qt_title_placeholder = qt_title_placeholder.replace(new RegExp('%SERVER%'), parentData.server.label);
+
+  return _.escape(qt_title_placeholder);
 }
 
 export function setQueryToolDockerTitle(panel, is_query_tool, panel_title, is_file) {
@@ -40,12 +51,12 @@ export function setQueryToolDockerTitle(panel, is_query_tool, panel_title, is_fi
 
   if(is_file || is_file == 'true'){
     panel_tooltip = gettext('File - ') + panel_title;
-    panel_icon = 'fa fa-file-text-o';
+    panel_icon = 'fa fa-file-alt';
   }
   else if (is_query_tool == 'false' || is_query_tool == false) {
     // Edit grid titles
     panel_tooltip = gettext('View/Edit Data - ') + panel_title;
-    panel_icon = 'fa fa-table';
+    panel_icon = 'pg-font-icon icon-view-data';
   } else {
     // Query tool titles
     panel_tooltip = gettext('Query Tool - ') + panel_title;

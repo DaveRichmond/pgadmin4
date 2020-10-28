@@ -12,7 +12,7 @@
 from flask import render_template
 from flask_babelex import gettext as _
 from pgadmin.utils.ajax import internal_server_error
-from pgadmin.utils.exception import ObjectGone
+from pgadmin.utils.exception import ObjectGone, ExecuteError
 from pgadmin.browser.server_groups.servers.databases.schemas.utils \
     import trigger_definition
 from functools import wraps
@@ -50,7 +50,7 @@ def get_parent(conn, tid, template_path=None):
                                     'get_parent.sql']), tid=tid)
     status, rset = conn.execute_2darray(SQL)
     if not status:
-        raise Exception(rset)
+        raise ExecuteError(rset)
 
     schema = ''
     table = ''
@@ -105,9 +105,8 @@ def get_sql(conn, data, tid, trid, datlastsysoid, template_path=None):
 
         status, res = conn.execute_dict(sql)
         if not status:
-            raise Exception(res)
-
-        if len(res['rows']) == 0:
+            raise ExecuteError(res)
+        elif len(res['rows']) == 0:
             raise ObjectGone(
                 _('Could not find the compound trigger in the table.'))
 
@@ -143,26 +142,27 @@ def get_sql(conn, data, tid, trid, datlastsysoid, template_path=None):
 
 
 @get_template_path
-def get_reverse_engineered_sql(conn, schema, table, tid, trid,
-                               datlastsysoid, template_path=None):
+def get_reverse_engineered_sql(conn, **kwargs):
     """
     This function will return reverse engineered sql for trigger(s).
     :param conn: Connection Object
-    :param schema: Schema
-    :param table: Table
-    :param tid: Table ID
-    :param trid: Trigger ID
-    :param datlastsysoid:
-    :param template_path: Optional template path
+    :param kwargs
     :return:
     """
+    schema = kwargs.get('schema')
+    table = kwargs.get('table')
+    tid = kwargs.get('tid')
+    trid = kwargs.get('trid')
+    datlastsysoid = kwargs.get('datlastsysoid')
+    template_path = kwargs.get('template_path', None)
+
     SQL = render_template("/".join([template_path, 'properties.sql']),
                           tid=tid, trid=trid,
                           datlastsysoid=datlastsysoid)
 
     status, res = conn.execute_dict(SQL)
     if not status:
-        raise Exception(res)
+        raise ExecuteError(res)
 
     if len(res['rows']) == 0:
         raise ObjectGone(
@@ -181,7 +181,7 @@ def get_reverse_engineered_sql(conn, schema, table, tid, trid,
 
     SQL, name = get_sql(conn, data, tid, None, datlastsysoid)
 
-    sql_header = u"-- Compound Trigger: {0}\n\n-- ".format(data['name'])
+    sql_header = "-- Compound Trigger: {0}\n\n-- ".format(data['name'])
 
     sql_header += render_template("/".join([template_path, 'delete.sql']),
                                   data=data, conn=conn)

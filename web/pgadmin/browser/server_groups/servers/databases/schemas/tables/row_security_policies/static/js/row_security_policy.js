@@ -41,7 +41,7 @@ define('pgadmin.node.row_security_policy', [
       width: pgBrowser.stdW.sm + 'px',
       sqlAlterHelp: 'sql-alterpolicy.html',
       sqlCreateHelp: 'sql-createpolicy.html',
-      dialogHelp: url_for('help.static', {'filename': 'row_security_policy_dialog.html'}),
+      dialogHelp: url_for('help.static', {'filename': 'rls_policy_dialog.html'}),
       url_jump_after_node: 'schema',
       Init: function() {
         /* Avoid mulitple registration of menus */
@@ -79,6 +79,12 @@ define('pgadmin.node.row_security_policy', [
         defaults: {
           name: undefined,
           policyowner: 'public',
+          event: 'ALL',
+          using: undefined,
+          using_orig: undefined,
+          withcheck: undefined,
+          withcheck_orig: undefined,
+          type:'PERMISSIVE',
         },
         schema: [{
           id: 'name', label: gettext('Name'), cell: 'string',
@@ -93,9 +99,10 @@ define('pgadmin.node.row_security_policy', [
             return !m.isNew();},
           select2: {
             width: '100%',
-            allowClear: true,
+            allowClear: false,
           },
           options:[
+            {label: 'ALL', value: 'ALL'},
             {label: 'SELECT', value: 'SELECT'},
             {label: 'INSERT', value: 'INSERT'},
             {label: 'UPDATE', value: 'UPDATE'},
@@ -109,10 +116,23 @@ define('pgadmin.node.row_security_policy', [
           control: 'sql-field', visible: true, group: gettext('Commands'),
         },
         {
-          id: 'withcheck', label: gettext('With Check'), deps: ['withcheck', 'event'],
+          id: 'withcheck', label: gettext('With check'), deps: ['withcheck', 'event'],
           type: 'text', mode: ['create', 'edit', 'properties'],
           control: 'sql-field', visible: true, group: gettext('Commands'),
           disabled: 'disableWithCheck',
+        },
+        {
+          id: 'rls_expression_key_note', label: gettext('RLS policy expression'),
+          type: 'note', group: gettext('Commands'), mode: ['create', 'edit'],
+          text: [
+            '<ul><li>',
+            '<strong>', gettext('Using: '), '</strong>',
+            gettext('This expression will be added to queries that refer to the table if row level security is enabled. Rows for which the expression returns true will be visible. Any rows for which the expression returns false or null will not be visible to the user (in a SELECT), and will not be available for modification (in an UPDATE or DELETE). Such rows are silently suppressed; no error is reported.'),
+            '</li><li>',
+            '<strong>', gettext('With check: '), '</strong>',
+            gettext('This expression will be used in INSERT and UPDATE queries against the table if row level security is enabled. Only rows for which the expression evaluates to true will be allowed. An error will be thrown if the expression evaluates to false or null for any of the records inserted or any of the records that result from the update.'),
+            '</li></ul>',
+          ].join(''),
         },
         {
           id: 'policyowner', label: gettext('Role'), cell: 'string',
@@ -129,11 +149,32 @@ define('pgadmin.node.row_security_policy', [
             });
             return res;
           },
-        }],
+        },
+        {
+          id: 'type', label: gettext('Type'), control: 'select2', deps:['type'],
+          type: 'text',readonly: function(m) {
+            return !m.isNew();},
+          select2: {
+            width: '100%',
+            allowClear: false,
+          },
+          options:[
+            {label: 'PERMISSIVE', value: 'PERMISSIVE'},
+            {label: 'RESTRICTIVE', value: 'RESTRICTIVE'},
+          ],
+          visible: function(m) {
+            if(!_.isUndefined(m.node_info) && !_.isUndefined(m.node_info.server)
+              && !_.isUndefined(m.node_info.server.version) &&
+                m.node_info.server.version >= 100000)
+              return true;
+
+            return false;
+          },
+        },
+        ],
         validate: function(keys) {
           var msg;
           this.errorModel.clear();
-
           // If nothing to validate
           if (keys && keys.length == 0) {
             return null;
@@ -143,6 +184,16 @@ define('pgadmin.node.row_security_policy', [
             || String(this.get('name')).replace(/^\s+|\s+$/g, '') == '') {
             msg = gettext('Name cannot be empty.');
             this.errorModel.set('name', msg);
+            return msg;
+          }
+          if (!this.isNew() && !_.isNull(this.get('using_orig')) && this.get('using_orig') != '' && String(this.get('using')).replace(/^\s+|\s+$/g, '') == ''){
+            msg = gettext('"USING" can not be empty once the value is set');
+            this.errorModel.set('using', msg);
+            return msg;
+          }
+          if (!this.isNew() && !_.isNull(this.get('withcheck_orig')) && this.get('withcheck_orig') != '' && String(this.get('withcheck')).replace(/^\s+|\s+$/g, '') == ''){
+            msg = gettext('"Withcheck" can not be empty once the value is set');
+            this.errorModel.set('withcheck', msg);
             return msg;
           }
           return null;
@@ -171,6 +222,11 @@ define('pgadmin.node.row_security_policy', [
         var treeData = this.getTreeNodeHierarchy(item),
           server = treeData['server'];
 
+        // If node is under catalog then do not allow 'create' menu
+        if (treeData['catalog'] != undefined)
+          return false;
+
+        // If server is less than 9.5 then do not allow 'create' menu
         if (server && server.version < 90500)
           return false;
 

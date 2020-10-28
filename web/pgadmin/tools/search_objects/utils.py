@@ -43,7 +43,7 @@ class SearchObjectsHelper:
             'trigger_function', 'fts_template', 'collation', 'view', 'mview',
             'fts_configuration', 'extension', 'language',
             'event_trigger', 'foreign_server', 'user_mapping',
-            'foreign_data_wrapper'
+            'foreign_data_wrapper', 'row_security_policy'
         ] if node_types is None else node_types
 
     @property
@@ -71,8 +71,8 @@ class SearchObjectsHelper:
             if blueprint is None:
                 continue
 
-            if blueprint.BackendSupported(self.manager, is_catalog=False,
-                                          did=self.did) or skip_check:
+            if blueprint.backend_supported(self.manager, is_catalog=False,
+                                           did=self.did) or skip_check:
                 if node_type in ['edbfunc', 'edbproc']:
                     return_types[node_type] =\
                         gettext('Package {0}').format(
@@ -87,12 +87,6 @@ class SearchObjectsHelper:
             "/".join([self.get_template_path(), sql_file]),
             **kwargs
         )
-
-    def finalize_id_path(self, path, base_path):
-        if base_path is not None:
-            path = '{0}/{1}'.format(base_path, path)
-
-        return path
 
     def search(self, text, obj_type=None):
         conn = self.manager.connection(did=self.did)
@@ -110,7 +104,8 @@ class SearchObjectsHelper:
         # D - Catalog schema with DB support - pg_catalog
         # O - Catalog schema with object support only - info schema, dbo, sys
         status, res = conn.execute_dict(
-            self.get_sql('search.sql', search_text=text, obj_type=obj_type,
+            self.get_sql('search.sql',
+                         search_text=text.lower(), obj_type=obj_type,
                          show_system_objects=self.show_system_objects,
                          show_node_prefs=show_node_prefs, _=gettext,
                          last_system_oid=last_system_oid)

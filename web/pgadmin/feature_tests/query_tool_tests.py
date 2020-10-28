@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 import sys
 import time
 
@@ -31,6 +30,8 @@ class QueryToolFeatureTest(BaseFeatureTest):
     scenarios = [
         ("Query tool feature test", dict())
     ]
+    data_output_tab_name = 'Data Output'
+    table_creation_fail_error = '"CREATE TABLE message does not displayed"'
 
     def before(self):
         self.page.wait_for_spinner_to_disappear()
@@ -47,6 +48,7 @@ class QueryToolFeatureTest(BaseFeatureTest):
         # on demand result set on scrolling.
         print("\nOn demand query result... ",
               file=sys.stderr, end="")
+        skip_warning = "Skipped."
         self._on_demand_result()
         self.page.clear_query_tool()
 
@@ -58,7 +60,7 @@ class QueryToolFeatureTest(BaseFeatureTest):
             print("OK.", file=sys.stderr)
             self.page.clear_query_tool()
         else:
-            print("Skipped.", file=sys.stderr)
+            print(skip_warning, file=sys.stderr)
 
         # explain analyze query with buffers and timing
         print("Explain analyze query with buffers and timing... ",
@@ -68,7 +70,7 @@ class QueryToolFeatureTest(BaseFeatureTest):
             print("OK.", file=sys.stderr)
             self.page.clear_query_tool()
         else:
-            print("Skipped.", file=sys.stderr)
+            print(skip_warning, file=sys.stderr)
 
         # auto commit disabled.
         print("Auto commit disabled... ", file=sys.stderr, end="")
@@ -107,7 +109,7 @@ class QueryToolFeatureTest(BaseFeatureTest):
             print("OK.", file=sys.stderr)
             self.page.clear_query_tool()
         else:
-            print("Skipped.", file=sys.stderr)
+            print(skip_warning, file=sys.stderr)
 
     def after(self):
         self.page.remove_server(self.server)
@@ -165,7 +167,7 @@ SELECT generate_series(1, {}) as id1, 'dummy' as id2""".format(
             (By.CSS_SELECTOR,
              QueryToolLocators.query_output_cells)))
 
-        canvas = self.page.find_by_css_selector(
+        self.page.find_by_css_selector(
             QueryToolLocators.query_output_canvas_css)
 
         self._check_ondemand_result(row_id_to_find)
@@ -176,7 +178,7 @@ SELECT generate_series(1, {}) as id1, 'dummy' as id2""".format(
         self.page.click_execute_query_button()
 
         # wait for header of the table to be visible
-        canvas = self.page.find_by_css_selector(
+        self.page.find_by_css_selector(
             QueryToolLocators.query_output_canvas_css)
 
         # wait for the rows in the table to be displayed
@@ -187,7 +189,6 @@ SELECT generate_series(1, {}) as id1, 'dummy' as id2""".format(
 
         # Select all rows in a table
         multiple_check = True
-        count = 0
         while multiple_check:
             try:
                 select_all = self.wait.until(EC.element_to_be_clickable(
@@ -196,7 +197,6 @@ SELECT generate_series(1, {}) as id1, 'dummy' as id2""".format(
                 multiple_check = False
             except (StaleElementReferenceException,
                     ElementClickInterceptedException):
-                count += 1
                 pass
 
         self._check_ondemand_result(row_id_to_find)
@@ -218,7 +218,7 @@ SELECT generate_series(1, {}) as id1, 'dummy' as id2""".format(
              QueryToolLocators.query_output_cells))
         )
 
-        canvas = self.wait.until(EC.presence_of_element_located(
+        self.wait.until(EC.presence_of_element_located(
             (By.CSS_SELECTOR, QueryToolLocators.query_output_canvas_css)))
 
         self._check_ondemand_result(row_id_to_find)
@@ -279,7 +279,7 @@ SELECT generate_series(1, 1000) as id order by id desc"""
 
         self.page.wait_for_query_tool_loading_indicator_to_disappear()
 
-        self.page.click_tab('Data Output')
+        self.page.click_tab(self.data_output_tab_name)
 
         canvas = self.wait.until(EC.presence_of_element_located(
             (By.CSS_SELECTOR, QueryToolLocators.query_output_canvas_css))
@@ -313,7 +313,7 @@ SELECT generate_series(1, 1000) as id order by id desc"""
 
         self.page.wait_for_query_tool_loading_indicator_to_disappear()
 
-        self.page.click_tab('Data Output')
+        self.page.click_tab(self.data_output_tab_name)
 
         self.wait.until(EC.presence_of_element_located(
             (By.XPATH, QueryToolLocators.output_cell_xpath.format(1, 1)))
@@ -354,7 +354,7 @@ CREATE TABLE public.{}();""".format(table_name)
 
         self.assertTrue(self.page.check_if_element_exist_by_xpath(
             QueryToolLocators.sql_editor_message.format('CREATE TABLE')),
-            "CREATE TABLE message does not displayed")
+            self.table_creation_fail_error)
 
         # do the ROLLBACK and check if the table is present or not
         self.page.clear_query_tool()
@@ -378,7 +378,7 @@ SELECT relname FROM pg_class
     WHERE relkind IN ('r','s','t') and relnamespace = 2200::oid;"""
 
         self.page.execute_query(query)
-        self.page.click_tab('Data Output')
+        self.page.click_tab(self.data_output_tab_name)
         canvas = self.wait.until(EC.presence_of_element_located(
             (By.CSS_SELECTOR, QueryToolLocators.query_output_canvas_css)))
 
@@ -435,7 +435,7 @@ CREATE TABLE public.{}();""".format(table_name)
         self.page.click_tab('Messages')
         self.assertTrue(self.page.check_if_element_exist_by_xpath(
             QueryToolLocators.sql_editor_message.format('CREATE TABLE')),
-            "CREATE TABLE message does not displayed")
+            self.table_creation_fail_error)
 
         self.page.clear_query_tool()
         query = """-- 1. (Done) END any open transaction if any.
@@ -462,7 +462,7 @@ SELECT relname FROM pg_class
     WHERE relkind IN ('r','s','t') and relnamespace = 2200::oid;"""
 
         self.page.execute_query(query)
-        self.page.click_tab('Data Output')
+        self.page.click_tab(self.data_output_tab_name)
         self.page.wait_for_query_tool_loading_indicator_to_disappear()
 
         canvas = self.wait.until(EC.presence_of_element_located(
@@ -513,7 +513,7 @@ CREATE TABLE public.{}();""".format(table_name)
         self.page.click_tab('Messages')
         self.assertTrue(self.page.check_if_element_exist_by_xpath(
             QueryToolLocators.sql_editor_message.format('CREATE TABLE')),
-            "CREATE TABLE message does not displayed")
+            self.table_creation_fail_error)
         self.page.clear_query_tool()
 
         query = """-- 1. (Done) END any open transaction.
@@ -557,7 +557,7 @@ SELECT relname FROM pg_class
     WHERE relkind IN ('r','s','t') and relnamespace = 2200::oid;"""
         self.page.execute_query(query)
         self.page.wait_for_query_tool_loading_indicator_to_disappear()
-        self.page.click_tab('Data Output')
+        self.page.click_tab(self.data_output_tab_name)
         canvas = self.wait.until(EC.presence_of_element_located(
             (By.CSS_SELECTOR, QueryToolLocators.query_output_canvas_css)))
 
@@ -581,6 +581,7 @@ SELECT 1, pg_sleep(300)"""
         commit_button = self.page.find_by_css_selector("#btn-commit")
         if not commit_button.get_attribute('disabled'):
             commit_button.click()
+            time.sleep(0.5)
 
         query_op = self.page.find_by_css_selector(
             QueryToolLocators.btn_query_dropdown)
@@ -667,8 +668,6 @@ SELECT 1, pg_sleep(300)"""
             self.server['sslmode']
         )
         pg_cursor = connection.cursor()
-        pg_cursor.execute('select version()')
-        version_string = pg_cursor.fetchone()
 
         # check if jit is turned on
         jit_enabled = False
@@ -677,12 +676,8 @@ SELECT 1, pg_sleep(300)"""
             show_jit = pg_cursor.fetchone()
             if show_jit[0] == 'on':
                 jit_enabled = True
-        except Exception as e:
+        except Exception:
             pass
-
-        is_edb = False
-        if len(version_string) > 0:
-            is_edb = 'EnterpriseDB' in version_string[0]
 
         connection.close()
         return connection.server_version >= 110000 and jit_enabled
@@ -718,7 +713,7 @@ SELECT 1, pg_sleep(300)"""
             QueryToolLocators.btn_explain_analyze).click()
 
         self.page.wait_for_query_tool_loading_indicator_to_disappear()
-        self.page.click_tab('Data Output')
+        self.page.click_tab(self.data_output_tab_name)
 
         canvas = self.wait.until(EC.presence_of_element_located(
             (By.CSS_SELECTOR, QueryToolLocators.query_output_canvas_css))

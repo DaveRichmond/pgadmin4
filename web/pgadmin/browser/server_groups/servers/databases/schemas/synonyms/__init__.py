@@ -49,8 +49,8 @@ class SynonymModule(SchemaChildModule):
         initialized.
     """
 
-    NODE_TYPE = 'synonym'
-    COLLECTION_LABEL = gettext("Synonyms")
+    _NODE_TYPE = 'synonym'
+    _COLLECTION_LABEL = gettext("Synonyms")
 
     def __init__(self, *args, **kwargs):
         """
@@ -78,7 +78,7 @@ class SynonymModule(SchemaChildModule):
         Load the module script for database, when any of the database node is
         initialized.
         """
-        return database.DatabaseModule.NODE_TYPE
+        return database.DatabaseModule.node_type
 
     @property
     def node_inode(self):
@@ -147,6 +147,7 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
     """
 
     node_type = blueprint.node_type
+    node_label = "Synonym"
 
     parent_ids = [
         {'type': 'int', 'id': 'gid'},
@@ -179,6 +180,8 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
         'get_target_objects': [{'get': 'get_target_objects'},
                                {'get': 'get_target_objects'}]
     })
+
+    keys_to_ignore = ['oid', 'oid-2', 'schema', 'synobjschema']
 
     def check_precondition(f):
         """
@@ -233,7 +236,7 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
         """
 
         SQL = render_template("/".join([self.template_path,
-                                        'properties.sql']), scid=scid)
+                                        self._PROPERTIES_SQL]), scid=scid)
         status, res = self.conn.execute_dict(SQL)
 
         if not status:
@@ -262,7 +265,7 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
 
         res = []
         SQL = render_template("/".join([self.template_path,
-                                        'nodes.sql']), scid=scid)
+                                        self._NODES_SQL]), scid=scid)
         status, rset = self.conn.execute_2darray(SQL)
         if not status:
             return internal_server_error(errormsg=rset)
@@ -295,7 +298,7 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
         """
 
         sql = render_template(
-            "/".join([self.template_path, 'properties.sql']),
+            "/".join([self.template_path, self._PROPERTIES_SQL]),
             syid=syid, scid=scid
         )
         status, rset = self.conn.execute_2darray(sql)
@@ -304,9 +307,7 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
             return internal_server_error(errormsg=rset)
 
         if len(rset['rows']) == 0:
-            return gone(
-                gettext("""Could not find the Synonym node.""")
-            )
+            return gone(self.not_found_error_msg())
 
         for row in rset['rows']:
             return make_json_response(
@@ -409,16 +410,14 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
         """
         try:
             SQL = render_template("/".join([self.template_path,
-                                            'properties.sql']),
+                                            self._PROPERTIES_SQL]),
                                   scid=scid, syid=syid)
             status, res = self.conn.execute_dict(SQL)
             if not status:
                 return False, internal_server_error(errormsg=res)
 
             if len(res['rows']) == 0:
-                return False, gone(
-                    gettext('The specified synonym could not be found.')
-                )
+                return False, gone(self.not_found_error_msg())
 
             res['rows'][0]['is_sys_obj'] = (
                 res['rows'][0]['oid'] <= self.datlastsysoid)
@@ -458,7 +457,7 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
 
         try:
             SQL = render_template("/".join([self.template_path,
-                                            'create.sql']),
+                                            self._CREATE_SQL]),
                                   data=data, conn=self.conn, comment=False)
 
             status, res = self.conn.execute_scalar(SQL)
@@ -512,7 +511,7 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
         try:
             for syid in data['ids']:
                 SQL = render_template("/".join([self.template_path,
-                                                'properties.sql']),
+                                                self._PROPERTIES_SQL]),
                                       scid=scid, syid=syid)
 
                 status, res = self.conn.execute_dict(SQL)
@@ -523,12 +522,10 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
                 if len(res['rows']) > 0:
                     data = res['rows'][0]
                 else:
-                    return gone(
-                        gettext('The specified synonym could not be found.')
-                    )
+                    return gone(self.not_found_error_msg())
 
                 SQL = render_template("/".join([self.template_path,
-                                                'delete.sql']),
+                                                self._DELETE_SQL]),
                                       data=data,
                                       conn=self.conn)
                 if only_sql:
@@ -622,15 +619,13 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
         name = None
         if syid is not None:
             SQL = render_template("/".join([self.template_path,
-                                            'properties.sql']),
+                                            self._PROPERTIES_SQL]),
                                   scid=scid, syid=syid)
             status, res = self.conn.execute_dict(SQL)
             if not status:
                 return internal_server_error(errormsg=res)
             if len(res['rows']) == 0:
-                return gone(
-                    gettext("Could not find the synonym on the server.")
-                )
+                return gone(self.not_found_error_msg())
             old_data = res['rows'][0]
             name = old_data['name']
             # If target schema/object is not present then take it from
@@ -641,7 +636,7 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
                 data['synobjname'] = old_data['synobjname']
 
             SQL = render_template(
-                "/".join([self.template_path, 'update.sql']),
+                "/".join([self.template_path, self._UPDATE_SQL]),
                 data=data, o_data=old_data, conn=self.conn
             )
         else:
@@ -655,13 +650,12 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
 
             name = data['name']
             SQL = render_template("/".join([self.template_path,
-                                            'create.sql']), comment=False,
+                                            self._CREATE_SQL]), comment=False,
                                   data=data, conn=self.conn)
         return SQL.strip('\n'), name
 
     @check_precondition
-    def sql(self, gid, sid, did, scid, syid, diff_schema=None,
-            json_resp=True):
+    def sql(self, gid, sid, did, scid, syid, **kwargs):
         """
         This function will generates reverse engineered sql for synonym object
 
@@ -671,11 +665,13 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
            did: Database ID
            scid: Schema ID
            syid: Synonym ID
-           diff_schema:
            json_resp:
         """
+        json_resp = kwargs.get('json_resp', True)
+        target_schema = kwargs.get('target_schema', None)
+
         SQL = render_template("/".join([self.template_path,
-                                        'properties.sql']),
+                                        self._PROPERTIES_SQL]),
                               scid=scid, syid=syid)
         status, res = self.conn.execute_dict(SQL)
         if not status:
@@ -684,15 +680,13 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
         if len(res['rows']) > 0:
             data = res['rows'][0]
         else:
-            return gone(
-                gettext('The specified synonym could not be found.')
-            )
+            return gone(self.not_found_error_msg())
 
-        if diff_schema:
-            data['schema'] = diff_schema
+        if target_schema:
+            data['schema'] = target_schema
 
         SQL = render_template("/".join([self.template_path,
-                                        'create.sql']),
+                                        self._CREATE_SQL]),
                               data=data, conn=self.conn, comment=True)
         if not json_resp:
             return SQL
@@ -755,7 +749,7 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
             return res
 
         SQL = render_template("/".join([self.template_path,
-                                        'properties.sql']), scid=scid)
+                                        self._PROPERTIES_SQL]), scid=scid)
         status, rset = self.conn.execute_2darray(SQL)
         if not status:
             return internal_server_error(errormsg=res)
@@ -767,33 +761,32 @@ class SynonymView(PGChildNodeView, SchemaDiffObjectCompare):
 
         return res
 
-    def get_sql_from_diff(self, gid, sid, did, scid, oid, data=None,
-                          diff_schema=None, drop_sql=False):
+    def get_sql_from_diff(self, **kwargs):
         """
         This function is used to get the DDL/DML statements.
-        :param gid: Group ID
-        :param sid: Serve ID
-        :param did: Database ID
-        :param scid: Schema ID
-        :param oid: Synonyms ID
-        :param data: Difference data
-        :param diff_schema: Target Schema
-        :param drop_sql: True if need to drop the domains
+        :param kwargs
         :return:
         """
-        sql = ''
+        gid = kwargs.get('gid')
+        sid = kwargs.get('sid')
+        did = kwargs.get('did')
+        scid = kwargs.get('scid')
+        oid = kwargs.get('oid')
+        data = kwargs.get('data', None)
+        drop_sql = kwargs.get('drop_sql', False)
+        target_schema = kwargs.get('target_schema', None)
+
         if data:
-            if diff_schema:
-                data['schema'] = diff_schema
+            if target_schema:
+                data['schema'] = target_schema
             sql, name = self.get_sql(gid, sid, data, scid, oid)
         else:
             if drop_sql:
                 sql = self.delete(gid=gid, sid=sid, did=did,
                                   scid=scid, syid=oid, only_sql=True)
-
-            elif diff_schema:
+            elif target_schema:
                 sql = self.sql(gid=gid, sid=sid, did=did, scid=scid, syid=oid,
-                               diff_schema=diff_schema, json_resp=False)
+                               target_schema=target_schema, json_resp=False)
             else:
                 sql = self.sql(gid=gid, sid=sid, did=did, scid=scid, syid=oid,
                                json_resp=False)

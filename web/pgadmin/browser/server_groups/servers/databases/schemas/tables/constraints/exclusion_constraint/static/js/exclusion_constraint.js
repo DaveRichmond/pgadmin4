@@ -323,7 +323,7 @@ define('pgadmin.node.exclusion_constraint', [
               // This will only get called in case of NodeListByNameControl.
 
               var that = this,
-                node = that.field.get('schema_node'),
+                schema_node = that.field.get('schema_node'),
                 res = [],
                 col_types = [],
                 filter = that.field.get('filter') || function() { return true; };
@@ -332,14 +332,14 @@ define('pgadmin.node.exclusion_constraint', [
 
               _.each(rows, function(r) {
                 if (filter(r)) {
-                  var l = (_.isFunction(node['node_label']) ?
-                      (node['node_label']).apply(node, [r, that.model, that]) :
+                  var l = (_.isFunction(schema_node['node_label']) ?
+                      (schema_node['node_label']).apply(schema_node, [r, that.model, that]) :
                       r.label),
-                    image = (_.isFunction(node['node_image']) ?
-                      (node['node_image']).apply(
-                        node, [r, that.model, that]
+                    image = (_.isFunction(schema_node['node_image']) ?
+                      (schema_node['node_image']).apply(
+                        schema_node, [r, that.model, that]
                       ) :
-                      (node['node_image'] || ('icon-' + node.type)));
+                      (schema_node['node_image'] || ('icon-' + schema_node.type)));
                   res.push({
                     'value': r.label,
                     'image': image,
@@ -358,7 +358,7 @@ define('pgadmin.node.exclusion_constraint', [
             },
             select2: {
               allowClear: false, width: 'style',
-              placeholder: 'Select column',
+              placeholder: gettext('Select column'),
             }, first_empty: !self.model.isNew(),
             readonly: function() {
               return !_.isUndefined(self.model.get('oid'));
@@ -450,7 +450,7 @@ define('pgadmin.node.exclusion_constraint', [
           titleTmpl = _.template([
             '<div class="subnode-header">',
             '  <label class="control-label pg-el-sm-10"><%-label%></label>',
-            '  <button class="btn btn-sm-sq btn-secondary add fa fa-plus" <%=canAdd ? "" : "disabled=\'disabled\'"%> title="' + gettext('Add new row') + '"></button>',
+            '  <button class="btn btn-sm-sq btn-primary-icon add fa fa-plus" <%=canAdd ? "" : "disabled=\'disabled\'"%> title="' + gettext('Add new row') + '"></button>',
             '</div>'].join('\n')),
           $gridBody =
           $('<div class=\'pgadmin-control-group backgrid form-group col-12 object subnode\'></div>').append(
@@ -541,41 +541,39 @@ define('pgadmin.node.exclusion_constraint', [
         var self = this,
           column = self.headerData.get('column');
 
-        if (!column || column == '') {
-          return false;
-        }
+        if (column && column != '') {
+          var coll = self.model.get(self.field.get('name')),
+            m = new (self.field.get('model'))(
+              self.headerData.toJSON(), {
+                silent: true, top: self.model.top,
+                collection: coll, handler: coll,
+              }),
+            col_types =self.field.get('col_types') || [];
 
-        var coll = self.model.get(self.field.get('name')),
-          m = new (self.field.get('model'))(
-            self.headerData.toJSON(), {
-              silent: true, top: self.model.top,
-              collection: coll, handler: coll,
-            }),
-          col_types =self.field.get('col_types') || [];
-
-        for(var i=0; i < col_types.length; i++) {
-          var col_type = col_types[i];
-          if (col_type['name'] ==  m.get('column')) {
-            m.set({'col_type':col_type['type']});
-            break;
+          for(var i=0; i < col_types.length; i++) {
+            var col_type = col_types[i];
+            if (col_type['name'] ==  m.get('column')) {
+              m.set({'col_type':col_type['type']});
+              break;
+            }
           }
-        }
 
-        coll.add(m);
+          coll.add(m);
 
-        var idx = coll.indexOf(m);
+          var idx = coll.indexOf(m);
 
-        // idx may not be always > -1 because our UniqueColCollection may
-        // remove 'm' if duplicate value found.
-        if (idx > -1) {
-          self.$grid.find('.new').removeClass('new');
+          // idx may not be always > -1 because our UniqueColCollection may
+          // remove 'm' if duplicate value found.
+          if (idx > -1) {
+            self.$grid.find('.new').removeClass('new');
 
-          var newRow = self.grid.body.rows[idx].$el;
+            var newRow = self.grid.body.rows[idx].$el;
 
-          newRow.addClass('new');
-          $(newRow).pgMakeVisible('backform-tab');
-        } else {
-          //delete m;
+            newRow.addClass('new');
+            $(newRow).pgMakeVisible('backform-tab');
+          } else {
+            //delete m;
+          }
         }
 
         return false;

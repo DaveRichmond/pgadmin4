@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 
 import fileinput
 import traceback
@@ -24,7 +23,7 @@ from testtools.testcase import clone_test_with_new_id
 import re
 import time
 from selenium.common.exceptions import WebDriverException
-import urllib.request as urllib
+from urllib.request import urlopen
 import json
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -36,6 +35,8 @@ import regression
 from regression import test_setup
 
 from pgadmin.utils.preferences import Preferences
+
+from functools import wraps
 
 CURRENT_PATH = os.path.abspath(os.path.join(os.path.dirname(
     os.path.realpath(__file__)), "../"))
@@ -552,33 +553,29 @@ def drop_tablespace(connection):
 
 def create_server(server):
     """This function is used to create server"""
-    try:
-        conn = sqlite3.connect(config.TEST_SQLITE_PATH)
-        # Create the server
-        cur = conn.cursor()
-        server_details = (1, SERVER_GROUP, server['name'], server['host'],
-                          server['port'], server['db'], server['username'],
-                          server['role'], server['sslmode'], server['comment'])
-        cur.execute('INSERT INTO server (user_id, servergroup_id, name, host, '
-                    'port, maintenance_db, username, role, ssl_mode,'
-                    ' comment) VALUES (?,?,?,?,?,?,?,?,?,?)', server_details)
-        server_id = cur.lastrowid
-        conn.commit()
-        conn.close()
+    conn = sqlite3.connect(config.TEST_SQLITE_PATH)
+    # Create the server
+    cur = conn.cursor()
+    server_details = (1, SERVER_GROUP, server['name'], server['host'],
+                      server['port'], server['db'], server['username'],
+                      server['role'], server['sslmode'], server['comment'])
+    cur.execute('INSERT INTO server (user_id, servergroup_id, name, host, '
+                'port, maintenance_db, username, role, ssl_mode,'
+                ' comment) VALUES (?,?,?,?,?,?,?,?,?,?)', server_details)
+    server_id = cur.lastrowid
+    conn.commit()
+    conn.close()
 
-        type = get_server_type(server)
-        server['type'] = type
-        # Add server info to parent_node_dict
-        regression.parent_node_dict["server"].append(
-            {
-                "server_id": server_id,
-                "server": server
-            }
-        )
+    server['type'] = get_server_type(server)
+    # Add server info to parent_node_dict
+    regression.parent_node_dict["server"].append(
+        {
+            "server_id": server_id,
+            "server": server
+        }
+    )
 
-        return server_id
-    except Exception as exception:
-        raise Exception("Error while creating server. %s" % exception)
+    return server_id
 
 
 def delete_server_with_api(tester, sid):
@@ -748,6 +745,12 @@ def get_db_server(sid):
 def configure_preferences(default_binary_path=None):
     conn = sqlite3.connect(config.TEST_SQLITE_PATH)
     cur = conn.cursor()
+    insert_preferences_query = \
+        'INSERT INTO user_preferences(pid, uid, value) VALUES (?,?,?)'
+    select_preference_query = \
+        'SELECT pid, uid FROM user_preferences where pid=?'
+    update_preference_query = 'UPDATE user_preferences' \
+                              ' SET VALUE = ? WHERE PID = ?'
 
     if default_binary_path is not None:
         paths_pref = Preferences.module('paths')
@@ -768,8 +771,7 @@ def configure_preferences(default_binary_path=None):
             else:
                 params = (pref_bin_path.pid, 1, default_binary_path[server])
                 cur.execute(
-                    'INSERT INTO user_preferences(pid, uid, value)'
-                    ' VALUES (?,?,?)', params
+                    insert_preferences_query, params
                 )
 
     browser_pref = Preferences.module('browser')
@@ -779,20 +781,16 @@ def configure_preferences(default_binary_path=None):
         browser_pref.preference('browser_tree_state_save_interval')
 
     user_pref = cur.execute(
-        'SELECT pid, uid FROM user_preferences '
-        'where pid=?', (pref_tree_state_save_interval.pid,)
+        select_preference_query, (pref_tree_state_save_interval.pid,)
     )
 
     if len(user_pref.fetchall()) == 0:
-        cur.execute(
-            'INSERT INTO user_preferences(pid, uid, value)'
-            ' VALUES (?,?,?)', (pref_tree_state_save_interval.pid, 1, -1)
-        )
+        cur.execute(insert_preferences_query,
+                    (pref_tree_state_save_interval.pid, 1, -1)
+                    )
     else:
         cur.execute(
-            'UPDATE user_preferences'
-            ' SET VALUE = ?'
-            ' WHERE PID = ?', (-1, pref_tree_state_save_interval.pid)
+            update_preference_query, (-1, pref_tree_state_save_interval.pid)
         )
 
     # Disable auto expand sole children tree state for tests
@@ -800,20 +798,18 @@ def configure_preferences(default_binary_path=None):
         browser_pref.preference('auto_expand_sole_children')
 
     user_pref = cur.execute(
-        'SELECT pid, uid FROM user_preferences '
-        'where pid=?', (pref_auto_expand_sol_children.pid,)
+        select_preference_query, (pref_auto_expand_sol_children.pid,)
     )
 
     if len(user_pref.fetchall()) == 0:
         cur.execute(
-            'INSERT INTO user_preferences(pid, uid, value)'
-            ' VALUES (?,?,?)', (pref_auto_expand_sol_children.pid, 1, 'False')
+            insert_preferences_query,
+            (pref_auto_expand_sol_children.pid, 1, 'False')
         )
     else:
         cur.execute(
-            'UPDATE user_preferences'
-            ' SET VALUE = ?'
-            ' WHERE PID = ?', ('False', pref_auto_expand_sol_children.pid)
+            update_preference_query,
+            ('False', pref_auto_expand_sol_children.pid)
         )
 
     # Disable reload warning on browser
@@ -821,20 +817,18 @@ def configure_preferences(default_binary_path=None):
         browser_pref.preference('confirm_on_refresh_close')
 
     user_pref = cur.execute(
-        'SELECT pid, uid FROM user_preferences '
-        'where pid=?', (pref_confirm_on_refresh_close.pid,)
+        select_preference_query, (pref_confirm_on_refresh_close.pid,)
     )
 
     if len(user_pref.fetchall()) == 0:
         cur.execute(
-            'INSERT INTO user_preferences(pid, uid, value)'
-            ' VALUES (?,?,?)', (pref_confirm_on_refresh_close.pid, 1, 'False')
+            insert_preferences_query,
+            (pref_confirm_on_refresh_close.pid, 1, 'False')
         )
     else:
         cur.execute(
-            'UPDATE user_preferences'
-            ' SET VALUE = ?'
-            ' WHERE PID = ?', ('False', pref_confirm_on_refresh_close.pid)
+            update_preference_query,
+            ('False', pref_confirm_on_refresh_close.pid)
         )
 
     conn.commit()
@@ -1108,7 +1102,7 @@ def get_server_type(server):
         pg_cursor.execute("SELECT version()")
         version_string = pg_cursor.fetchone()
         connection.close()
-        if type(version_string) == tuple:
+        if isinstance(version_string, tuple):
             version_string = version_string[0]
 
         if "Greenplum Database" in version_string:
@@ -1137,9 +1131,9 @@ def check_binary_path_or_skip_test(cls, utility_name):
             cls.server['default_binary_paths'][cls.server['type']],
             utility_name
         )
-        retVal = does_utility_exist(binary_path)
-        if retVal is not None:
-            cls.skipTest(retVal)
+        ret_val = does_utility_exist(binary_path)
+        if ret_val is not None:
+            cls.skipTest(ret_val)
 
 
 def get_watcher_dialogue_status(self):
@@ -1213,6 +1207,21 @@ def generate_scenarios(key, test_cases):
     return scenarios
 
 
+def assert_status_code(self, response):
+    act_res = response.status_code
+    exp_res = self.expected_data["status_code"]
+    return self.assertEqual(act_res, exp_res)
+
+
+def assert_error_message(self, response, error_msg=None):
+    act_res = response.json["errormsg"]
+    if error_msg is not None:
+        exp_res = error_msg
+    else:
+        exp_res = self.expected_data["error_msg"]
+    return self.assertEqual(act_res, exp_res)
+
+
 def create_expected_output(parameters, actual_data):
     """
     This function creates the dict using given parameter and actual data
@@ -1241,7 +1250,7 @@ def is_parallel_ui_tests(args):
     return False
 
 
-def get_selenium_grid_status_and_browser_list(selenoid_url):
+def get_selenium_grid_status_and_browser_list(selenoid_url, arguments):
     """
     This function checks selenoid status for given url
     :param selrnoid_url:
@@ -1253,10 +1262,9 @@ def get_selenium_grid_status_and_browser_list(selenoid_url):
     try:
         selenoid_status = get_selenium_grid_status_json(selenoid_url)
         if selenoid_status:
+            # Get available browsers from selenoid
             available_browsers = selenoid_status["browsers"]
-            list_of_browsers = test_setup.config_data['selenoid_config'][
-                'browsers_list']
-
+            list_of_browsers = get_selenoid_browsers_list(arguments)
             for browser in list_of_browsers:
                 if browser["name"].lower() in available_browsers.keys():
                     versions = available_browsers[(browser["name"].lower())]
@@ -1322,10 +1330,11 @@ def launch_url_in_browser(driver_instance, url, title='pgAdmin 4', timeout=50):
             time.sleep(6)
             count -= 1
             if count == 0:
+                print(str(e))
                 exception_msg = 'Web-page title did not match to {0}. ' \
                                 'Please check url {1} accessible on ' \
                                 'internet.'.format(title, url)
-                raise Exception(exception_msg)
+                raise WebDriverException(exception_msg)
 
 
 def get_remote_webdriver(hub_url, browser, browser_ver, test_name):
@@ -1399,9 +1408,7 @@ def get_parallel_sequential_module_list(module_list):
             parallel_tests.remove(module)
 
     #  list of tests can be executed in sequentially
-    sequential_tests = list(
-        filter(lambda i: i not in parallel_tests,
-               module_list))
+    sequential_tests = [i for i in module_list if i not in parallel_tests]
 
     # return parallel & sequential lists
     return parallel_tests, sequential_tests
@@ -1460,15 +1467,15 @@ def get_selenium_grid_status_json(selenoid_url):
     :return:
     """
     try:
-        selenoid_status = urllib.urlopen(
+        selenoid_status = urlopen(
             "http://" + re.split('/', (re.split('//', selenoid_url, 1)[1]))[
                 0] + "/status", timeout=10)
         selenoid_status = json.load(selenoid_status)
         if isinstance(selenoid_status, dict):
             return selenoid_status
-    except Exception as e:
-        print("Unable to find Selenoid Status.Kindly check url passed -'{0}'".
-              format(selenoid_url))
+    except Exception:
+        print("Unable to find Selenoid Status.Kindly check url passed -'{0}'."
+              "Check parsing errors in test_config.json".format(selenoid_url))
         return None
 
 
@@ -1485,3 +1492,214 @@ def quit_webdriver(driver):
         print("Some Other exception occurred.")
         traceback.print_exc(file=sys.stderr)
         print(str(e))
+
+
+def delete_server(tester, server_information=None):
+    """ This function use to delete test server """
+    try:
+        parent_node_dict = regression.parent_node_dict
+        test_servers = parent_node_dict["server"]
+        test_table_spaces = regression.node_info_dict["tsid"]
+        for server in test_servers:
+            if server["server_id"] == server_information['server_id']:
+                srv_id = server["server_id"]
+                servers_dict = server["server"]
+
+                # Delete databases and roles
+                delete_database(srv_id, servers_dict)
+                delete_roles(srv_id, servers_dict)
+
+                for tablespace in test_table_spaces:
+                    if tablespace['server_id'] == srv_id:
+                        connection = get_db_connection(
+                            servers_dict['db'],
+                            servers_dict['username'],
+                            servers_dict['db_password'],
+                            servers_dict['host'],
+                            servers_dict['port'],
+                            servers_dict['sslmode']
+                        )
+                        # Delete tablespace
+                        regression.tablespace_utils.delete_tablespace(
+                            connection, tablespace["tablespace_name"]
+                        )
+                        print(
+                            "Deleted Tablepace  {0}".format(
+                                tablespace["tablespace_name"]),
+                            file=sys.stderr)
+
+                # Delete server
+                delete_server_with_api(tester, srv_id)
+                print("Deleted Database, Roles, Tablespace for {0}".format(
+                    servers_dict['name']), file=sys.stderr)
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
+        raise
+
+
+def delete_database(server_id, servers_dict):
+    """This function will delete all the databases from the server"""
+    parent_node_dict = regression.parent_node_dict
+    test_databases = parent_node_dict["database"]
+    deleted_db = []
+    for database in test_databases:
+        if database['server_id'] == server_id:
+            connection = get_db_connection(
+                servers_dict['db'],
+                servers_dict['username'],
+                servers_dict['db_password'],
+                servers_dict['host'],
+                servers_dict['port'],
+                servers_dict['sslmode']
+            )
+            # Drop database
+            drop_database(connection, database["db_name"])
+            deleted_db.append(database)
+
+    if len(deleted_db) > 0:
+        print("Deleted DB  {0}".format(deleted_db),
+              file=sys.stderr)
+        for ele in deleted_db:
+            regression.parent_node_dict["database"].remove(ele)
+
+
+def delete_roles(server_id, servers_dict):
+    test_roles = regression.node_info_dict["lrid"]
+    deleted_roles = []
+    for role in test_roles:
+        if role['server_id'] == server_id:
+            connection = get_db_connection(
+                servers_dict['db'],
+                servers_dict['username'],
+                servers_dict['db_password'],
+                servers_dict['host'],
+                servers_dict['port'],
+                servers_dict['sslmode']
+            )
+            # Delete role
+            regression.roles_utils.delete_role(
+                connection, role["role_name"]
+            )
+            deleted_roles.append(role)
+
+    if len(deleted_roles) > 0:
+        print("Deleted Roles  {0}".format(deleted_roles),
+              file=sys.stderr)
+        for ele in deleted_roles:
+            regression.node_info_dict["lrid"].remove(ele)
+
+
+def get_selenoid_browsers_list(arguments):
+    """This function will return the list of all the browsers from selenoid"""
+    if 'default_browser' in arguments and \
+            arguments['default_browser'] is not None:
+        default_browser = arguments['default_browser'].lower()
+        list_of_browsers = [{"name": default_browser,
+                             "version": None}]
+    else:
+        list_of_browsers = test_setup.config_data['selenoid_config'][
+            'browsers_list']
+    return list_of_browsers
+
+
+def login_using_user_account(tester):
+    """
+    This function login the test client username and password
+    :param tester: test client
+    :type tester: flask test client object
+    :return: None
+    """
+    username = tester.test_config_data['login_username']
+    password = tester.test_config_data['login_password']
+    response = tester.login(username, password)
+
+    if response.status_code != 302:
+        print("Unable to login test client, email and password not found.",
+              file=sys.stderr)
+        sys.exit(1)
+
+
+def logout_tester_account(tester):
+    """
+    This function logout the test account
+    :param tester: test client
+    :type tester: flask test client object
+    :return: None
+    """
+    tester.logout()
+
+
+def create_user(user_details):
+    try:
+        conn = sqlite3.connect(config.TEST_SQLITE_PATH)
+        # Create the server
+        cur = conn.cursor()
+        user_details = (
+            user_details['login_username'], user_details['login_username'],
+            user_details['login_password'], 1)
+
+        cur.execute(
+            'select * from user where username = "%s"' % user_details[0])
+        user = cur.fetchone()
+        if user is None:
+            cur.execute('INSERT INTO user (username, email, password, active) '
+                        'VALUES (?,?,?,?)', user_details)
+            user_id = cur.lastrowid
+            conn.commit()
+        else:
+            user_id = user[0]
+        conn.close()
+
+        return user_id
+    except Exception as exception:
+        traceback.print_exc(file=sys.stderr)
+        raise ("Error while creating server. %s" % exception)
+
+
+def get_test_user(self, user_details,
+                  is_api=True, create_conn=True):
+    if user_details is None:
+        return None, None
+
+    if is_api is True:
+
+        # Create test_client for this user, and login through it.
+        test_client = self.app.test_client()
+        user = create_user(user_details)
+        if user is not None:
+            test_client.test_config_data = dict({
+                "login_username": user_details['login_username'],
+                "login_password": user_details['login_password']
+            })
+        else:
+            return "User not created"
+        login_using_user_account(test_client)
+        user = test_client
+
+    return user
+
+
+def create_user_wise_test_client(user):
+    """
+    This function creates new test client and execute the test cases.
+    :return: None
+    """
+
+    def multi_user_decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            main_tester = self.__class__.tester
+            try:
+                # Login with non-admin_user
+                test_user = get_test_user(self, user)
+                self.setTestClient(test_user)
+
+                # Call 'runTest' with new test client
+                func(self, *args, **kwargs)
+            finally:
+                # Restore the original user and driver
+                self.__class__.tester = main_tester
+
+        return wrapper
+
+    return multi_user_decorator

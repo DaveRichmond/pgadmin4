@@ -30,7 +30,7 @@ from pgadmin.tools.schema_diff.compare import SchemaDiffObjectCompare
 
 def backend_supported(module, manager, **kwargs):
 
-    if CollectionNodeModule.BackendSupported(module, manager, **kwargs):
+    if CollectionNodeModule.backend_supported(module, manager, **kwargs):
         if 'tid' not in kwargs:
             return True
 
@@ -72,8 +72,8 @@ class PartitionsModule(CollectionNodeModule):
         initialized.
     """
 
-    NODE_TYPE = 'partition'
-    COLLECTION_LABEL = gettext("Partitions")
+    _NODE_TYPE = 'partition'
+    _COLLECTION_LABEL = gettext("Partitions")
 
     def __init__(self, *args, **kwargs):
         """
@@ -101,7 +101,7 @@ class PartitionsModule(CollectionNodeModule):
         Load the module script for server, when any of the server-group node is
         initialized.
         """
-        return schema.SchemaModule.NODE_TYPE
+        return schema.SchemaModule.node_type
 
     @property
     def node_inode(self):
@@ -110,7 +110,7 @@ class PartitionsModule(CollectionNodeModule):
         """
         return True
 
-    def BackendSupported(self, manager, **kwargs):
+    def backend_supported(self, manager, **kwargs):
         """
         Load this module if it is a partition table
         """
@@ -139,10 +139,10 @@ class PartitionsModule(CollectionNodeModule):
             # Exclude 'partition' module for now to avoid cyclic import issue.
             modules_to_skip = ['partition', 'column']
             for parent in self.parentmodules:
-                if parent.NODE_TYPE == 'table':
+                if parent.node_type == 'table':
                     self.submodules += [
                         submodule for submodule in parent.submodules
-                        if submodule.NODE_TYPE not in modules_to_skip
+                        if submodule.node_type not in modules_to_skip
                     ]
 
     @property
@@ -197,6 +197,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
     """
 
     node_type = blueprint.node_type
+    node_label = "Partition"
 
     parent_ids = [
         {'type': 'int', 'id': 'gid'},
@@ -239,13 +240,13 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
         for module in self.blueprint.submodules:
             if isinstance(module, PGChildModule):
                 if manager is not None and \
-                        module.BackendSupported(manager, **kwargs):
+                        module.backend_supported(manager, **kwargs):
                     nodes.extend(module.get_nodes(**kwargs))
             else:
                 nodes.extend(module.get_nodes(**kwargs))
 
         if manager is not None and \
-                self.blueprint.BackendSupported(manager, **kwargs):
+                self.blueprint.backend_supported(manager, **kwargs):
             nodes.extend(self.blueprint.get_nodes(**kwargs))
 
         return nodes
@@ -267,7 +268,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
             JSON of available table nodes
         """
         SQL = render_template("/".join([self.partition_template_path,
-                                        'properties.sql']),
+                                        self._PROPERTIES_SQL]),
                               did=did, scid=scid, tid=tid,
                               datlastsysoid=self.datlastsysoid)
         status, res = self.conn.execute_dict(SQL)
@@ -297,7 +298,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
             JSON of available table nodes
         """
         SQL = render_template(
-            "/".join([self.partition_template_path, 'nodes.sql']),
+            "/".join([self.partition_template_path, self._NODES_SQL]),
             scid=scid, tid=tid, ptid=ptid
         )
         status, rset = self.conn.execute_2darray(SQL)
@@ -321,9 +322,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
 
         if ptid is not None:
             if len(rset['rows']) == 0:
-                return gone(gettext(
-                    "The specified partitioned table could not be found."
-                ))
+                return gone(self.not_found_error_msg())
 
             return make_json_response(
                 data=browser_node(rset['rows'][0]), status=200
@@ -356,20 +355,43 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
             JSON of selected table node
         """
 
-        SQL = render_template("/".join([self.partition_template_path,
-                                        'properties.sql']),
-                              did=did, scid=scid, tid=tid,
-                              ptid=ptid, datlastsysoid=self.datlastsysoid)
-        status, res = self.conn.execute_dict(SQL)
-        if not status:
-            return internal_server_error(errormsg=res)
+        status, res = self._fetch_properties(did, scid, tid, ptid)
 
         if len(res['rows']) == 0:
-            return gone(gettext(
-                "The specified partitioned table could not be found."))
+            return gone(self.not_found_error_msg())
 
         return super(PartitionsView, self).properties(
-            gid, sid, did, scid, ptid, res)
+            gid, sid, did, scid, ptid, res=res)
+
+    def _fetch_properties(self, did, scid, tid, ptid=None):
+
+        """
+        This function is used to fetch the properties of the specified object
+        :param did:
+        :param scid:
+        :param tid:
+        :return:
+        """
+        try:
+            SQL = render_template("/".join([self.partition_template_path,
+                                            self._PROPERTIES_SQL]),
+                                  did=did, scid=scid, tid=tid,
+                                  ptid=ptid, datlastsysoid=self.datlastsysoid)
+            status, res = self.conn.execute_dict(SQL)
+            if not status:
+                return internal_server_error(errormsg=res)
+
+            if len(res['rows']) == 0:
+                return False, gone(
+                    gettext(self.not_found_error_msg()))
+
+            # Update autovacuum properties
+            self.update_autovacuum_properties(res['rows'][0])
+
+        except Exception as e:
+            return False, internal_server_error(errormsg=str(e))
+
+        return True, res
 
     @BaseTableView.check_precondition
     def fetch_objects_to_compare(self, sid, did, scid, tid, ptid=None):
@@ -388,7 +410,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
 
         if ptid:
             SQL = render_template("/".join([self.partition_template_path,
-                                            'properties.sql']),
+                                            self._PROPERTIES_SQL]),
                                   did=did, scid=scid, tid=tid,
                                   ptid=ptid, datlastsysoid=self.datlastsysoid)
             status, result = self.conn.execute_dict(SQL)
@@ -401,7 +423,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
 
         else:
             SQL = render_template(
-                "/".join([self.partition_template_path, 'nodes.sql']),
+                "/".join([self.partition_template_path, self._NODES_SQL]),
                 scid=scid, tid=tid
             )
             status, partitions = self.conn.execute_2darray(SQL)
@@ -411,7 +433,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
 
             for row in partitions['rows']:
                 SQL = render_template("/".join([self.partition_template_path,
-                                                'properties.sql']),
+                                                self._PROPERTIES_SQL]),
                                       did=did, scid=scid, tid=tid,
                                       ptid=row['oid'],
                                       datlastsysoid=self.datlastsysoid)
@@ -426,7 +448,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
                 )
                 res[row['name']] = data
 
-            return res
+        return res
 
     @BaseTableView.check_precondition
     def sql(self, gid, sid, did, scid, tid, ptid):
@@ -444,22 +466,15 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
         """
         main_sql = []
 
-        SQL = render_template("/".join([self.partition_template_path,
-                                        'properties.sql']),
-                              did=did, scid=scid, tid=tid,
-                              ptid=ptid, datlastsysoid=self.datlastsysoid)
-        status, res = self.conn.execute_dict(SQL)
-        if not status:
-            return internal_server_error(errormsg=res)
+        status, res = self._fetch_properties(did, scid, tid, ptid)
 
         if len(res['rows']) == 0:
-            return gone(gettext(
-                "The specified partitioned table could not be found."))
+            return gone(self.not_found_error_msg())
 
         data = res['rows'][0]
 
-        return BaseTableView.get_reverse_engineered_sql(self, did, scid, ptid,
-                                                        main_sql, data)
+        return BaseTableView.get_reverse_engineered_sql(
+            self, did=did, scid=scid, tid=ptid, main_sql=main_sql, data=data)
 
     @BaseTableView.check_precondition
     def get_sql_from_diff(self, **kwargs):
@@ -552,7 +567,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
         # Get schema oid of partition
         status, pscid = self.conn.execute_scalar(
             render_template("/".join([self.table_template_path,
-                                      'get_schema_oid.sql']), tid=ptid))
+                                      self._GET_SCHEMA_OID_SQL]), tid=ptid))
         if not status:
             return internal_server_error(errormsg=scid)
 
@@ -627,13 +642,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
                 data[k] = v
 
         if ptid is not None:
-            SQL = render_template("/".join([self.partition_template_path,
-                                            'properties.sql']),
-                                  did=did, scid=scid, tid=tid,
-                                  ptid=ptid, datlastsysoid=self.datlastsysoid)
-            status, res = self.conn.execute_dict(SQL)
-            if not status:
-                return internal_server_error(errormsg=res)
+            status, res = self._fetch_properties(did, scid, tid, ptid)
 
         SQL, name = self.get_sql(did, scid, ptid, data, res)
         SQL = re.sub('\n{2,}', '\n\n', SQL)
@@ -674,16 +683,10 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
                 data[k] = v
 
         try:
-            SQL = render_template("/".join([self.partition_template_path,
-                                            'properties.sql']),
-                                  did=did, scid=scid, tid=tid,
-                                  ptid=ptid, datlastsysoid=self.datlastsysoid)
-            status, res = self.conn.execute_dict(SQL)
-            if not status:
-                return internal_server_error(errormsg=res)
+            status, res = self._fetch_properties(did, scid, tid, ptid)
 
             return super(PartitionsView, self).update(
-                gid, sid, did, scid, ptid, data, res, parent_id=tid)
+                gid, sid, did, scid, ptid, data=data, res=res, parent_id=tid)
         except Exception as e:
             return internal_server_error(errormsg=str(e))
 
@@ -702,7 +705,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
 
         try:
             SQL = render_template("/".join([self.partition_template_path,
-                                            'properties.sql']),
+                                            self._PROPERTIES_SQL]),
                                   did=did, scid=scid, tid=tid,
                                   ptid=ptid, datlastsysoid=self.datlastsysoid)
             status, res = self.conn.execute_dict(SQL)
@@ -717,7 +720,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
             return internal_server_error(errormsg=str(e))
 
     @BaseTableView.check_precondition
-    def delete(self, gid, sid, did, scid, tid, ptid=None, only_sql=False):
+    def delete(self, gid, sid, did, scid, tid, ptid=None):
         """
         This function will delete the table object
 
@@ -739,7 +742,8 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
         try:
             for ptid in data['ids']:
                 SQL = render_template(
-                    "/".join([self.partition_template_path, 'properties.sql']),
+                    "/".join([self.partition_template_path,
+                              self._PROPERTIES_SQL]),
                     did=did, scid=scid, tid=tid, ptid=ptid,
                     datlastsysoid=self.datlastsysoid
                 )
@@ -793,7 +797,7 @@ class PartitionsView(BaseTableView, DataTypeReader, VacuumSettings,
 
         try:
             SQL = render_template(
-                "/".join([self.partition_template_path, 'properties.sql']),
+                "/".join([self.partition_template_path, self._PROPERTIES_SQL]),
                 did=did, scid=scid, tid=tid, ptid=ptid,
                 datlastsysoid=self.datlastsysoid
             )

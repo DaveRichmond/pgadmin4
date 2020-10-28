@@ -175,7 +175,7 @@ let SchemaDiffSelect2Control =
       let span = this.$el.find('.select2-selection .select2-selection__rendered span.wcTabIcon'),
         selSpan = this.$el.find('option:selected');
 
-      if (span.hasClass('icon-server-not-connected')) {
+      if (span.hasClass('icon-server-not-connected') || span.hasClass('icon-shared-server-not-connected')) {
         let icon = (data.icon) ? data.icon : 'icon-pg';
         span.removeClass('icon-server-not-connected');
         span.addClass(icon);
@@ -317,17 +317,17 @@ let SchemaDiffHeaderView = Backform.Form.extend({
       <div class="col-6 target row"></div>
       <div class="col-5 target-buttons">
           <div class="action-btns d-flex">
-              <button class="btn btn-primary mr-auto"><i class="icon-schema-diff-white"></i>&nbsp;` + gettext('Compare') + `</button>
-              <button id="generate-script" class="btn btn-secondary mr-1" disabled><i class="fa fa-file-code-o sql-icon-lg"></i>&nbsp;` + gettext('Generate Script') + `</button>
+              <button class="btn btn-primary mr-auto"><span class="pg-font-icon icon-schema-diff sql-icon-lg"></span>&nbsp;` + gettext('Compare') + `</button>
+              <button id="generate-script" class="btn btn-primary-icon mr-1" disabled><i class="fa fa-file-code sql-icon-lg"></i>&nbsp;` + gettext('Generate Script') + `</button>
               <div class="btn-group mr-1" role="group" aria-label="">
-                <button id="btn-filter" type="button" class="btn btn-secondary"
+                <button id="btn-filter" type="button" class="btn btn-primary-icon"
                         title=""
                         accesskey=""
                         tabindex="0"
                         style="pointer-events: none;">
                     <i class="fa fa-filter sql-icon-lg" aria-hidden="true"></i>&nbsp;` + gettext('Filter') + `
                 </button>
-                <button id="btn-filter-dropdown" type="button" class="btn btn-secondary dropdown-toggle dropdown-toggle-split"
+                <button id="btn-filter-dropdown" type="button" class="btn btn-primary-icon dropdown-toggle dropdown-toggle-split"
                         data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"
                         title=""
                         accesskey=""
@@ -514,6 +514,7 @@ let SchemaDiffFooterView = Backform.Form.extend({
     return this;
   },
 });
+
 export {
   SchemaDiffSelect2Control,
   SchemaDiffHeaderView,

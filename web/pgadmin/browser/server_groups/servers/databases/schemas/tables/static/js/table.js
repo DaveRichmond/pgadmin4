@@ -104,7 +104,7 @@ define('pgadmin.node.table', [
           name: 'reset_table_stats', node: 'table', module: this,
           applies: ['object', 'context'], callback: 'reset_table_stats',
           category: 'Reset', priority: 4, label: gettext('Reset Statistics'),
-          icon: 'fa fa-bar-chart', enable : 'canCreate',
+          icon: 'fa fa-chart-bar', enable : 'canCreate',
         },{
           name: 'count_table_rows', node: 'table', module: this,
           applies: ['object', 'context'], callback: 'count_table_rows',
@@ -616,8 +616,8 @@ define('pgadmin.node.table', [
                     var removedCols = primary_key_column_coll.where({column:column_name});
                     if (removedCols.length > 0) {
                       primary_key_column_coll.remove(removedCols);
-                      _.each(removedCols, function(m) {
-                        m.destroy();
+                      _.each(removedCols, function(local_model) {
+                        local_model.destroy();
                       });
                       if (primary_key_column_coll.length == 0) {
                         /* Ideally above line of code should be "primary_key_coll.reset()".
@@ -698,7 +698,7 @@ define('pgadmin.node.table', [
 
               return true;
             },
-            columns : ['name', 'columns'],
+            columns : ['name', 'columns','references_table_name'],
             canAddRow: function(m) {
               // User can only add if there is at least one column with name.
               var columns = m.get('columns');
@@ -1247,21 +1247,13 @@ define('pgadmin.node.table', [
             this.errorModel.set('partition_keys', msg);
             return msg;
           }
-          if (this.get('rlspolicy') && this.isNew()){
-            Alertify.confirm(
+          this.errorModel.unset('partition_keys');
+          if (this.get('rlspolicy') && this.changed.rlspolicy){
+            Alertify.alert(
               gettext('Check Policy?'),
-              gettext('Check if any policy exist. If no policy exists for the table, a default-deny policy is used, meaning that no rows are visible or can be modified'),
-              function() {
-                self.close();
-                return true;
-              },
-              function() {
-                // Do nothing.
-                return true;
-              }
+              gettext('Please check if any policy exist. If no policy exists for the table, a default-deny policy is used, meaning that no rows are visible or can be modified by other users')
             );
           }
-          this.errorModel.unset('partition_keys');
           return null;
         },
         // We will disable everything if we are under catalog node
@@ -1274,16 +1266,12 @@ define('pgadmin.node.table', [
         },
         isInheritedTable: function(m) {
           if(!m.inSchema.apply(this, [m])) {
-            if(
-              (!_.isUndefined(m.get('coll_inherits')) && m.get('coll_inherits').length != 0)
-                ||
-                (!_.isUndefined(m.get('typname')) && String(m.get('typname')).replace(/^\s+|\s+$/g, '') !== '')
-            ) {
-              // Either of_types or coll_inherits has value
-              return false;
-            } else {
-              return true;
-            }
+            // Either of_types or coll_inherits has value
+            return (
+              (_.isUndefined(m.get('coll_inherits')) || m.get('coll_inherits').length == 0)
+                &&
+                (_.isUndefined(m.get('typname')) || String(m.get('typname')).replace(/^\s+|\s+$/g, '') === '')
+            );
           }
           return false;
         },
@@ -1374,11 +1362,7 @@ define('pgadmin.node.table', [
           if(this.node_info &&  'schema' in this.node_info)
           {
             // We will disbale control if it's in 'edit' mode
-            if (m.isNew()) {
-              return false;
-            } else {
-              return true;
-            }
+            return !m.isNew();
           }
           return true;
         },

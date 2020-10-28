@@ -6,7 +6,6 @@
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
-
 define('pgadmin.datagrid', [
   'sources/gettext', 'sources/url_for', 'jquery', 'underscore',
   'pgadmin.alertifyjs', 'sources/pgadmin', 'bundled_codemirror',
@@ -181,6 +180,7 @@ define('pgadmin.datagrid', [
           name: 'frm_datagrid',
           showTitle: true,
           isCloseable: true,
+          isRenameable: true,
           isPrivate: true,
           url: 'about:blank',
         });
@@ -224,18 +224,23 @@ define('pgadmin.datagrid', [
           queryToolForm +=`<textarea name="sql_filter" hidden>${sql_filter}</textarea>`;
         }
 
+        /* Escape backslashes as it is stripped by back end */
         queryToolForm +=`
           </form>
             <script>
-              document.getElementById("title").value = "${_.escape(panel_title)}";
+              document.getElementById("title").value = "${_.escape(panel_title.replace('\\', '\\\\'))}";
               document.getElementById("queryToolForm").submit();
             </script>
           `;
 
         if (self.preferences.new_browser_tab) {
           var newWin = window.open('', '_blank');
-          newWin.document.write(queryToolForm);
-          newWin.document.title = panel_title;
+          if(newWin) {
+            newWin.document.write(queryToolForm);
+            newWin.document.title = panel_title;
+          } else {
+            return false;
+          }
         } else {
           /* On successfully initialization find the dashboard panel,
            * create new panel and add it to the dashboard panel.
@@ -253,6 +258,35 @@ define('pgadmin.datagrid', [
               url: url_for('datagrid.close', {'trans_id': trans_id}),
               method: 'DELETE',
             });
+          });
+
+          // Listen on the panelRename event.
+          queryToolPanel.on(wcDocker.EVENT.RENAME, function(panel_data) {
+            alertify.prompt('', panel_data.$titleText[0].textContent,
+              // We will execute this function when user clicks on the OK button
+              function(evt, value) {
+                if(value) {
+
+                  var is_file = false;
+                  if(panel_data.$titleText[0].innerHTML.includes('File - ')) {
+                    is_file = true;
+                  }
+                  var selected_item = pgBrowser.treeMenu.selected();
+                  var panel_titles = '';
+
+                  if(is_query_tool) {
+                    panel_titles = panelTitleFunc.getPanelTitle(pgBrowser, selected_item, value);
+                  } else {
+                    panel_titles = showData.generateDatagridTitle(pgBrowser, selected_item, value);
+                  }
+                  // Set title to the selected tab.
+                  panelTitleFunc.setQueryToolDockerTitle(queryToolPanel, is_query_tool, _.unescape(panel_titles), is_file);
+                }
+              },
+              // We will execute this function when user clicks on the Cancel
+              // button.  Do nothing just close it.
+              function(evt) { evt.cancel = false; }
+            ).set({'title': gettext('Rename Panel')});
           });
 
           var openQueryToolURL = function(j) {
@@ -283,6 +317,7 @@ define('pgadmin.datagrid', [
 
           openQueryToolURL(queryToolPanel);
         }
+        return true;
       },
     },
     Backbone.Events);

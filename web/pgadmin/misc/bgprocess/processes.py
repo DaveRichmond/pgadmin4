@@ -21,8 +21,8 @@ from pickle import dumps, loads
 from subprocess import Popen, PIPE
 import logging
 
-from pgadmin.utils import u, file_quote, fs_encoding, \
-    get_complete_file_path
+from pgadmin.utils import u_encode, file_quote, fs_encoding, \
+    get_complete_file_path, get_storage_directory, IS_WIN
 
 import pytz
 from dateutil import parser
@@ -38,6 +38,7 @@ PROCESS_NOT_STARTED = 0
 PROCESS_STARTED = 1
 PROCESS_FINISHED = 2
 PROCESS_TERMINATED = 3
+PROCESS_NOT_FOUND = _("Could not find a process with the specified ID.")
 
 
 def get_current_time(format='%Y-%m-%d %H:%M:%S.%f %z'):
@@ -49,9 +50,7 @@ def get_current_time(format='%Y-%m-%d %H:%M:%S.%f %z'):
     ).strftime(format)
 
 
-class IProcessDesc(object):
-    __metaclass__ = ABCMeta
-
+class IProcessDesc(object, metaclass=ABCMeta):
     @abstractproperty
     def message(self):
         pass
@@ -59,6 +58,48 @@ class IProcessDesc(object):
     @abstractmethod
     def details(self, cmd, args):
         pass
+
+    @property
+    def current_storage_dir(self):
+
+        if config.SERVER_MODE:
+
+            file = self.bfile
+            try:
+                # check if file name is encoded with UTF-8
+                file = self.bfile.decode('utf-8')
+            except Exception as e:
+                str(e)
+                # do nothing if bfile is not encoded.
+
+            path = get_complete_file_path(file)
+            path = file if path is None else path
+
+            if IS_WIN:
+                path = os.path.realpath(path)
+
+            storage_directory = os.path.basename(get_storage_directory())
+
+            if storage_directory in path:
+                start = path.index(storage_directory)
+                end = start + (len(storage_directory))
+                last_dir = os.path.dirname(path[end:])
+            else:
+                last_dir = file
+
+            if IS_WIN:
+                if '\\' in last_dir:
+                    if len(last_dir) == 1:
+                        last_dir = last_dir.replace('\\', '\\\\')
+                    else:
+                        last_dir = last_dir.replace('\\', '/')
+                else:
+                    last_dir = last_dir.replace('\\', '/')
+
+            return None if hasattr(self, 'is_import') and self.is_import \
+                else last_dir
+
+        return None
 
 
 class BatchProcess(object):
@@ -80,9 +121,7 @@ class BatchProcess(object):
         p = Process.query.filter_by(pid=_id, user_id=current_user.id).first()
 
         if p is None:
-            raise LookupError(
-                _("Could not find a process with the specified ID.")
-            )
+            raise LookupError(PROCESS_NOT_FOUND)
 
         tmp_desc = loads(p.desc)
 
@@ -129,11 +168,11 @@ class BatchProcess(object):
 
         created = False
         size = 0
-        id = ctime
+        uid = ctime
         while not created:
             try:
-                id += random_number(size)
-                log_dir = os.path.join(log_dir, id)
+                uid += random_number(size)
+                log_dir = os.path.join(log_dir, uid)
                 size += 1
                 if not os.path.exists(log_dir):
                     os.makedirs(log_dir, int('700', 8))
@@ -178,7 +217,7 @@ class BatchProcess(object):
         tmp_desc = dumps(self.desc)
 
         j = Process(
-            pid=int(id),
+            pid=int(uid),
             command=_cmd,
             arguments=args_val,
             logdir=log_dir,
@@ -197,58 +236,39 @@ class BatchProcess(object):
             for path in paths:
                 if not os.path.isdir(path):
                     continue
-                exe_file = os.path.join(u(path, fs_encoding), program)
+                exe_file = os.path.join(u_encode(path, fs_encoding), program)
                 if is_exe(exe_file):
                     return file_quote(exe_file)
             return None
 
-        def convert_environment_variables(env):
-            """
-            This function is use to convert environment variable to string
-            because environment variable must be string in popen
-            :param env: Dict of environment variable
-            :return: Encoded environment variable as string
-            """
-            encoding = sys.getdefaultencoding()
-            if encoding is None or encoding == 'ascii':
-                encoding = 'utf-8'
-            temp_env = dict()
-            for key, value in env.items():
-                if not isinstance(key, str):
-                    key = key.encode(encoding)
-                if not isinstance(value, str):
-                    value = value.encode(encoding)
-                temp_env[key] = value
-            return temp_env
-
         if self.stime is not None:
             if self.etime is None:
-                raise Exception(_('The process has already been started.'))
-            raise Exception(
+                raise RuntimeError(_('The process has already been started.'))
+            raise RuntimeError(
                 _('The process has already finished and cannot be restarted.')
             )
 
         executor = file_quote(os.path.join(
-            os.path.dirname(u(__file__)), u'process_executor.py'
+            os.path.dirname(u_encode(__file__)), 'process_executor.py'
         ))
         paths = os.environ['PATH'].split(os.pathsep)
         interpreter = None
 
         current_app.logger.info(
-            u"Process Executor: Operating System Path %s",
+            "Process Executor: Operating System Path %s",
             str(paths)
         )
 
         if os.name == 'nt':
-            paths.insert(0, os.path.join(u(sys.prefix), u'Scripts'))
-            paths.insert(0, u(sys.prefix))
+            paths.insert(0, os.path.join(u_encode(sys.prefix), 'Scripts'))
+            paths.insert(0, u_encode(sys.prefix))
 
-            interpreter = which(u'pythonw.exe', paths)
+            interpreter = which('pythonw.exe', paths)
             if interpreter is None:
-                interpreter = which(u'python.exe', paths)
+                interpreter = which('python.exe', paths)
 
             current_app.logger.info(
-                u"Process Executor: Interpreter value in path: %s",
+                "Process Executor: Interpreter value in path: %s",
                 str(interpreter)
             )
             if interpreter is None and current_app.PGADMIN_RUNTIME:
@@ -266,16 +286,16 @@ class BatchProcess(object):
                 bin_path = os.path.dirname(sys.executable)
 
                 venv = os.path.realpath(
-                    os.path.join(bin_path, u'..\\venv')
+                    os.path.join(bin_path, '..\\venv')
                 )
 
-                interpreter = which(u'pythonw.exe', [venv])
+                interpreter = which('pythonw.exe', [venv])
                 if interpreter is None:
-                    interpreter = which(u'python.exe', [venv])
+                    interpreter = which('python.exe', [venv])
 
                 current_app.logger.info(
-                    u"Process Executor: Interpreter value in virtual "
-                    u"environment: %s", str(interpreter)
+                    "Process Executor: Interpreter value in virtual "
+                    "environment: %s", str(interpreter)
                 )
 
                 if interpreter is not None:
@@ -293,10 +313,9 @@ class BatchProcess(object):
             # directory in the PATH environment variable. Hence - it will
             # anyway be the redundant value in paths.
             if not current_app.PGADMIN_RUNTIME:
-                paths.insert(0, os.path.join(u(sys.prefix), u'bin'))
-            python_binary_name = 'python{0}'.format(sys.version_info[0]) \
-                if sys.version_info[0] >= 3 else 'python'
-            interpreter = which(u(python_binary_name), paths)
+                paths.insert(0, os.path.join(u_encode(sys.prefix), 'bin'))
+            python_binary_name = 'python{0}'.format(sys.version_info[0])
+            interpreter = which(u_encode(python_binary_name), paths)
 
         p = None
         cmd = [
@@ -306,7 +325,7 @@ class BatchProcess(object):
         cmd.extend(self.args)
 
         current_app.logger.info(
-            u"Executing the process executor with the arguments: %s",
+            "Executing the process executor with the arguments: %s",
             str(cmd)
         )
 
@@ -410,7 +429,7 @@ class BatchProcess(object):
         out_completed = err_completed = False
         process_output = (out != -1 and err != -1)
         enc = sys.getdefaultencoding()
-        if enc is None or enc == 'ascii':
+        if enc == 'ascii':
             enc = 'utf-8'
 
         def read_log(logfile, log, pos, ctime, ecode=None):
@@ -507,6 +526,26 @@ class BatchProcess(object):
         }
 
     @staticmethod
+    def _check_start_time(p, data):
+        """
+        Check start time and its related other timing checks.
+        :param p: Process.
+        :param data: Data
+        :return:
+        """
+        if 'start_time' in data and data['start_time']:
+            p.start_time = data['start_time']
+
+            # We can't have 'exit_code' without the 'start_time'
+            if 'exit_code' in data and \
+                    data['exit_code'] is not None:
+                p.exit_code = data['exit_code']
+
+                # We can't have 'end_time' without the 'exit_code'.
+                if 'end_time' in data and data['end_time']:
+                    p.end_time = data['end_time']
+
+    @staticmethod
     def update_process_info(p):
         if p.start_time is None or p.end_time is None:
             status = os.path.join(p.logdir, 'status')
@@ -519,18 +558,7 @@ class BatchProcess(object):
                     data = json.load(fp)
 
                     #  First - check for the existance of 'start_time'.
-                    if 'start_time' in data and data['start_time']:
-                        p.start_time = data['start_time']
-
-                        # We can't have 'exit_code' without the 'start_time'
-                        if 'exit_code' in data and \
-                                data['exit_code'] is not None:
-                            p.exit_code = data['exit_code']
-
-                            # We can't have 'end_time' without the 'exit_code'.
-                            if 'end_time' in data and data['end_time']:
-                                p.end_time = data['end_time']
-
+                    BatchProcess._check_start_time(p, data)
                     # get the pid of the utility.
                     if 'pid' in data:
                         p.utility_pid = data['pid']
@@ -547,6 +575,39 @@ class BatchProcess(object):
         return True, False
 
     @staticmethod
+    def _check_process_desc(p):
+        """
+        Check process desc instance and return data according to process.
+        :param p: process
+        :return: return value for details, type_desc and desc related
+        to process
+        """
+        desc = loads(p.desc)
+        details = desc
+        type_desc = ''
+        current_storage_dir = None
+
+        if isinstance(desc, IProcessDesc):
+
+            from pgadmin.tools.backup import BackupMessage
+            from pgadmin.tools.import_export import IEMessage
+            args = []
+            args_csv = StringIO(
+                p.arguments.encode('utf-8')
+                if hasattr(p.arguments, 'decode') else p.arguments
+            )
+            args_reader = csv.reader(args_csv, delimiter=str(','))
+            for arg in args_reader:
+                args = args + arg
+            details = desc.details(p.command, args)
+            type_desc = desc.type_desc
+            if isinstance(desc, (BackupMessage, IEMessage)):
+                current_storage_dir = desc.current_storage_dir
+            desc = desc.message
+
+        return desc, details, type_desc, current_storage_dir
+
+    @staticmethod
     def list():
         processes = Process.query.filter_by(user_id=current_user.id)
         changed = False
@@ -556,8 +617,7 @@ class BatchProcess(object):
             status, updated = BatchProcess.update_process_info(p)
             if not status:
                 continue
-
-            if not changed:
+            elif not changed:
                 changed = updated
 
             if p.start_time is None or (
@@ -571,21 +631,9 @@ class BatchProcess(object):
             etime = parser.parse(p.end_time or get_current_time())
 
             execution_time = BatchProcess.total_seconds(etime - stime)
-            desc = loads(p.desc)
-            details = desc
 
-            if isinstance(desc, IProcessDesc):
-                args = []
-                args_csv = StringIO(
-                    p.arguments.encode('utf-8')
-                    if hasattr(p.arguments, 'decode') else p.arguments
-                )
-                args_reader = csv.reader(args_csv, delimiter=str(','))
-                for arg in args_reader:
-                    args = args + arg
-                details = desc.details(p.command, args)
-                type_desc = desc.type_desc
-                desc = desc.message
+            desc, details, type_desc, current_storage_dir = BatchProcess.\
+                _check_process_desc(p)
 
             res.append({
                 'id': p.pid,
@@ -597,7 +645,8 @@ class BatchProcess(object):
                 'exit_code': p.exit_code,
                 'acknowledge': p.acknowledge,
                 'execution_time': execution_time,
-                'process_state': p.process_state
+                'process_state': p.process_state,
+                'current_storage_dir': current_storage_dir,
             })
 
         if changed:
@@ -623,9 +672,7 @@ class BatchProcess(object):
         ).first()
 
         if p is None:
-            raise LookupError(
-                _("Could not find a process with the specified ID.")
-            )
+            raise LookupError(PROCESS_NOT_FOUND)
 
         if p.end_time is not None:
             logdir = p.logdir
@@ -666,9 +713,7 @@ class BatchProcess(object):
         ).first()
 
         if p is None:
-            raise LookupError(
-                _("Could not find a process with the specified ID.")
-            )
+            raise LookupError(PROCESS_NOT_FOUND)
 
         try:
             process = psutil.Process(p.utility_pid)

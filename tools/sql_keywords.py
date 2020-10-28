@@ -13,7 +13,6 @@
 # pgsql keywords from the code git paths mentioned in PG_CODES_URLS
 # Note that, PG_CODES_URLS may need to be changed manually per version change
 
-from __future__ import print_function
 import re
 import requests
 import argparse
@@ -50,7 +49,7 @@ def get_release_tag(current_url=PG_CURRENT_VERSION_URL,
                     version_regex=PG_CURRENT_VERSION_REGEX):
     resp_text = get_file_from_url(current_url)
     version = apply_regex(resp_text, version_regex)
-    if type(version) == list:
+    if isinstance(version, list):
         version = version[0]
 
     return "REL_" + version.replace(".", "_")

@@ -40,7 +40,7 @@ define('pgadmin.node.column', [
       type: 'text', disabled: false, node: 'column',
       options: [['n_distinct', 'n_distinct'],
         ['n_distinct_inherited','n_distinct_inherited']],
-      select2: {placeholder: 'Select variable'},
+      select2: {placeholder: gettext('Select variable')},
       cellHeaderClasses:'width_percent_50',
     },{
       id: 'value', label: gettext('Value'),
@@ -71,16 +71,8 @@ define('pgadmin.node.column', [
         Backgrid.Extension.DependentCell.prototype.initialize.apply(this, arguments);
       },
       dependentChanged: function () {
-        this.$el.empty();
-        var model = this.model,
-          column = this.column,
-          editable = this.column.get('editable'),
-          is_editable = _.isFunction(editable) ? !!editable.apply(column, [model]) : !!editable;
-
-        if (is_editable){ this.$el.addClass('editable'); }
-        else { this.$el.removeClass('editable'); }
-
-        this.delegateEvents();
+        this.model.set(this.column.get('name'), null);
+        this.render();
         return this;
       },
       render: function() {
@@ -491,7 +483,7 @@ define('pgadmin.node.column', [
           id: 'attstorage', label: gettext('Storage'), group: gettext('Definition'),
           type: 'text', mode: ['properties', 'edit'],
           cell: 'string', disabled: 'inSchemaWithColumnCheck', first_empty: true,
-          control: 'select2', select2: { placeholder: 'Select storage',
+          control: 'select2', select2: { placeholder: gettext('Select storage'),
             allowClear: false,
             width: '100%',
           },
@@ -583,7 +575,7 @@ define('pgadmin.node.column', [
         }, {
           id: 'attidentity', label: gettext('Identity'), control: 'select2',
           cell: 'select2',
-          select2: {placeholder: 'Select identity', allowClear: false, width: '100%'},
+          select2: {placeholder: gettext('Select identity'), allowClear: false, width: '100%'},
           min_version: 100000, group: gettext('Constraints'),
           'options': [
             {label: gettext('ALWAYS'), value: 'a'},
@@ -607,10 +599,8 @@ define('pgadmin.node.column', [
           visible: 'isTypeIdentity',
         },{
           id: 'seqstart', label: gettext('Start'), type: 'int',
-          mode: ['properties', 'create'], group: gettext('Constraints'),
+          mode: ['properties', 'create', 'edit'], group: gettext('Constraints'),
           disabled: function(m) {
-            if (!m.isNew())
-              return true;
             let isIdentity = m.get('attidentity');
             if(!_.isUndefined(isIdentity) && !_.isNull(isIdentity) && !_.isEmpty(isIdentity))
               return false;

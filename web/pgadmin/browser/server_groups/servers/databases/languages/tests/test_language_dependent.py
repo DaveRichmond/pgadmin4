@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 
 import uuid
 from regression import parent_node_dict
@@ -45,7 +44,7 @@ class LanguagesGetDependentTestCase(BaseTestGenerator):
         response = self.get_language_dependency()
         actual_response_code = response.status_code
         expected_status_code = self.expected_data['status_code']
-        self.assertEquals(actual_response_code, expected_status_code)
+        self.assertEqual(actual_response_code, expected_status_code)
 
     def get_language_dependency(self):
         """

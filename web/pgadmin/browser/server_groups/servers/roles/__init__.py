@@ -20,13 +20,14 @@ from pgadmin.utils.ajax import make_json_response, \
     make_response as ajax_response, precondition_required, \
     internal_server_error, forbidden, success_return, gone
 from pgadmin.utils.driver import get_driver
+from pgadmin.utils.constants import ERROR_FETCHING_ROLE_INFORMATION
 
 from config import PG_DEFAULT_DRIVER
 
 
 class RoleModule(CollectionNodeModule):
-    NODE_TYPE = 'role'
-    COLLECTION_LABEL = _("Login/Group Roles")
+    _NODE_TYPE = 'role'
+    _COLLECTION_LABEL = _("Login/Group Roles")
 
     def __init__(self, *args, **kwargs):
         self.min_ver = None
@@ -54,7 +55,7 @@ class RoleModule(CollectionNodeModule):
         Load the module script for server, when any of the server-group node is
         initialized.
         """
-        return sg.ServerGroupModule.NODE_TYPE
+        return sg.ServerGroupModule.node_type
 
     @property
     def csssnippets(self):
@@ -63,7 +64,7 @@ class RoleModule(CollectionNodeModule):
         """
         snippets = [
             render_template(
-                "browser/css/collection.css",
+                self._COLLECTION_CSS,
                 node_type=self.node_type
             ),
             render_template("roles/css/role.css")]
@@ -111,68 +112,141 @@ class RoleView(PGChildNodeView):
         'variables': [{'get': 'variables'}],
     })
 
-    def validate_request(f):
-        @wraps(f)
-        def wrap(self, **kwargs):
+    def _validate_input_dict_for_new(self, data, req_keys):
+        """
+        This functions validates the input dict and check for required
+        keys in the dict when creating a new object
+        :param data: input dict
+        :param req_keys: required keys
+        :return: Valid or Invalid
+        """
+        if not isinstance(data, list):
+            return False
 
-            data = None
-            if request.data:
-                data = json.loads(request.data, encoding='utf-8')
-            else:
-                data = dict()
-                req = request.args or request.form
+        for item in data:
+            if not isinstance(item, dict):
+                return False
 
-                for key in req:
+            for a_key in req_keys:
+                if a_key not in item:
+                    return False
 
-                    val = req[key]
-                    if key in [
-                        u'rolcanlogin', u'rolsuper', u'rolcreatedb',
-                        u'rolcreaterole', u'rolinherit', u'rolreplication',
-                        u'rolcatupdate', u'variables', u'rolmembership',
-                        u'seclabels'
-                    ]:
-                        data[key] = json.loads(val, encoding='utf-8')
-                    else:
-                        data[key] = val
+        return True
 
-            if (u'rid' not in kwargs or kwargs['rid'] == -1) and \
-                    u'rolname' not in data:
-                return precondition_required(
-                    _("Name must be specified.")
-                )
+    def _validate_input_dict_for_update(
+            self, data, req_add_keys, req_delete_keys):
+        """
+        This functions validates the input dict and check for required
+        keys in the dict when updating an existing object
+        :param data: input dict
+        :param req_add_keys: required keys when adding, updating
+        :param req_delete_keys: required keys when deleting
+        :return: Valid or Invalid
+        """
+        if not isinstance(data, dict):
+            return False
 
-            if u'rolvaliduntil' in data:
-                # Make date explicit so that it works with every
-                # postgres database datestyle format
-                try:
-                    if data[u'rolvaliduntil'] is not None and \
-                            data[u'rolvaliduntil'] != '' and \
-                            len(data[u'rolvaliduntil']) > 0:
-                        data[u'rolvaliduntil'] = dateutil_parser.parse(
-                            data[u'rolvaliduntil']
-                        ).isoformat()
-                except Exception:
-                    return precondition_required(
-                        _("Date format is invalid.")
-                    )
+        for op in ['added', 'deleted', 'changed']:
+            op_data = data.get(op, [])
+            check_keys = req_add_keys \
+                if op in ['added', 'changed'] else req_delete_keys
+            if not self._validate_input_dict_for_new(op_data, check_keys):
+                return False
 
-            if u'rolconnlimit' in data:
-                # If roleconnlimit is empty string then set it to -1
-                if data[u'rolconnlimit'] == '':
-                    data[u'rolconnlimit'] = -1
+        return True
 
-                if data[u'rolconnlimit'] is not None:
-                    data[u'rolconnlimit'] = int(data[u'rolconnlimit'])
-                    if type(data[u'rolconnlimit']) != int or \
-                            data[u'rolconnlimit'] < -1:
-                        return precondition_required(
-                            _("Connection limit must be an integer value "
-                              "or equal to -1.")
-                        )
+    def _validate_rolvaliduntil(self, data):
+        """
+        Validate the rolvaliduntil in input data dict
+        :param data: role data
+        :return: valid or invalid message
+        """
+        if 'rolvaliduntil' in data:
+            # Make date explicit so that it works with every
+            # postgres database datestyle format
+            try:
+                if data['rolvaliduntil'] is not None and \
+                    data['rolvaliduntil'] != '' and \
+                        len(data['rolvaliduntil']) > 0:
+                    data['rolvaliduntil'] = dateutil_parser.parse(
+                        data['rolvaliduntil']
+                    ).isoformat()
+            except Exception:
+                return _("Date format is invalid.")
 
-            if u'rolmembership' in data:
-                if u'rid' not in kwargs or kwargs['rid'] == -1:
-                    msg = _("""
+        return None
+
+    def _validate_rolconnlimit(self, data):
+        """
+        Validate the rolconnlimit data dict
+        :param data: role data
+        :return: valid or invalid message
+        """
+        if 'rolconnlimit' in data:
+            # If roleconnlimit is empty string then set it to -1
+            if data['rolconnlimit'] == '':
+                data['rolconnlimit'] = -1
+
+            if data['rolconnlimit'] is not None:
+                data['rolconnlimit'] = int(data['rolconnlimit'])
+                if not isinstance(data['rolconnlimit'], int) or \
+                        data['rolconnlimit'] < -1:
+                    return _("Connection limit must be an integer value "
+                             "or equal to -1.")
+        return None
+
+    def _process_rolemembership(self, id, data):
+        """
+        Process the input rolemembership list to appropriate keys
+        :param id: id of role
+        :param data: input role data
+        """
+        def _part_dict_list(dict_list, condition, list_key=None):
+            ret_val = []
+            for d in dict_list:
+                if condition(d):
+                    ret_val.append(d[list_key])
+
+            return ret_val
+
+        if id == -1:
+            data['members'] = []
+            data['admins'] = []
+
+            data['admins'] = _part_dict_list(
+                data['rolmembership'], lambda d: d['admin'], 'role')
+            data['members'] = _part_dict_list(
+                data['rolmembership'], lambda d: not d['admin'], 'role')
+        else:
+            data['admins'] = _part_dict_list(
+                data['rolmembership'].get('added', []),
+                lambda d: d['admin'], 'role')
+            data['members'] = _part_dict_list(
+                data['rolmembership'].get('added', []),
+                lambda d: not d['admin'], 'role')
+
+            data['admins'].extend(_part_dict_list(
+                data['rolmembership'].get('changed', []),
+                lambda d: d['admin'], 'role'))
+            data['revoked_admins'] = _part_dict_list(
+                data['rolmembership'].get('changed', []),
+                lambda d: not d['admin'], 'role')
+
+            data['revoked'] = _part_dict_list(
+                data['rolmembership'].get('deleted', []),
+                lambda _: True, 'role')
+
+    def _validate_rolemembership(self, id, data):
+        """
+        Validate the rolmembership data dict
+        :param data: role data
+        :return: valid or invalid message
+        """
+        if 'rolmembership' not in data:
+            return None
+
+        if id == -1:
+            msg = _("""
 Role membership information must be passed as an array of JSON objects in the
 following format:
 
@@ -182,23 +256,15 @@ rolmembership:[{
     },
     ...
 ]""")
-                    if type(data[u'rolmembership']) != list:
-                        return precondition_required(msg)
 
-                    data[u'members'] = []
-                    data[u'admins'] = []
+            if not self._validate_input_dict_for_new(
+                    data['rolmembership'], ['role', 'admin']):
+                return msg
 
-                    for r in data[u'rolmembership']:
-                        if type(r) != dict or u'role' not in r or \
-                                u'admin' not in r:
-                            return precondition_required(msg)
-                        else:
-                            if r[u'admin']:
-                                data[u'admins'].append(r[u'role'])
-                            else:
-                                data[u'members'].append(r[u'role'])
-                else:
-                    msg = _("""
+            self._process_rolemembership(id, data)
+            return None
+
+        msg = _("""
 Role membership information must be passed as a string representing an array of
 JSON objects in the following format:
 rolmembership:{
@@ -221,63 +287,24 @@ rolmembership:{
         ...
         ]
 """)
-                    if type(data[u'rolmembership']) != dict:
-                        return precondition_required(msg)
+        if not self._validate_input_dict_for_update(
+                data['rolmembership'], ['role', 'admin'], ['role']):
+            return msg
 
-                    data[u'members'] = []
-                    data[u'admins'] = []
-                    data[u'revoked_admins'] = []
-                    data[u'revoked'] = []
+        self._process_rolemembership(id, data)
+        return None
 
-                    if u'added' in data[u'rolmembership']:
-                        roles = (data[u'rolmembership'])[u'added']
+    def _validate_seclabels(self, id, data):
+        """
+        Validate the seclabels data dict
+        :param data: role data
+        :return: valid or invalid message
+        """
+        if 'seclabels' not in data or self.manager.version < 90200:
+            return None
 
-                        if type(roles) != list:
-                            return precondition_required(msg)
-
-                        for r in roles:
-                            if type(r) != dict or \
-                                    u'role' not in r or \
-                                    u'admin' not in r:
-                                return precondition_required(msg)
-
-                            if r[u'admin']:
-                                data[u'admins'].append(r[u'role'])
-                            else:
-                                data[u'members'].append(r[u'role'])
-
-                    if u'deleted' in data[u'rolmembership']:
-                        roles = (data[u'rolmembership'])[u'deleted']
-
-                        if type(roles) != list:
-                            return precondition_required(msg)
-
-                        for r in roles:
-                            if type(r) != dict or u'role' not in r:
-                                return precondition_required(msg)
-
-                            data[u'revoked'].append(r[u'role'])
-
-                    if u'changed' in data[u'rolmembership']:
-                        roles = (data[u'rolmembership'])[u'changed']
-
-                        if type(roles) != list:
-                            return precondition_required(msg)
-
-                        for r in roles:
-                            if type(r) != dict or \
-                                    u'role' not in r or \
-                                    u'admin' not in r:
-                                return precondition_required(msg)
-
-                            if not r[u'admin']:
-                                data[u'revoked_admins'].append(r[u'role'])
-                            else:
-                                data[u'admins'].append(r[u'role'])
-
-            if self.manager.version >= 90200 and u'seclabels' in data:
-                if u'rid' not in kwargs or kwargs['rid'] == -1:
-                    msg = _("""
+        if id == -1:
+            msg = _("""
 Security Label must be passed as an array of JSON objects in the following
 format:
 seclabels:[{
@@ -286,16 +313,13 @@ seclabels:[{
     },
     ...
 ]""")
-                    if type(data[u'seclabels']) != list:
-                        return precondition_required(msg)
+            if not self._validate_input_dict_for_new(
+                    data['seclabels'], ['provider', 'label']):
+                return msg
 
-                    for s in data[u'seclabels']:
-                        if type(s) != dict or \
-                                u'provider' not in s or \
-                                u'label' not in s:
-                            return precondition_required(msg)
-                else:
-                    msg = _("""
+            return None
+
+        msg = _("""
 Security Label must be passed as an array of JSON objects in the following
 format:
 seclabels:{
@@ -318,131 +342,210 @@ seclabels:{
         ...
         ]
 """)
-                    seclabels = data[u'seclabels']
-                    if type(seclabels) != dict:
-                        return precondition_required(msg)
+        if not self._validate_input_dict_for_update(
+                data['seclabels'], ['provider', 'label'], ['provider']):
+            return msg
 
-                    if u'added' in seclabels:
-                        new_seclabels = seclabels[u'added']
+        return None
 
-                        if type(new_seclabels) != list:
-                            return precondition_required(msg)
+    def _validate_variables(self, id, data):
+        """
+        Validate the variables data dict
+        :param data: role data
+        :return: valid or invalid message
+        """
+        if 'variables' not in data:
+            return None
 
-                        for s in new_seclabels:
-                            if type(s) != dict or \
-                                    u'provider' not in s or \
-                                    u'label' not in s:
-                                return precondition_required(msg)
-
-                    if u'deleted' in seclabels:
-                        removed_seclabels = seclabels[u'deleted']
-
-                        if type(removed_seclabels) != list:
-                            return precondition_required(msg)
-
-                        for s in removed_seclabels:
-                            if (type(s) != dict or u'provider' not in s):
-                                return precondition_required(msg)
-
-                    if u'changed' in seclabels:
-                        changed_seclabels = seclabels[u'deleted']
-
-                        if type(changed_seclabels) != list:
-                            return precondition_required(msg)
-
-                        for s in changed_seclabels:
-                            if type(s) != dict or \
-                                    u'provider' not in s and \
-                                    u'label' not in s:
-                                return precondition_required(msg)
-
-            if u'variables' in data:
-                if u'rid' not in kwargs or kwargs['rid'] == -1:
-                    msg = _("""
+        if id == -1:
+            msg = _("""
 Configuration parameters/variables must be passed as an array of JSON objects
 in the following format in create mode:
 variables:[{
+database: <database> or null,
+name: <configuration>,
+value: <value>
+},
+...
+]""")
+            if not self._validate_input_dict_for_new(
+                    data['variables'], ['name', 'value']):
+                return msg
+
+            return None
+
+        msg = _("""
+Configuration parameters/variables must be passed as an array of JSON objects
+in the following format in update mode:
+rolmembership:{
+'added': [{
     database: <database> or null,
     name: <configuration>,
     value: <value>
     },
     ...
-]""")
-                    if type(data[u'variables']) != list:
-                        return precondition_required(msg)
-
-                    for r in data[u'variables']:
-                        if type(r) != dict or u'name' not in r or \
-                                u'value' not in r:
-                            return precondition_required(msg)
-                else:
-                    msg = _("""
-Configuration parameters/variables must be passed as an array of JSON objects
-in the following format in update mode:
-rolmembership:{
-    'added': [{
-        database: <database> or null,
-        name: <configuration>,
-        value: <value>
-        },
-        ...
-        ],
-    'deleted': [{
-        database: <database> or null,
-        name: <configuration>,
-        value: <value>
-        },
-        ...
-        ],
-    'updated': [{
-        database: <database> or null,
-        name: <configuration>,
-        value: <value>
-        },
-        ...
-        ]
+    ],
+'deleted': [{
+    database: <database> or null,
+    name: <configuration>,
+    value: <value>
+    },
+    ...
+    ],
+'updated': [{
+    database: <database> or null,
+    name: <configuration>,
+    value: <value>
+    },
+    ...
+    ]
 """)
-                    variables = data[u'variables']
-                    if type(variables) != dict:
-                        return precondition_required(msg)
+        if not self._validate_input_dict_for_update(
+                data['variables'], ['name', 'value'], ['name']):
+            return msg
+        return None
 
-                    if u'added' in variables:
-                        new_vars = variables[u'added']
+    def _validate_rolname(self, id, data):
+        """
+        Validate the rolname data dict
+        :param data: role data
+        :return: valid or invalid message
+        """
+        if (id == -1) and 'rolname' not in data:
+            return precondition_required(
+                _("Name must be specified.")
+            )
+        return None
 
-                        if type(new_vars) != list:
-                            return precondition_required(msg)
+    def validate_request(f):
+        @wraps(f)
+        def wrap(self, **kwargs):
+            if request.data:
+                data = json.loads(request.data, encoding='utf-8')
+            else:
+                data = dict()
+                req = request.args or request.form
 
-                        for v in new_vars:
-                            if type(v) != dict or u'name' not in v or \
-                                    u'value' not in v:
-                                return precondition_required(msg)
+                for key in req:
 
-                    if u'deleted' in variables:
-                        delete_vars = variables[u'deleted']
+                    val = req[key]
+                    if key in [
+                        'rolcanlogin', 'rolsuper', 'rolcreatedb',
+                        'rolcreaterole', 'rolinherit', 'rolreplication',
+                        'rolcatupdate', 'variables', 'rolmembership',
+                        'seclabels'
+                    ]:
+                        data[key] = json.loads(val, encoding='utf-8')
+                    else:
+                        data[key] = val
 
-                        if type(delete_vars) != list:
-                            return precondition_required(msg)
+            invalid_msg = self._validate_rolname(kwargs.get('rid', -1), data)
+            if invalid_msg is not None:
+                return precondition_required(invalid_msg)
 
-                        for v in delete_vars:
-                            if type(v) != dict or u'name' not in v:
-                                return precondition_required(msg)
+            invalid_msg = self._validate_rolvaliduntil(data)
+            if invalid_msg is not None:
+                return precondition_required(invalid_msg)
 
-                    if u'changed' in variables:
-                        new_vars = variables[u'changed']
+            invalid_msg = self._validate_rolconnlimit(data)
+            if invalid_msg is not None:
+                return precondition_required(invalid_msg)
 
-                        if type(new_vars) != list:
-                            return precondition_required(msg)
+            invalid_msg = self._validate_rolemembership(
+                kwargs.get('rid', -1), data)
+            if invalid_msg is not None:
+                return precondition_required(invalid_msg)
 
-                        for v in new_vars:
-                            if type(v) != dict or u'name' not in v or \
-                                    u'value' not in v:
-                                return precondition_required(msg)
+            invalid_msg = self._validate_seclabels(
+                kwargs.get('rid', -1), data)
+            if invalid_msg is not None:
+                return precondition_required(invalid_msg)
+
+            invalid_msg = self._validate_variables(
+                kwargs.get('rid', -1), data)
+            if invalid_msg is not None:
+                return precondition_required(invalid_msg)
 
             self.request = data
 
             return f(self, **kwargs)
 
         return wrap
+
+    @staticmethod
+    def _check_action(action, kwargs):
+        check_permission = False
+        fetch_name = False
+        forbidden_msg = None
+        if action in ['drop', 'update']:
+            if 'rid' in kwargs:
+                fetch_name = True
+                check_permission = True
+
+            if action == 'drop':
+                forbidden_msg = _(
+                    "The current user does not have permission to drop"
+                    " the role."
+                )
+            else:
+                forbidden_msg = _(
+                    "The current user does not have permission to "
+                    "update the role."
+                )
+        elif action == 'create':
+            check_permission = True
+            forbidden_msg = _(
+                "The current user does not have permission to create "
+                "the role."
+            )
+        elif action == 'msql' and 'rid' in kwargs:
+            fetch_name = True
+
+        return fetch_name, check_permission, forbidden_msg
+
+    def _check_permission(self, check_permission, action, kwargs):
+        if check_permission:
+            user = self.manager.user_info
+
+            if not user['is_superuser'] and \
+                not user['can_create_role'] and \
+                (action != 'update' or 'rid' in kwargs) and \
+                kwargs['rid'] != -1 and \
+                    user['id'] != kwargs['rid']:
+                return True
+        return False
+
+    def _check_and_fetch_name(self, fetch_name, kwargs):
+        if fetch_name:
+            status, res = self.conn.execute_dict(
+                render_template(
+                    self.sql_path + 'permission.sql',
+                    rid=kwargs['rid'],
+                    conn=self.conn
+                )
+            )
+
+            if not status:
+                return True, internal_server_error(
+                    _(
+                        "Error retrieving the role information.\n{0}"
+                    ).format(res)
+                )
+
+            if len(res['rows']) == 0:
+                return True, gone(
+                    _("Could not find the role on the database "
+                      "server.")
+                )
+
+            row = res['rows'][0]
+
+            self.role = row['rolname']
+            self.rolCanLogin = row['rolcanlogin']
+            self.rolCatUpdate = row['rolcatupdate']
+            self.rolSuper = row['rolsuper']
+
+        return False, ''
 
     def check_precondition(action=None):
         """
@@ -479,81 +582,27 @@ rolmembership:{
                 self.sql_path = 'roles/sql/#{0}#'.format(self.manager.version)
 
                 self.alterKeys = [
-                    u'rolcanlogin', u'rolsuper', u'rolcreatedb',
-                    u'rolcreaterole', u'rolinherit', u'rolreplication',
-                    u'rolconnlimit', u'rolvaliduntil', u'rolpassword'
+                    'rolcanlogin', 'rolsuper', 'rolcreatedb',
+                    'rolcreaterole', 'rolinherit', 'rolreplication',
+                    'rolconnlimit', 'rolvaliduntil', 'rolpassword'
                 ] if self.manager.version >= 90200 else [
-                    u'rolcanlogin', u'rolsuper', u'rolcreatedb',
-                    u'rolcreaterole', u'rolinherit', u'rolconnlimit',
-                    u'rolvaliduntil', u'rolpassword'
+                    'rolcanlogin', 'rolsuper', 'rolcreatedb',
+                    'rolcreaterole', 'rolinherit', 'rolconnlimit',
+                    'rolvaliduntil', 'rolpassword'
                 ]
 
-                check_permission = False
-                fetch_name = False
-                forbidden_msg = None
+                fetch_name, check_permission, \
+                    forbidden_msg = RoleView._check_action(action, kwargs)
 
-                if action in ['drop', 'update']:
-                    if 'rid' in kwargs:
-                        fetch_name = True
-                        check_permission = True
+                is_permission_error = self._check_permission(check_permission,
+                                                             action, kwargs)
+                if is_permission_error:
+                    return forbidden(forbidden_msg)
 
-                    if action == 'drop':
-                        forbidden_msg = _(
-                            "The current user does not have permission to drop"
-                            " the role."
-                        )
-                    else:
-                        forbidden_msg = _(
-                            "The current user does not have permission to "
-                            "update the role."
-                        )
-                elif action == 'create':
-                    check_permission = True
-                    forbidden_msg = _(
-                        "The current user does not have permission to create "
-                        "the role."
-                    )
-                elif action == 'msql' and 'rid' in kwargs:
-                    fetch_name = True
-
-                if check_permission:
-                    user = self.manager.user_info
-
-                    if not user['is_superuser'] and \
-                            not user['can_create_role'] and \
-                            (action != 'update' or 'rid' in kwargs) and \
-                            kwargs['rid'] != -1 and \
-                            user['id'] != kwargs['rid']:
-                        return forbidden(forbidden_msg)
-
-                if fetch_name:
-                    status, res = self.conn.execute_dict(
-                        render_template(
-                            self.sql_path + 'permission.sql',
-                            rid=kwargs['rid'],
-                            conn=self.conn
-                        )
-                    )
-
-                    if not status:
-                        return internal_server_error(
-                            _(
-                                "Error retrieving the role information.\n{0}"
-                            ).format(res)
-                        )
-
-                    if len(res['rows']) == 0:
-                        return gone(
-                            _("Could not find the role on the database "
-                              "server.")
-                        )
-
-                    row = res['rows'][0]
-
-                    self.role = row['rolname']
-                    self.rolCanLogin = row['rolcanlogin']
-                    self.rolCatUpdate = row['rolcatupdate']
-                    self.rolSuper = row['rolsuper']
+                is_error, errmsg = self._check_and_fetch_name(fetch_name,
+                                                              kwargs)
+                if is_error:
+                    return errmsg
 
                 return f(self, **kwargs)
 
@@ -565,16 +614,13 @@ rolmembership:{
     def list(self, gid, sid):
         status, res = self.conn.execute_dict(
             render_template(
-                self.sql_path + 'properties.sql'
+                self.sql_path + self._PROPERTIES_SQL
             )
         )
 
         if not status:
             return internal_server_error(
-                _(
-                    "Error retrieving roles from the database server.\n{0}"
-                ).format(res)
-            )
+                _(ERROR_FETCHING_ROLE_INFORMATION + "\n{0}").format(res))
 
         self.transform(res)
 
@@ -587,16 +633,12 @@ rolmembership:{
     def nodes(self, gid, sid):
 
         status, rset = self.conn.execute_2darray(
-            render_template(self.sql_path + 'nodes.sql')
+            render_template(self.sql_path + self._NODES_SQL)
         )
 
         if not status:
             return internal_server_error(
-                _(
-                    "Error fetching role information from the database "
-                    "server.\n{0}"
-                ).format(rset)
-            )
+                _(ERROR_FETCHING_ROLE_INFORMATION + "\n{0}").format(rset))
 
         res = []
         for row in rset['rows']:
@@ -620,7 +662,7 @@ rolmembership:{
 
         status, rset = self.conn.execute_2darray(
             render_template(
-                self.sql_path + 'nodes.sql',
+                self.sql_path + self._NODES_SQL,
                 rid=rid
             )
         )
@@ -628,10 +670,7 @@ rolmembership:{
         if not status:
             return internal_server_error(
                 _(
-                    "Error fetching role information from the database "
-                    "server.\n{0}"
-                ).format(rset)
-            )
+                    ERROR_FETCHING_ROLE_INFORMATION + "\n{0}").format(rset))
 
         for row in rset['rows']:
             return make_json_response(
@@ -645,7 +684,7 @@ rolmembership:{
                 status=200
             )
 
-        return gone(_("Could not find the role information."))
+        return gone()
 
     def transform(self, rset):
         for row in rset['rows']:
@@ -674,21 +713,18 @@ rolmembership:{
 
         status, res = self.conn.execute_dict(
             render_template(
-                self.sql_path + 'properties.sql',
+                self.sql_path + self._PROPERTIES_SQL,
                 rid=rid
             )
         )
 
         if not status:
             return internal_server_error(
-                _(
-                    "Error retrieving roles from the database server.\n{0}"
-                ).format(res)
-            )
+                _(ERROR_FETCHING_ROLE_INFORMATION + "\n{0}").format(res))
 
         self.transform(res)
         if len(res['rows']) == 0:
-            return gone(_("Could not find the role information."))
+            return gone(self.not_found_error_msg())
 
         res['rows'][0]['is_sys_obj'] = (
             res['rows'][0]['oid'] <= self.datlastsysoid)
@@ -733,8 +769,8 @@ rolmembership:{
             row = res['rows'][0]
 
             status, res = self.conn.execute_2darray(
-                u"DROP ROLE {0};".format(self.qtIdent(self.conn,
-                                                      row['rolname']))
+                "DROP ROLE {0};".format(self.qtIdent(self.conn,
+                                                     row['rolname']))
             )
             if not status:
                 return internal_server_error(
@@ -773,7 +809,7 @@ rolmembership:{
     def create(self, gid, sid):
 
         sql = render_template(
-            self.sql_path + 'create.sql',
+            self.sql_path + self._CREATE_SQL,
             data=self.request,
             dummy=False,
             conn=self.conn
@@ -788,16 +824,15 @@ rolmembership:{
 
         status, rid = self.conn.execute_scalar(
             "SELECT oid FROM pg_roles WHERE rolname = %(rolname)s",
-            {'rolname': self.request[u'rolname']}
+            {'rolname': self.request['rolname']}
         )
 
         if not status:
             return internal_server_error(
-                _("Could not retrieve the role information.\n{0}").format(msg)
-            )
+                _(ERROR_FETCHING_ROLE_INFORMATION + "\n{0}").format(msg))
 
         status, rset = self.conn.execute_dict(
-            render_template(self.sql_path + 'nodes.sql',
+            render_template(self.sql_path + self._NODES_SQL,
                             rid=rid
                             )
         )
@@ -805,10 +840,7 @@ rolmembership:{
         if not status:
             return internal_server_error(
                 _(
-                    "Error fetching role information from the database "
-                    "server.\n{0}"
-                ).format(rset)
-            )
+                    ERROR_FETCHING_ROLE_INFORMATION + "\n{0}").format(rset))
         for row in rset['rows']:
             return jsonify(
                 node=self.blueprint.generate_browser_node(
@@ -819,14 +851,14 @@ rolmembership:{
                 )
             )
 
-        return gone(_("Could not find the role information."))
+        return gone(self.not_found_error_msg())
 
     @check_precondition(action='update')
     @validate_request
     def update(self, gid, sid, rid):
 
         sql = render_template(
-            self.sql_path + 'update.sql',
+            self.sql_path + self._UPDATE_SQL,
             data=self.request,
             dummy=False,
             conn=self.conn,
@@ -845,18 +877,14 @@ rolmembership:{
             )
 
         status, rset = self.conn.execute_dict(
-            render_template(self.sql_path + 'nodes.sql',
+            render_template(self.sql_path + self._NODES_SQL,
                             rid=rid
                             )
         )
 
         if not status:
             return internal_server_error(
-                _(
-                    "Error fetching role information from the database "
-                    "server.\n{0}"
-                ).format(rset)
-            )
+                _(ERROR_FETCHING_ROLE_INFORMATION + "\n{0}").format(rset))
 
         for row in rset['rows']:
             return jsonify(
@@ -869,7 +897,7 @@ rolmembership:{
                 )
             )
 
-        return gone(_("Could not find the role information."))
+        return gone(self.not_found_error_msg())
 
     @check_precondition(action='msql')
     @validate_request
@@ -877,7 +905,7 @@ rolmembership:{
         if rid is None:
             return make_json_response(
                 data=render_template(
-                    self.sql_path + 'create.sql',
+                    self.sql_path + self._CREATE_SQL,
                     data=self.request,
                     dummy=True,
                     conn=self.conn
@@ -886,7 +914,7 @@ rolmembership:{
         else:
             return make_json_response(
                 data=render_template(
-                    self.sql_path + 'update.sql',
+                    self.sql_path + self._UPDATE_SQL,
                     data=self.request,
                     dummy=True,
                     conn=self.conn,
@@ -931,6 +959,74 @@ rolmembership:{
             response=dependents_result,
             status=200
         )
+
+    @staticmethod
+    def _handle_dependents_type(types, type_str, type_name, rel_name, row):
+        if types[type_str[0]] is None:
+            if type_str[0] == 'i':
+                type_name = 'index'
+                rel_name = row['indname'] + ' ON ' + rel_name
+            elif type_str[0] == 'o':
+                type_name = 'operator'
+                rel_name = row['relname']
+        else:
+            type_name = types[type_str[0]]
+
+        return type_name, rel_name
+
+    @staticmethod
+    def _handle_dependents_data(result, types, dependents, db_row):
+        for row in result['rows']:
+            rel_name = row['nspname']
+            if rel_name is not None:
+                rel_name += '.'
+
+            if rel_name is None:
+                rel_name = row['relname']
+            else:
+                rel_name += row['relname']
+
+            type_name = ''
+            type_str = row['relkind']
+            # Fetch the type name from the dictionary
+            # if type is not present in the types dictionary then
+            # we will continue and not going to add it.
+            if type_str[0] in types:
+                # if type is present in the types dictionary, but it's
+                # value is None then it requires special handling.
+                type_name, rel_name = RoleView._handle_dependents_type(
+                    types, type_str, type_name, rel_name, row)
+            else:
+                continue
+
+            dependents.append(
+                {
+                    'type': type_name,
+                    'name': rel_name,
+                    'field': db_row['datname']
+                }
+            )
+
+    def _temp_connection_check(self, rid, temp_conn, db_row, types,
+                               dependents):
+        if temp_conn.connected():
+            query = render_template(
+                "/".join([self.sql_path, 'dependents.sql']),
+                fetch_dependents=True, rid=rid,
+                lastsysoid=db_row['datlastsysoid']
+            )
+
+            status, result = temp_conn.execute_dict(query)
+            if not status:
+                current_app.logger.error(result)
+
+            RoleView._handle_dependents_data(result, types, dependents, db_row)
+
+    @staticmethod
+    def _release_connection(is_connected, manager, db_row):
+        # Release only those connections which we have created above.
+        if not is_connected:
+            manager.release(db_row['datname'])
 
     def get_dependents(self, conn, sid, rid):
         """
@@ -1009,59 +1105,9 @@ rolmembership:{
             except Exception as e:
                 current_app.logger.exception(e)
 
-            if temp_conn.connected():
-                query = render_template(
-                    "/".join([self.sql_path, 'dependents.sql']),
-                    fetch_dependents=True, rid=rid,
-                    lastsysoid=db_row['datlastsysoid']
-                )
-
-                status, result = temp_conn.execute_dict(query)
-                if not status:
-                    current_app.logger.error(result)
-
-                for row in result['rows']:
-                    rel_name = row['nspname']
-                    if rel_name is not None:
-                        rel_name += '.'
-
-                    if rel_name is None:
-                        rel_name = row['relname']
-                    else:
-                        rel_name += row['relname']
-
-                    type_name = ''
-                    type_str = row['relkind']
-                    # Fetch the type name from the dictionary
-                    # if type is not present in the types dictionary then
-                    # we will continue and not going to add it.
-                    if type_str[0] in types:
-
-                        # if type is present in the types dictionary, but it's
-                        # value is None then it requires special handling.
-                        if types[type_str[0]] is None:
-                            if type_str[0] == 'i':
-                                type_name = 'index'
-                                rel_name = row['indname'] + ' ON ' + rel_name
-                            elif type_str[0] == 'o':
-                                type_name = 'operator'
-                                rel_name = row['relname']
-                        else:
-                            type_name = types[type_str[0]]
-                    else:
-                        continue
-
-                    dependents.append(
-                        {
-                            'type': type_name,
-                            'name': rel_name,
-                            'field': db_row['datname']
-                        }
-                    )
-
-                # Release only those connections which we have created above.
-                if not is_connected:
-                    manager.release(db_row['datname'])
+            self._temp_connection_check(rid, temp_conn, db_row, types,
+                                        dependents)
+            RoleView._release_connection(is_connected, manager, db_row)
 
         return dependents
 

@@ -29,7 +29,6 @@ module.exports =  Alertify.dialog('fileSelectionDlg', function() {
       this.set('title', params['dialog_title']);
       this.params = JSON.stringify(params);
 
-      this.elements.dialog.style.minWidth = '630px';
       this.show();
 
     },
@@ -78,7 +77,8 @@ module.exports =  Alertify.dialog('fileSelectionDlg', function() {
           $($(self.elements.footer).find('.file_manager_ok')).trigger('click');
         });
       }, 200);
-      self.__internal.buttons[1].element.disabled = true;
+      if(self.__internal.buttons[1])
+        self.__internal.buttons[1].element.disabled = true;
     },
     setup: function() {
       return {

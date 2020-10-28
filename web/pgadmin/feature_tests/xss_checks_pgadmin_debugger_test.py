@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 import random
 
 from selenium.webdriver import ActionChains
@@ -45,7 +44,7 @@ class CheckDebuggerForXssFeatureTest(BaseFeatureTest):
 
         if test_utils.does_function_exist(self.server, self.test_db,
                                           self.function_name) != 'True':
-            raise Exception("The required function is not found")
+            raise RuntimeError("The required function is not found")
 
     def runTest(self):
         self.page.wait_for_spinner_to_disappear()
@@ -88,7 +87,7 @@ class CheckDebuggerForXssFeatureTest(BaseFeatureTest):
                            "contains(@class,'ajs-header')]")
             ))
 
-        except TimeoutException as e:
+        except TimeoutException:
             is_error = None
 
         # If debugger plugin is not found

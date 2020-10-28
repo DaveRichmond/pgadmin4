@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 
 from pgadmin.browser.server_groups.servers.databases.tests import \
     utils as database_utils
@@ -49,7 +48,7 @@ class ExtensionsGetTestCase(BaseTestGenerator):
                 self.server_id) + '/' +
             str(self.db_id) + '/' + str(self.extension_id),
             content_type='html/json')
-        self.assertEquals(response.status_code, 200)
+        self.assertEqual(response.status_code, 200)
 
     def tearDown(self):
         """This function disconnect the test database and drop added

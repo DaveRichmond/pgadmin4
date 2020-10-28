@@ -154,7 +154,6 @@ define([
 
       if (_.isUndefined(options) || _.isNull(options)) {
         options = attributes || {};
-        attributes = null;
       }
 
       self.sessAttrs = {};
@@ -367,8 +366,12 @@ define([
             return;
           }
           attrs[k] = v;
+          const attrsDefined = self.origSessAttrs[k] && v;
           /* If the orig value was null and new one is empty string, then its a "no change" */
-          if (_.isEqual(self.origSessAttrs[k], v) || (self.origSessAttrs[k] === null && v === '')) {
+          /* If the orig value and new value are of different datatype but of same value(numeric) "no change" */
+          if (_.isEqual(self.origSessAttrs[k], v)
+            || (self.origSessAttrs[k] === null && v === '')
+            || (attrsDefined ? _.isEqual(self.origSessAttrs[k].toString(), v.toString()) : false)) {
             delete self.sessAttrs[k];
           } else {
             self.sessAttrs[k] = v;
@@ -383,8 +386,8 @@ define([
         }
 
         self.trigger('pgadmin-session:set', self, attrs);
-        if (!options || !options.silent) {
-          self.trigger('change', self, options);
+        if (!opts || !opts.silent) {
+          self.trigger('change', self, opts);
         }
 
         // Perform default validations.
@@ -1025,128 +1028,125 @@ define([
       return (_.findIndex(this.sessAttrs[type], comparator));
     },
     onModelAdd: function(obj) {
-      if (!this.trackChanges)
-        return true;
+      if (this.trackChanges) {
+        var self = this,
+          msg,
+          idx = self.objFindInSession(obj, 'deleted');
 
-      var self = this,
-        msg,
-        idx = self.objFindInSession(obj, 'deleted');
+        // Hmm.. - it was originally deleted from this collection, we should
+        // remove it from the 'deleted' list.
+        if (idx >= 0) {
+          var origObj = self.sessAttrs['deleted'][idx];
 
-      // Hmm.. - it was originally deleted from this collection, we should
-      // remove it from the 'deleted' list.
-      if (idx >= 0) {
-        var origObj = self.sessAttrs['deleted'][idx];
+          obj.origSessAttrs = _.clone(origObj.origSessAttrs);
+          obj.attributes = _.extend(obj.attributes, origObj.attributes);
+          obj.sessAttrs = _.clone(origObj.sessAttrs);
 
-        obj.origSessAttrs = _.clone(origObj.origSessAttrs);
-        obj.attributes = _.extend(obj.attributes, origObj.attributes);
-        obj.sessAttrs = _.clone(origObj.sessAttrs);
+          self.sessAttrs['deleted'].splice(idx, 1);
 
-        self.sessAttrs['deleted'].splice(idx, 1);
-
-        // It has been changed originally!
-        if ((!('sessChanged' in obj)) || obj.sessChanged()) {
-          self.sessAttrs['changed'].push(obj);
-        }
-
-        (self.handler || self).trigger('pgadmin-session:added', self, obj);
-
-
-        if ('default_validate' in obj && typeof(obj.default_validate) == 'function') {
-          msg = obj.default_validate();
-        }
-
-        if (_.isString(msg)) {
-          (self.sessAttrs['invalid'])[obj.cid] = msg;
-        } else if ('validate' in obj && typeof(obj.validate) === 'function') {
-          msg = obj.validate();
-
-          if (msg) {
-            (self.sessAttrs['invalid'])[obj.cid] = msg;
+          // It has been changed originally!
+          if ((!('sessChanged' in obj)) || obj.sessChanged()) {
+            self.sessAttrs['changed'].push(obj);
           }
-        }
-      } else {
 
-        if ('default_validate' in obj && typeof(obj.default_validate) == 'function') {
-          msg = obj.default_validate();
-        }
+          (self.handler || self).trigger('pgadmin-session:added', self, obj);
 
-        if (_.isString(msg)) {
-          (self.sessAttrs['invalid'])[obj.cid] = msg;
-        } else if ('validate' in obj && typeof(obj.validate) === 'function') {
-          msg = obj.validate();
 
-          if (msg) {
-            (self.sessAttrs['invalid'])[obj.cid] = msg;
+          if ('default_validate' in obj && typeof(obj.default_validate) == 'function') {
+            msg = obj.default_validate();
           }
-        }
-        self.sessAttrs['added'].push(obj);
 
-        /*
-         * Session has been changed
-         */
-        (self.handler || self).trigger('pgadmin-session:added', self, obj);
+          if (_.isString(msg)) {
+            (self.sessAttrs['invalid'])[obj.cid] = msg;
+          } else if ('validate' in obj && typeof(obj.validate) === 'function') {
+            msg = obj.validate();
+
+            if (msg) {
+              (self.sessAttrs['invalid'])[obj.cid] = msg;
+            }
+          }
+        } else {
+
+          if ('default_validate' in obj && typeof(obj.default_validate) == 'function') {
+            msg = obj.default_validate();
+          }
+
+          if (_.isString(msg)) {
+            (self.sessAttrs['invalid'])[obj.cid] = msg;
+          } else if ('validate' in obj && typeof(obj.validate) === 'function') {
+            msg = obj.validate();
+
+            if (msg) {
+              (self.sessAttrs['invalid'])[obj.cid] = msg;
+            }
+          }
+          self.sessAttrs['added'].push(obj);
+
+          /*
+           * Session has been changed
+           */
+          (self.handler || self).trigger('pgadmin-session:added', self, obj);
+        }
+
+        // Let the parent/listener know about my status (valid/invalid).
+        this.triggerValidationEvent.apply(this);
       }
-
-      // Let the parent/listener know about my status (valid/invalid).
-      this.triggerValidationEvent.apply(this);
 
       return true;
     },
     onModelRemove: function(obj) {
-      if (!this.trackChanges)
-        return true;
+      if (this.trackChanges) {
+        /* Once model is removed from collection clear its errorModel as it's no longer relevant
+         * for us. Otherwise it creates problem in 'clearInvalidSessionIfModelValid' function.
+         */
+        obj.errorModel.clear();
 
-      /* Once model is removed from collection clear its errorModel as it's no longer relevant
-       * for us. Otherwise it creates problem in 'clearInvalidSessionIfModelValid' function.
-       */
-      obj.errorModel.clear();
+        var self = this,
+          invalidModels = self.sessAttrs['invalid'],
+          copy = _.clone(obj),
+          idx = self.objFindInSession(obj, 'added');
 
-      var self = this,
-        invalidModels = self.sessAttrs['invalid'],
-        copy = _.clone(obj),
-        idx = self.objFindInSession(obj, 'added');
+        // We need to remove it from the invalid object list first.
+        if (obj.cid in invalidModels) {
+          delete invalidModels[obj.cid];
+        }
 
-      // We need to remove it from the invalid object list first.
-      if (obj.cid in invalidModels) {
-        delete invalidModels[obj.cid];
+        // Hmm - it was newly added, we can safely remove it.
+        if (idx >= 0) {
+          self.sessAttrs['added'].splice(idx, 1);
+
+          (self.handler || self).trigger('pgadmin-session:removed', self, copy);
+
+          self.checkDuplicateWithModel(copy);
+
+          // Let the parent/listener know about my status (valid/invalid).
+          this.triggerValidationEvent.apply(this);
+        } else {
+          // Hmm - it was changed in this session, we should remove it from the
+          // changed models.
+          idx = self.objFindInSession(obj, 'changed');
+
+          if (idx >= 0) {
+            self.sessAttrs['changed'].splice(idx, 1);
+            (self.handler || self).trigger('pgadmin-session:removed', self, copy);
+          } else {
+            (self.handler || self).trigger('pgadmin-session:removed', self, copy);
+          }
+          /* When removing the object use the original session attrs and not the changed ones */
+          obj.set(obj.origSessAttrs, {silent: true});
+          self.sessAttrs['deleted'].push(obj);
+
+          self.checkDuplicateWithModel(obj);
+
+          // Let the parent/listener know about my status (valid/invalid).
+          this.triggerValidationEvent.apply(this);
+        }
+
+        /*
+         * This object has been remove, we need to check (if we still have any
+         * other invalid message pending).
+         */
       }
-
-      // Hmm - it was newly added, we can safely remove it.
-      if (idx >= 0) {
-        self.sessAttrs['added'].splice(idx, 1);
-
-        (self.handler || self).trigger('pgadmin-session:removed', self, copy);
-
-        self.checkDuplicateWithModel(copy);
-
-        // Let the parent/listener know about my status (valid/invalid).
-        this.triggerValidationEvent.apply(this);
-
-        return true;
-      }
-
-      // Hmm - it was changed in this session, we should remove it from the
-      // changed models.
-      idx = self.objFindInSession(obj, 'changed');
-
-      if (idx >= 0) {
-        self.sessAttrs['changed'].splice(idx, 1);
-        (self.handler || self).trigger('pgadmin-session:removed', self, copy);
-      } else {
-        (self.handler || self).trigger('pgadmin-session:removed', self, copy);
-      }
-
-      self.sessAttrs['deleted'].push(obj);
-
-      self.checkDuplicateWithModel(obj);
-
-      // Let the parent/listener know about my status (valid/invalid).
-      this.triggerValidationEvent.apply(this);
-
-      /*
-       * This object has been remove, we need to check (if we still have any
-       * other invalid message pending).
-       */
 
       return true;
     },
@@ -1190,52 +1190,39 @@ define([
     onModelChange: function(obj) {
       var self = this;
 
-      if (!this.trackChanges || !(obj instanceof pgBrowser.Node.Model))
-        return true;
+      if (this.trackChanges && obj instanceof pgBrowser.Node.Model) {
+        var idx = self.objFindInSession(obj, 'added');
 
-      var idx = self.objFindInSession(obj, 'added');
-
-      // It was newly added model, we don't need to add into the changed
-      // list.
-      if (idx >= 0) {
-        (self.handler || self).trigger('pgadmin-session:changed', self, obj);
-
-        return true;
-      }
-
-      idx = self.objFindInSession(obj, 'changed');
-
-      if (!('sessChanged' in obj)) {
-        (self.handler || self).trigger('pgadmin-session:changed', self, obj);
-
+        // It was newly added model, we don't need to add into the changed
+        // list.
         if (idx >= 0) {
-          return true;
-        }
-
-        self.sessAttrs['changed'].push(obj);
-
-        return true;
-      }
-
-      if (idx >= 0) {
-
-        if (!obj.sessChanged()) {
-          // This object is no more updated, removing it from the changed
-          // models list.
-          self.sessAttrs['changed'].splice(idx, 1);
-
           (self.handler || self).trigger('pgadmin-session:changed', self, obj);
-          return true;
+        } else {
+          idx = self.objFindInSession(obj, 'changed');
+
+          if (!('sessChanged' in obj)) {
+            (self.handler || self).trigger('pgadmin-session:changed', self, obj);
+
+            if (idx < 0) {
+              self.sessAttrs['changed'].push(obj);
+            }
+          } else {
+            if (idx >= 0) {
+              if (!obj.sessChanged()) {
+                // This object is no more updated, removing it from the changed
+                // models list.
+                self.sessAttrs['changed'].splice(idx, 1);
+
+                (self.handler || self).trigger('pgadmin-session:changed', self, obj);
+              } else {
+                (self.handler || self).trigger('pgadmin-session:changed', self, obj);
+              }
+            } else if (obj.sessChanged()) {
+              self.sessAttrs['changed'].push(obj);
+              (self.handler || self).trigger('pgadmin-session:changed', self, obj);
+            }
+          }
         }
-
-        (self.handler || self).trigger('pgadmin-session:changed', self, obj);
-
-        return true;
-      }
-
-      if (obj.sessChanged()) {
-        self.sessAttrs['changed'].push(obj);
-        (self.handler || self).trigger('pgadmin-session:changed', self, obj);
       }
 
       return true;
@@ -1282,12 +1269,12 @@ define([
       } else {
         var msg = 'Duplicate rows.';
         setTimeout(function() {
-          _.each(new_conflicting_models, function(m) {
+          _.each(new_conflicting_models, function(local_model) {
             self.trigger(
-              'pgadmin-session:model:invalid', msg, m, self.handler
+              'pgadmin-session:model:invalid', msg, local_model, self.handler
             );
-            m.trigger(
-              'pgadmin-session:model:duplicate', m, msg
+            local_model.trigger(
+              'pgadmin-session:model:duplicate', local_model, msg
             );
           });
         }, 10);

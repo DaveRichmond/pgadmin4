@@ -12,7 +12,7 @@
 from flask import render_template
 from flask_babelex import gettext as _
 from pgadmin.utils.ajax import internal_server_error
-from pgadmin.utils.exception import ObjectGone
+from pgadmin.utils.exception import ObjectGone, ExecuteError
 from functools import wraps
 
 
@@ -49,7 +49,7 @@ def get_parent(conn, tid, template_path=None):
                                     'get_parent.sql']), tid=tid)
     status, rset = conn.execute_2darray(SQL)
     if not status:
-        raise Exception(rset)
+        raise ExecuteError(rset)
 
     schema = ''
     table = ''
@@ -61,25 +61,30 @@ def get_parent(conn, tid, template_path=None):
 
 
 @get_template_path
-def get_sql(conn, data, did, tid, plid, datlastsysoid, schema, table,
-            mode=None, template_path=None):
+def get_sql(conn, **kwargs):
     """
     This function will generate sql from model data
     """
+    data = kwargs.get('data')
+    scid = kwargs.get('scid')
+    plid = kwargs.get('plid')
+    policy_table_id = kwargs.get('policy_table_id')
+    schema = kwargs.get('schema')
+    table = kwargs.get('table')
+    template_path = kwargs.get('template_path', None)
 
     if plid is not None:
-        sql = render_template("/".join(
-            [template_path, 'properties.sql']), plid=plid)
+        sql = render_template("/".join([template_path, 'properties.sql']),
+                              schema=schema, plid=plid, scid=scid,
+                              policy_table_id=policy_table_id)
         status, res = conn.execute_dict(sql)
         if not status:
             return internal_server_error(errormsg=res)
+
         if len(res['rows']) == 0:
-            raise ObjectGone(_('Could not find the index in the table.'))
-        res_data = dict(res['rows'][0])
+            raise ObjectGone(_('Could not find the policy in the table.'))
 
-        res = res_data
-
-        old_data = res
+        old_data = dict(res['rows'][0])
         old_data['schema'] = schema
         old_data['table'] = table
         sql = render_template(
@@ -91,48 +96,49 @@ def get_sql(conn, data, did, tid, plid, datlastsysoid, schema, table,
         data['table'] = table
         sql = render_template("/".join(
             [template_path, 'create.sql']), data=data)
+
     return sql, data['name'] if 'name' in data else old_data['name']
 
 
 @get_template_path
-def get_reverse_engineered_sql(conn, schema, table, did, tid, plid,
-                               datlastsysoid,
-                               template_path=None, with_header=True):
+def get_reverse_engineered_sql(conn, **kwargs):
     """
     This function will return reverse engineered sql for specified trigger.
-
-    :param conn: Connection Object
-    :param schema: Schema
-    :param table: Table
-    :param did: DB ID
-    :param tid: Table ID
-    :param plid: Policy ID
-    :param datlastsysoid:
-    :param template_path: Optional template path
-    :param with_header: Optional parameter to decide whether the SQL will be
-     returned with header or not
+    :param conn:
+    :param kwargs:
     :return:
     """
+    schema = kwargs.get('schema')
+    table = kwargs.get('table')
+    scid = kwargs.get('scid')
+    plid = kwargs.get('plid')
+    policy_table_id = kwargs.get('policy_table_id')
+    datlastsysoid = kwargs.get('datlastsysoid')
+    template_path = kwargs.get('template_path', None)
+    with_header = kwargs.get('with_header', True)
+
     SQL = render_template("/".join(
-        [template_path, 'properties.sql']), plid=plid)
+        [template_path, 'properties.sql']), plid=plid, scid=scid,
+        policy_table_id=policy_table_id)
 
     status, res = conn.execute_dict(SQL)
     if not status:
-        raise Exception(res)
+        raise ExecuteError(res)
 
     if len(res['rows']) == 0:
-        raise ObjectGone(_('Could not find the index in the table.'))
+        raise ObjectGone(_('Could not find the policy in the table.'))
 
     data = dict(res['rows'][0])
     # Adding parent into data dict, will be using it while creating sql
     data['schema'] = schema
     data['table'] = table
 
-    SQL, name = get_sql(conn, data, did, tid, None, datlastsysoid, schema,
-                        table)
-
+    SQL, name = get_sql(conn, data=data, scid=scid, plid=None,
+                        policy_table_id=policy_table_id,
+                        datlastsysoid=datlastsysoid, schema=schema,
+                        table=table)
     if with_header:
-        sql_header = u"-- POLICY: {0}\n\n-- ".format(data['name'])
+        sql_header = "-- POLICY: {0}\n\n-- ".format(data['name'])
 
         sql_header += render_template("/".join([template_path,
                                                 'delete.sql']),

@@ -15,7 +15,8 @@ to start a web server."""
 import sys
 
 if sys.version_info < (3, 4):
-    raise Exception('This application must be run under Python 3.4 or later.')
+    raise RuntimeError('This application must be run under Python 3.4 '
+                       'or later.')
 
 import builtins
 import os
@@ -33,7 +34,7 @@ else:
 
 import config
 from pgadmin import create_app
-from pgadmin.utils import u, fs_encoding, file_quote
+from pgadmin.utils import u_encode, fs_encoding, file_quote
 # Get the config database schema version. We store this in pgadmin.model
 # as it turns out that putting it in the config files isn't a great idea
 from pgadmin.model import SCHEMA_VERSION
@@ -79,8 +80,8 @@ config.SETTINGS_SCHEMA_VERSION = SCHEMA_VERSION
 # Check if the database exists. If it does not, create it.
 if not os.path.isfile(config.SQLITE_PATH):
     setup_py = os.path.join(
-        os.path.dirname(os.path.realpath(u(__file__, fs_encoding))),
-        u'setup.py'
+        os.path.dirname(os.path.realpath(u_encode(__file__, fs_encoding))),
+        'setup.py'
     )
     exec(open(file_quote(setup_py), 'r').read())
 
@@ -155,15 +156,15 @@ def main():
             JavascriptBundler, JsState
         app.debug = True
 
-        javascriptBundler = JavascriptBundler()
-        javascriptBundler.bundle()
-        if javascriptBundler.report() == JsState.NONE:
+        javascript_bundler = JavascriptBundler()
+        javascript_bundler.bundle()
+        if javascript_bundler.report() == JsState.NONE:
             app.logger.error(
                 "Unable to generate javascript.\n"
                 "To run the app ensure that yarn install command runs "
                 "successfully"
             )
-            raise Exception("No generated javascript, aborting")
+            raise RuntimeError("No generated javascript, aborting")
 
     # Output a startup message if we're not under the runtime and startup.
     # If we're under WSGI, we don't need to worry about this

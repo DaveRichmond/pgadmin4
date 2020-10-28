@@ -13,7 +13,7 @@ import simplejson as json
 from functools import wraps
 
 import pgadmin.browser.server_groups.servers.databases as databases
-from flask import render_template, request, jsonify
+from flask import render_template, request, jsonify, current_app
 from flask_babelex import gettext
 from pgadmin.browser.collection import CollectionNodeModule
 from pgadmin.browser.utils import PGChildNodeView
@@ -24,6 +24,8 @@ from config import PG_DEFAULT_DRIVER
 from pgadmin.browser.server_groups.servers.databases.schemas.tables. \
     row_security_policies import utils as row_security_policies_utils
 from pgadmin.utils.compile_template_name import compile_template_path
+from pgadmin.tools.schema_diff.node_registry import SchemaDiffRegistry
+from pgadmin.tools.schema_diff.directory_compare import directory_diff
 
 
 class RowSecurityModule(CollectionNodeModule):
@@ -50,8 +52,8 @@ class RowSecurityModule(CollectionNodeModule):
         initialized.
     """
 
-    NODE_TYPE = 'row_security_policy'
-    COLLECTION_LABEL = gettext('RLS Policies')
+    _NODE_TYPE = 'row_security_policy'
+    _COLLECTION_LABEL = gettext('RLS Policies')
 
     def __init__(self, *args, **kwargs):
         super(RowSecurityModule, self).__init__(*args, **kwargs)
@@ -59,15 +61,14 @@ class RowSecurityModule(CollectionNodeModule):
         self.min_ver = 90500
         self.max_ver = None
 
-    def get_nodes(self, gid, sid, did, scid, **kwargs):
+    def get_nodes(self, **kwargs):
         """
         Generate the collection node
-        :param gid: group id
-        :param sid: server id
-        :param did: database id
-        :param scid: Schema ID
         """
-        yield self.generate_browser_collection_node(did)
+        assert ('tid' in kwargs or 'vid' in kwargs)
+        yield self.generate_browser_collection_node(
+            kwargs['tid'] if 'tid' in kwargs else kwargs['vid']
+        )
 
     @property
     def node_inode(self):
@@ -82,7 +83,7 @@ class RowSecurityModule(CollectionNodeModule):
         Load the module script for policy, when any of the database node is
         initialized.
         """
-        return databases.DatabaseModule.NODE_TYPE
+        return databases.DatabaseModule.node_type
 
     @property
     def module_use_template_javascript(self):
@@ -124,31 +125,30 @@ class RowSecurityView(PGChildNodeView):
       - This function will used to create all the child node within that
       collection. Here it will create all the policy nodes.
 
-    * properties(gid, sid, did, rg_id)
+    * properties(gid, sid, did, plid)
       - This function will show the properties of the selected policy node
 
-    * create(gid, sid, did, rg_id)
+    * create(gid, sid, did, plid)
       - This function will create the new policy object
 
-    * update(gid, sid, did, rg_id)
+    * update(gid, sid, did, plid)
       - This function will update the data for the selected policy node
 
-    * delete(self, gid, sid, rg_id):
+    * delete(self, gid, sid, plid):
       - This function will drop the policy object
 
-    * msql(gid, sid, did, rg_id)
+    * msql(gid, sid, did, plid)
       - This function is used to return modified sql for the selected
       policy node
 
-    * get_sql(data, rg_id)
-      - This function will generate sql from model data
 
-    * sql(gid, sid, did, rg_id):
+    * sql(gid, sid, did, plid):
       - This function will generate sql to show in sql pane for the selected
       policy node.
     """
 
     node_type = blueprint.node_type
+    node_label = "RLS Policy"
 
     parent_ids = [
         {'type': 'int', 'id': 'gid'},
@@ -226,7 +226,8 @@ class RowSecurityView(PGChildNodeView):
 
         # fetch schema name by schema id
         sql = render_template("/".join(
-            [self.template_path, 'properties.sql']), tid=tid)
+            [self.template_path, self._PROPERTIES_SQL]), schema=self.schema,
+            tid=tid)
         status, res = self.conn.execute_dict(sql)
 
         if not status:
@@ -242,14 +243,14 @@ class RowSecurityView(PGChildNodeView):
         return single node
         """
         sql = render_template("/".join(
-            [self.template_path, 'nodes.sql']), plid=plid)
+            [self.template_path, self._NODES_SQL]), plid=plid)
 
         status, rset = self.conn.execute_2darray(sql)
         if not status:
             return internal_server_error(errormsg=rset)
 
         if len(rset['rows']) == 0:
-            return gone(gettext("""Could not find the policy in the table."""))
+            return gone(self.not_found_error_msg())
 
         res = self.blueprint.generate_browser_node(
             rset['rows'][0]['oid'],
@@ -270,7 +271,7 @@ class RowSecurityView(PGChildNodeView):
         """
         res = []
         sql = render_template("/".join(
-            [self.template_path, 'nodes.sql']), tid=tid)
+            [self.template_path, self._NODES_SQL]), tid=tid)
 
         status, rset = self.conn.execute_2darray(sql)
         if not status:
@@ -297,7 +298,7 @@ class RowSecurityView(PGChildNodeView):
         properties tab
 
         """
-        status, data = self._fetch_properties(plid)
+        status, data = self._fetch_properties(did, scid, tid, plid)
         if not status:
             return data
 
@@ -306,29 +307,37 @@ class RowSecurityView(PGChildNodeView):
             status=200
         )
 
-    def _fetch_properties(self, plid):
+    def _fetch_properties(self, did, scid, tid, plid):
         """
         This function is used to fetch the properties of the specified object
         :param plid:
         :return:
         """
         sql = render_template("/".join(
-            [self.template_path, 'properties.sql']
-        ), plid=plid, datlastsysoid=self.datlastsysoid)
+            [self.template_path, self._PROPERTIES_SQL]
+        ), plid=plid, scid=scid, policy_table_id=tid,
+            datlastsysoid=self.datlastsysoid)
         status, res = self.conn.execute_dict(sql)
 
         if not status:
             return False, internal_server_error(errormsg=res)
 
         if len(res['rows']) == 0:
-            return False, gone(
-                gettext("""Could not find the policy in the table."""))
+            return False, gone(self.not_found_error_msg())
 
         data = dict(res['rows'][0])
 
-        res = data
+        # Remove opening and closing bracket as we already have in jinja
+        # template.
+        if 'using' in data and data['using'] is not None and \
+                data['using'].startswith('(') and data['using'].endswith(')'):
+            data['using'] = data['using'][1:-1]
+        if 'withcheck' in data and data['withcheck'] is not None and \
+            data['withcheck'].startswith('(') and \
+                data['withcheck'].endswith(')'):
+            data['withcheck'] = data['withcheck'][1:-1]
 
-        return True, res
+        return True, data
 
     @check_precondition
     def create(self, gid, sid, did, scid, tid):
@@ -361,7 +370,8 @@ class RowSecurityView(PGChildNodeView):
                     ).format(arg)
                 )
         try:
-            sql = render_template("/".join([self.template_path, 'create.sql']),
+            sql = render_template("/".join([self.template_path,
+                                            self._CREATE_SQL]),
                                   data=data,
                                   conn=self.conn,
                                   )
@@ -404,12 +414,11 @@ class RowSecurityView(PGChildNodeView):
             request.data, encoding='utf-8'
         )
         try:
-            sql, name = row_security_policies_utils.get_sql(self.conn, data,
-                                                            did,
-                                                            tid, plid,
-                                                            self.datlastsysoid,
-                                                            self.schema,
-                                                            self.table)
+            sql, name = row_security_policies_utils.get_sql(
+                self.conn, data=data, scid=scid, plid=plid,
+                policy_table_id=tid,
+                schema=self.schema, table=self.table)
+
             # Most probably this is due to error
             if not isinstance(sql, str):
                 return sql
@@ -429,8 +438,24 @@ class RowSecurityView(PGChildNodeView):
         except Exception as e:
             return internal_server_error(errormsg=str(e))
 
+    @staticmethod
+    def get_policy_data(plid):
+        """
+        return policy data
+        :param plid:
+        :return: policy id
+        """
+        if plid is None:
+            data = request.form if request.form else json.loads(
+                request.data, encoding='utf-8'
+            )
+        else:
+            data = {'ids': [plid]}
+
+        return data
+
     @check_precondition
-    def delete(self, gid, sid, did, scid, tid, plid=None):
+    def delete(self, gid, sid, did, scid, tid, **kwargs):
         """
         This function will drop the policy object
         :param plid: policy id
@@ -439,25 +464,20 @@ class RowSecurityView(PGChildNodeView):
         :param gid: group id
         :param tid: table id
         :param scid: Schema ID
+        :param kwargs
         :return:
         """
-        # Below will deplide if it's simple drop or drop with cascade call
-        if self.cmd == 'delete':
-            # This is a cascade operation
-            cascade = True
-        else:
-            cascade = False
+        plid = kwargs.get('plid', None)
+        only_sql = kwargs.get('only_sql', False)
 
-        if plid is None:
-            data = request.form if request.form else json.loads(
-                request.data, encoding='utf-8'
-            )
-        else:
-            data = {'ids': [plid]}
+        # Below will deplide if it's simple drop or drop with cascade call
+        cascade = self._check_cascade_operation()
+
+        data = self.get_policy_data(plid)
 
         for plid in data['ids']:
             try:
-                # Get name for policy from plid
+                # Get name of policy using plid
                 sql = render_template("/".join([self.template_path,
                                                 'get_policy_name.sql']),
                                       plid=plid)
@@ -472,9 +492,7 @@ class RowSecurityView(PGChildNodeView):
                         errormsg=gettext(
                             'Error: Object not found.'
                         ),
-                        info=gettext(
-                            'The specified policy object could not be found.\n'
-                        )
+                        info=self.not_found_error_msg()
                     )
 
                 # drop policy
@@ -482,11 +500,13 @@ class RowSecurityView(PGChildNodeView):
                 result['schema'] = self.schema
                 result['table'] = self.table
                 sql = render_template("/".join([self.template_path,
-                                                'delete.sql']),
+                                                self._DELETE_SQL]),
                                       policy_name=result['name'],
                                       cascade=cascade,
                                       result=result
                                       )
+                if only_sql:
+                    return sql
                 status, res = self.conn.execute_scalar(sql)
                 if not status:
                     return internal_server_error(errormsg=res)
@@ -506,11 +526,9 @@ class RowSecurityView(PGChildNodeView):
         """
         data = dict(request.args)
 
-        sql, name = row_security_policies_utils.get_sql(self.conn, data, did,
-                                                        tid, plid,
-                                                        self.datlastsysoid,
-                                                        self.schema,
-                                                        self.table)
+        sql, name = row_security_policies_utils.get_sql(
+            self.conn, data=data, scid=scid, plid=plid, policy_table_id=tid,
+            schema=self.schema, table=self.table)
         if not isinstance(sql, str):
             return sql
         sql = sql.strip('\n').strip(' ')
@@ -526,24 +544,21 @@ class RowSecurityView(PGChildNodeView):
     def sql(self, gid, sid, did, scid, tid, plid):
         """
         This function will generate sql to render into the sql panel
+
+         Args:
+           gid: Server Group ID
+           sid: Server ID
+           did: Database ID
+           scid: Schema ID
+           tid: Table ID
+           plid: policy ID
         """
-        sql = render_template("/".join(
-            [self.template_path, 'properties.sql']), plid=plid)
-        status, res = self.conn.execute_dict(sql)
-        if not status:
-            return internal_server_error(errormsg=res)
-        if len(res['rows']) == 0:
-            return gone(gettext("""Could not find the policy in the table."""))
-        res = dict(res['rows'][0])
-        res_data = res
-        res_data['schema'] = self.schema
-        res_data['table'] = self.table
 
-        sql = render_template("/".join(
-            [self.template_path, 'create.sql']),
-            data=res_data, display_comments=True)
+        SQL = row_security_policies_utils.get_reverse_engineered_sql(
+            self.conn, schema=self.schema, table=self.table, scid=scid,
+            plid=plid, policy_table_id=tid, datlastsysoid=self.datlastsysoid)
 
-        return ajax_response(response=sql)
+        return ajax_response(response=SQL)
 
     @check_precondition
     def dependents(self, gid, sid, did, scid, tid, plid):
@@ -585,5 +600,149 @@ class RowSecurityView(PGChildNodeView):
             status=200
         )
 
+    @check_precondition
+    def get_sql_from_diff(self, **kwargs):
+        """
+        This function is used to get the DDL/DML statements.
+        :param kwargs
+        :return:
+        """
+        sid = kwargs.get('sid')
+        did = kwargs.get('did')
+        scid = kwargs.get('scid')
+        tid = kwargs.get('tid')
+        oid = kwargs.get('plid')
+        data = kwargs.get('data', None)
+        drop_req = kwargs.get('drop_req', False)
+        target_schema = kwargs.get('target_schema', None)
 
+        if data:
+            data['schema'] = self.schema
+            data['table'] = self.table
+            sql, name = row_security_policies_utils.get_sql(
+                self.conn, data=data, scid=scid, plid=oid,
+                schema=self.schema, table=self.table)
+
+            sql = sql.strip('\n').strip(' ')
+
+        else:
+            schema = self.schema
+            if target_schema:
+                schema = target_schema
+
+            sql = row_security_policies_utils.get_reverse_engineered_sql(
+                self.conn, schema=schema, table=self.table, scid=scid,
+                plid=oid, datlastsysoid=self.datlastsysoid, with_header=False)
+
+        drop_sql = ''
+        if drop_req:
+            drop_sql = '\n' + self.delete(gid=1, sid=sid, did=did,
+                                          scid=scid, tid=tid,
+                                          plid=oid, only_sql=True)
+        if drop_sql != '':
+            sql = drop_sql + '\n\n' + sql
+        return sql
+
+    @check_precondition
+    def fetch_objects_to_compare(self, sid, did, scid, tid, oid=None):
+        """
+        This function will fetch the list of all the policies for
+        specified schema id.
+
+        :param sid: Server Id
+        :param did: Database Id
+        :param scid: Schema Id
+        :param oid: Policy Id
+        :return:
+        """
+
+        res = dict()
+
+        if not oid:
+            SQL = render_template("/".join([self.template_path,
+                                            self._NODES_SQL]), tid=tid)
+            status, policies = self.conn.execute_2darray(SQL)
+            if not status:
+                current_app.logger.error(policies)
+                return False
+            for row in policies['rows']:
+                status, data = self._fetch_properties(did, scid, tid,
+                                                      row['oid'])
+                if status:
+                    res[row['name']] = data
+        else:
+            status, data = self._fetch_properties(did, scid, tid, oid)
+            if not status:
+                current_app.logger.error(data)
+                return False
+            res = data
+
+        return res
+
+    def ddl_compare(self, **kwargs):
+        """
+        This function returns the DDL/DML statements based on the
+        comparison status.
+
+        :param kwargs:
+        :return:
+        """
+
+        src_params = kwargs.get('source_params')
+        tgt_params = kwargs.get('target_params')
+        source = kwargs.get('source')
+        target = kwargs.get('target')
+        target_schema = kwargs.get('target_schema')
+        comp_status = kwargs.get('comp_status')
+
+        diff = ''
+        if comp_status == 'source_only':
+            diff = self.get_sql_from_diff(gid=src_params['gid'],
+                                          sid=src_params['sid'],
+                                          did=src_params['did'],
+                                          scid=src_params['scid'],
+                                          tid=src_params['tid'],
+                                          plid=source['oid'],
+                                          target_schema=target_schema)
+        elif comp_status == 'target_only':
+            diff = self.delete(gid=1,
+                               sid=tgt_params['sid'],
+                               did=tgt_params['did'],
+                               scid=tgt_params['scid'],
+                               tid=tgt_params['tid'],
+                               plid=target['oid'],
+                               only_sql=True)
+        elif comp_status == 'different':
+            diff_dict = directory_diff(
+                source, target, difference={}
+            )
+            if 'event' in diff_dict or 'type' in diff_dict:
+                delete_sql = self.get_sql_from_diff(gid=1,
+                                                    sid=tgt_params['sid'],
+                                                    did=tgt_params['did'],
+                                                    scid=tgt_params['scid'],
+                                                    tid=tgt_params['tid'],
+                                                    plid=target['oid'],
+                                                    drop_req=True)
+
+                diff = self.get_sql_from_diff(gid=src_params['gid'],
+                                              sid=src_params['sid'],
+                                              did=src_params['did'],
+                                              scid=src_params['scid'],
+                                              tid=src_params['tid'],
+                                              plid=source['oid'],
+                                              target_schema=target_schema)
+                return delete_sql + diff
+
+            diff = self.get_sql_from_diff(gid=tgt_params['gid'],
+                                          sid=tgt_params['sid'],
+                                          did=tgt_params['did'],
+                                          scid=tgt_params['scid'],
+                                          tid=tgt_params['tid'],
+                                          plid=target['oid'],
+                                          data=diff_dict)
+        return '\n' + diff
+
+
+SchemaDiffRegistry(blueprint.node_type, RowSecurityView, 'table')
 RowSecurityView.register_node_view(blueprint)

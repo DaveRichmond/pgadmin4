@@ -19,7 +19,7 @@ define('pgadmin.browser', [
   'pgadmin.browser.error', 'pgadmin.browser.frame',
   'pgadmin.browser.node', 'pgadmin.browser.collection', 'pgadmin.browser.activity',
   'sources/codemirror/addon/fold/pgadmin-sqlfoldcode',
-  'pgadmin.browser.keyboard', 'sources/tree/pgadmin_tree_save_state',
+  'pgadmin.browser.keyboard', 'sources/tree/pgadmin_tree_save_state','jquery.acisortable', 'jquery.acifragment',
 ], function(
   tree,
   gettext, url_for, require, $, _,
@@ -31,7 +31,6 @@ define('pgadmin.browser', [
   // Generally the one, which do no have AMD support.
   var wcDocker = window.wcDocker;
   $ = $ || window.jQuery || window.$;
-  Bootstrap = Bootstrap || window.Bootstrap;
   var CodeMirror = codemirror.default;
 
   var pgBrowser = pgAdmin.Browser = pgAdmin.Browser || {};
@@ -171,12 +170,50 @@ define('pgadmin.browser', [
       md: 700,
       lg: 900,
       default: 500,
+      // If you change above values then make sure to update
+      // calc method logic
+      calc: (passed_width) => {
+        let iw = window.innerWidth;
+        if(iw > passed_width){
+          return passed_width;
+        }else{
+          if (iw > pgAdmin.Browser.stdW.lg)
+            return pgAdmin.Browser.stdW.lg;
+          else if (iw > pgAdmin.Browser.stdW.md)
+            return pgAdmin.Browser.stdW.md;
+          else if (iw > pgAdmin.Browser.stdW.sm)
+            return pgAdmin.Browser.stdW.sm;
+          else
+            // if avilable screen resolution is still
+            // less then return the width value as it
+            return iw;
+        }
+
+      },
     },
     stdH: {
       sm: 200,
       md: 400,
       lg: 550,
       default: 550,
+      // If you change above values then make sure to update
+      // calc method logic
+      calc: (passed_height) => {
+        // We are excluding sm as it is too small for dialog
+        let ih = window.innerHeight;
+        if (ih > passed_height){
+          return passed_height;
+        }else{
+          if (ih > pgAdmin.Browser.stdH.lg)
+            return pgAdmin.Browser.stdH.lg;
+          else if (ih > pgAdmin.Browser.stdH.md)
+            return pgAdmin.Browser.stdH.md;
+          else
+            // if avilable screen resolution is still
+            // less then return the height value as it
+            return ih;
+        }
+      },
     },
     // Default panels
     panels: {
@@ -367,7 +404,7 @@ define('pgadmin.browser', [
       // Create the object menu dynamically
       if (item && obj.menus['object'] && obj.menus['object'][d._type]) {
         pgAdmin.Browser.MenuCreator(
-          $obj_mnu, obj.menus['object'][d._type], obj.menu_categories, d, item
+          obj.Nodes, $obj_mnu, obj.menus['object'][d._type], obj.menu_categories, d, item
         );
       } else {
         // Create a dummy 'no object seleted' menu
@@ -466,7 +503,7 @@ define('pgadmin.browser', [
             context_menu = {};
 
           pgAdmin.Browser.MenuCreator(
-            $div, menus, obj.menu_categories, d, item, context_menu
+            obj.Nodes, $div, menus, obj.menu_categories, d, item, context_menu
           );
 
           return {
@@ -574,7 +611,7 @@ define('pgadmin.browser', [
               return {
                 buttons:[{
                   text: '',
-                  className: 'btn btn-secondary pull-left fa fa-question pg-alertify-icon-button',
+                  className: 'btn btn-primary-icon pull-left fa fa-question pg-alertify-icon-button',
                   attrs: {
                     name: 'dialog_help',
                     type: 'button',
@@ -584,7 +621,7 @@ define('pgadmin.browser', [
                     }),
                   },
                 },{
-                  text: gettext('Reset Master Password'), className: 'btn btn-secondary fa fa-trash-o pg-alertify-button pull-left',
+                  text: gettext('Reset Master Password'), className: 'btn btn-secondary fa fa-trash-alt pg-alertify-button pull-left',
                 },{
                   text: gettext('Cancel'), className: 'btn btn-secondary fa fa-times pg-alertify-button',
                   key: 27,
@@ -840,7 +877,7 @@ define('pgadmin.browser', [
         $dropdown.empty();
 
         if (pgAdmin.Browser.MenuCreator(
-          $dropdown, obj.menus[o.menu], obj.menu_categories
+          obj.Nodes, $dropdown, obj.menus[o.menu], obj.menu_categories
         )) {
           $mnu.removeClass('d-none');
         }
@@ -2133,22 +2170,6 @@ define('pgadmin.browser', [
       // Autocomplete sql command
       'Ctrl-Space': 'autocomplete',
       'Cmd-Space': 'autocomplete',
-
-      // Select All text
-      'Ctrl-A': 'selectAll',
-      'Cmd-A': 'selectAll',
-
-      // Redo text
-      'Ctrl-Y': 'redo',
-      'Cmd-Y': 'redo',
-
-      // Undo text
-      'Ctrl-Z': 'undo',
-      'Cmd-Z': 'undo',
-
-      // Delete Line
-      'Ctrl-D': 'deleteLine',
-      'Cmd-D': 'deleteLine',
 
       'Alt-Up': 'goLineUp',
       'Alt-Down': 'goLineDown',

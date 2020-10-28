@@ -53,8 +53,8 @@ class IndexesModule(CollectionNodeModule):
         initialized.
     """
 
-    NODE_TYPE = 'index'
-    COLLECTION_LABEL = gettext("Indexes")
+    _NODE_TYPE = 'index'
+    _COLLECTION_LABEL = gettext("Indexes")
 
     def __init__(self, *args, **kwargs):
         """
@@ -68,12 +68,12 @@ class IndexesModule(CollectionNodeModule):
         self.max_ver = None
         super(IndexesModule, self).__init__(*args, **kwargs)
 
-    def BackendSupported(self, manager, **kwargs):
+    def backend_supported(self, manager, **kwargs):
         """
         Load this module if vid is view, we will not load it under
         material view
         """
-        if super(IndexesModule, self).BackendSupported(manager, **kwargs):
+        if super(IndexesModule, self).backend_supported(manager, **kwargs):
             conn = manager.connection(did=kwargs['did'])
 
             # If PG version > 100000 and < 110000 then index is
@@ -113,7 +113,7 @@ class IndexesModule(CollectionNodeModule):
         Load the module script for server, when any of the server-group node is
         initialized.
         """
-        return database.DatabaseModule.NODE_TYPE
+        return database.DatabaseModule.node_type
 
     @property
     def node_inode(self):
@@ -193,6 +193,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
     """
 
     node_type = blueprint.node_type
+    node_label = "Index"
 
     parent_ids = [
         {'type': 'int', 'id': 'gid'},
@@ -388,7 +389,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
         """
 
         SQL = render_template(
-            "/".join([self.template_path, 'nodes.sql']), tid=tid
+            "/".join([self.template_path, self._NODES_SQL]), tid=tid
         )
         status, res = self.conn.execute_dict(SQL)
 
@@ -417,7 +418,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
             JSON of available schema child nodes
         """
         SQL = render_template(
-            "/".join([self.template_path, 'nodes.sql']),
+            "/".join([self.template_path, self._NODES_SQL]),
             tid=tid, idx=idx
         )
         status, rset = self.conn.execute_2darray(SQL)
@@ -425,7 +426,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
             return internal_server_error(errormsg=rset)
 
         if len(rset['rows']) == 0:
-            return gone(gettext("""Could not find the index in the table."""))
+            return gone(self.not_found_error_msg())
 
         res = self.blueprint.generate_browser_node(
             rset['rows'][0]['oid'],
@@ -457,7 +458,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
         """
         res = []
         SQL = render_template(
-            "/".join([self.template_path, 'nodes.sql']), tid=tid
+            "/".join([self.template_path, self._NODES_SQL]), tid=tid
         )
         status, rset = self.conn.execute_2darray(SQL)
         if not status:
@@ -512,7 +513,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
         :return:
         """
         SQL = render_template(
-            "/".join([self.template_path, 'properties.sql']),
+            "/".join([self.template_path, self._PROPERTIES_SQL]),
             did=did, tid=tid, idx=idx, datlastsysoid=self.datlastsysoid
         )
 
@@ -521,8 +522,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
             return False, internal_server_error(errormsg=res)
 
         if len(res['rows']) == 0:
-            return False, gone(
-                gettext("""Could not find the index in the table."""))
+            return False, gone(self.not_found_error_msg())
 
         # Making copy of output for future use
         data = dict(res['rows'][0])
@@ -535,6 +535,28 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
             data = index_utils.get_include_details(self.conn, idx, data)
 
         return True, data
+
+    @staticmethod
+    def _check_for_error(required_args, data):
+        """
+        This function is used to check for any error.
+        :param required_args:
+        :param data:
+        :return:
+        """
+        for arg in required_args:
+            err_msg = None
+            if arg == 'columns' and len(data['columns']) < 1:
+                err_msg = gettext("You must provide one or more column to "
+                                  "create index.")
+
+            if arg not in data:
+                err_msg = gettext("Could not find the required parameter ({})"
+                                  ".").format(required_args[arg])
+                # Check if we have at least one column
+            if err_msg is not None:
+                return True, err_msg
+        return False, ''
 
     @check_precondition
     def create(self, gid, sid, did, scid, tid):
@@ -568,34 +590,25 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
             'columns': 'Columns'
         }
 
-        for arg in required_args:
-            err_msg = None
-            if arg == 'columns' and len(data['columns']) < 1:
-                err_msg = gettext("You must provide one or more column to "
-                                  "create index.")
-
-            if arg not in data:
-                err_msg = gettext("Could not find the required parameter ({})"
-                                  ".").format(required_args[arg])
-                # Check if we have at least one column
-            if err_msg is not None:
-                return make_json_response(
-                    status=410,
-                    success=0,
-                    errormsg=gettext(err_msg)
-                )
+        is_error, err_msg = IndexesView._check_for_error(required_args, data)
+        if is_error:
+            return make_json_response(
+                status=410,
+                success=0,
+                errormsg=gettext(err_msg)
+            )
 
         # Adding parent into data dict, will be using it while creating sql
         data['schema'] = self.schema
         data['table'] = self.table
         if len(data['table']) == 0:
-            return gone(gettext("The specified table could not be found."))
+            return gone(gettext(self.not_found_error_msg('Table')))
 
         try:
             # Start transaction.
             self.conn.execute_scalar("BEGIN;")
             SQL = render_template(
-                "/".join([self.template_path, 'create.sql']),
+                "/".join([self.template_path, self._CREATE_SQL]),
                 data=data, conn=self.conn, mode='create'
             )
             status, res = self.conn.execute_scalar(SQL)
@@ -607,7 +620,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
             # If user chooses concurrent index then we cannot run it along
             # with other alter statements so we will separate alter index part
             SQL = render_template(
-                "/".join([self.template_path, 'alter.sql']),
+                "/".join([self.template_path, self._ALTER_SQL]),
                 data=data, conn=self.conn
             )
             SQL = SQL.strip('\n').strip(' ')
@@ -620,7 +633,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
 
             # we need oid to to add object in tree at browser
             SQL = render_template(
-                "/".join([self.template_path, 'get_oid.sql']),
+                "/".join([self.template_path, self._OID_SQL]),
                 tid=tid, data=data
             )
             status, idx = self.conn.execute_scalar(SQL)
@@ -645,8 +658,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
             return internal_server_error(errormsg=str(e))
 
     @check_precondition
-    def delete(self, gid, sid, did, scid, tid, idx=None,
-               only_sql=False):
+    def delete(self, gid, sid, did, scid, tid, **kwargs):
         """
         This function will updates existing the schema object
 
@@ -658,6 +670,9 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
            tid: Table ID
            idx: Index ID
         """
+        idx = kwargs.get('idx', None)
+        only_sql = kwargs.get('only_sql', False)
+
         if idx is None:
             data = request.form if request.form else json.loads(
                 request.data, encoding='utf-8'
@@ -666,40 +681,34 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
             data = {'ids': [idx]}
 
         # Below will decide if it's simple drop or drop with cascade call
-        if self.cmd == 'delete':
-            # This is a cascade operation
-            cascade = True
-        else:
-            cascade = False
+
+        cascade = self._check_cascade_operation()
 
         try:
             for idx in data['ids']:
                 # We will first fetch the index name for current request
                 # so that we create template for dropping index
                 SQL = render_template(
-                    "/".join([self.template_path, 'properties.sql']),
+                    "/".join([self.template_path, self._PROPERTIES_SQL]),
                     did=did, tid=tid, idx=idx, datlastsysoid=self.datlastsysoid
                 )
 
                 status, res = self.conn.execute_dict(SQL)
                 if not status:
                     return internal_server_error(errormsg=res)
-
-                if not res['rows']:
+                elif not res['rows']:
                     return make_json_response(
                         success=0,
                         errormsg=gettext(
                             'Error: Object not found.'
                         ),
-                        info=gettext(
-                            'The specified index could not be found.\n'
-                        )
+                        info=self.not_found_error_msg()
                     )
 
                 data = dict(res['rows'][0])
 
                 SQL = render_template(
-                    "/".join([self.template_path, 'delete.sql']),
+                    "/".join([self.template_path, self._DELETE_SQL]),
                     data=data, conn=self.conn, cascade=cascade
                 )
 
@@ -737,7 +746,8 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
         data['table'] = self.table
         try:
             SQL, name = index_utils.get_sql(
-                self.conn, data, did, tid, idx, self.datlastsysoid)
+                self.conn, data=data, did=did, tid=tid, idx=idx,
+                datlastsysoid=self.datlastsysoid)
             if not isinstance(SQL, str):
                 return SQL
             SQL = SQL.strip('\n').strip(' ')
@@ -787,8 +797,8 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
 
         try:
             sql, name = index_utils.get_sql(
-                self.conn, data, did, tid, idx, self.datlastsysoid,
-                mode='create')
+                self.conn, data=data, did=did, tid=tid, idx=idx,
+                datlastsysoid=self.datlastsysoid, mode='create')
             if not isinstance(sql, str):
                 return sql
             sql = sql.strip('\n').strip(' ')
@@ -816,34 +826,45 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
         """
 
         SQL = index_utils.get_reverse_engineered_sql(
-            self.conn, self.schema, self.table, did, tid, idx,
-            self.datlastsysoid)
+            self.conn, schema=self.schema, table=self.table, did=did,
+            tid=tid, idx=idx, datlastsysoid=self.datlastsysoid)
 
         return ajax_response(response=SQL)
 
     @check_precondition
-    def get_sql_from_index_diff(self, sid, did, scid, tid, idx, data=None,
-                                diff_schema=None, drop_req=False):
+    def get_sql_from_index_diff(self, **kwargs):
+        """
+        This function get the sql from index diff.
+        :param kwargs:
+        :return:
+        """
+        sid = kwargs.get('sid')
+        did = kwargs.get('did')
+        scid = kwargs.get('scid')
+        tid = kwargs.get('tid')
+        idx = kwargs.get('idx')
+        data = kwargs.get('data', None)
+        target_schema = kwargs.get('target_schema', None)
+        drop_req = kwargs.get('drop_req', False)
 
         sql = ''
+
         if data:
             data['schema'] = self.schema
             data['nspname'] = self.schema
             data['table'] = self.table
 
             sql, name = index_utils.get_sql(
-                self.conn, data, did, tid, idx, self.datlastsysoid,
-                mode='create')
+                self.conn, data=data, did=did, tid=tid, idx=idx,
+                datlastsysoid=self.datlastsysoid, mode='create')
 
             sql = sql.strip('\n').strip(' ')
 
-        elif diff_schema:
-            schema = diff_schema
-
+        elif target_schema:
             sql = index_utils.get_reverse_engineered_sql(
-                self.conn, schema,
-                self.table, did, tid, idx,
-                self.datlastsysoid,
+                self.conn, schema=target_schema,
+                table=self.table, did=did, tid=tid, idx=idx,
+                datlastsysoid=self.datlastsysoid,
                 template_path=None, with_header=False)
 
         drop_sql = ''
@@ -936,7 +957,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
             if is_pgstattuple:
                 # Fetch index details only if extended stats available
                 SQL = render_template(
-                    "/".join([self.template_path, 'properties.sql']),
+                    "/".join([self.template_path, self._PROPERTIES_SQL]),
                     did=did, tid=tid, idx=idx,
                     datlastsysoid=self.datlastsysoid
                 )
@@ -944,9 +965,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
                 if not status:
                     return internal_server_error(errormsg=res)
                 if len(res['rows']) == 0:
-                    return gone(
-                        gettext("""Could not find the index in the table.""")
-                    )
+                    return gone(self.not_found_error_msg())
 
                 data = dict(res['rows'][0])
                 index = data['name']
@@ -995,7 +1014,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
 
         if not oid:
             SQL = render_template("/".join([self.template_path,
-                                            'nodes.sql']), tid=tid)
+                                            self._NODES_SQL]), tid=tid)
             status, indexes = self.conn.execute_2darray(SQL)
             if not status:
                 current_app.logger.error(indexes)
@@ -1016,6 +1035,28 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
 
         return res
 
+    @staticmethod
+    def _check_for_create_req(required_create_keys, diff_dict):
+        """
+        This function is used to check whether create required or not.
+        :param required_create_keys:
+        :param diff_dict:
+        :return:
+        """
+        create_req = False
+        for key in required_create_keys:
+            if key in diff_dict and \
+                ((key == 'columns' and
+                  (('added' in diff_dict[key] and
+                    len(diff_dict[key]['added']) > 0) or
+                   ('changed' in diff_dict[key] and
+                    len(diff_dict[key]['changed']) > 0) or
+                   ('deleted' in diff_dict[key] and
+                    len(diff_dict[key]['deleted']) > 0))) or
+                 key != 'columns'):
+                create_req = True
+        return create_req
+
     def ddl_compare(self, **kwargs):
         """
         This function returns the DDL/DML statements based on the
@@ -1029,8 +1070,8 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
         tgt_params = kwargs.get('target_params')
         source = kwargs.get('source')
         target = kwargs.get('target')
-        target_schema = kwargs.get('target_schema')
         comp_status = kwargs.get('comp_status')
+        tgt_schema = kwargs.get('target_schema', None)
 
         diff = ''
         if comp_status == 'source_only':
@@ -1039,7 +1080,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
                                                 scid=src_params['scid'],
                                                 tid=src_params['tid'],
                                                 idx=source['oid'],
-                                                diff_schema=target_schema)
+                                                target_schema=tgt_schema)
         elif comp_status == 'target_only':
             diff = self.delete(gid=1, sid=tgt_params['sid'],
                                did=tgt_params['did'], scid=tgt_params['scid'],
@@ -1053,19 +1094,11 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
             )
 
             required_create_keys = ['columns']
-            create_req = False
 
-            for key in required_create_keys:
-                if key in diff_dict:
-                    if (key == 'columns' and ((
-                            'added' in diff_dict[key] and
-                            len(diff_dict[key]['added']) > 0
-                    ) or ('changed' in diff_dict[key] and
-                          len(diff_dict[key]['changed']) > 0) or (
-                            'deleted' in diff_dict[key] and
-                            len(diff_dict[key]['deleted']) > 0)
-                    )) or key != 'columns':
-                        create_req = True
+            create_req = IndexesView._check_for_create_req(
+                required_create_keys,
+                diff_dict
+            )
 
             if create_req:
                 diff = self.get_sql_from_index_diff(sid=src_params['sid'],
@@ -1073,7 +1106,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
                                                     scid=src_params['scid'],
                                                     tid=src_params['tid'],
                                                     idx=source['oid'],
-                                                    diff_schema=target_schema,
+                                                    target_schema=tgt_schema,
                                                     drop_req=True)
             else:
                 diff = self.get_sql_from_index_diff(sid=tgt_params['sid'],

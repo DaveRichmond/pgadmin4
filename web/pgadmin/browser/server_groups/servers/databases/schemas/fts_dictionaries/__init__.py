@@ -49,8 +49,8 @@ class FtsDictionaryModule(SchemaChildModule):
       - Load the module script for FTS Dictionary, when any of the schema
       node is initialized.
     """
-    NODE_TYPE = 'fts_dictionary'
-    COLLECTION_LABEL = _('FTS Dictionaries')
+    _NODE_TYPE = 'fts_dictionary'
+    _COLLECTION_LABEL = _('FTS Dictionaries')
 
     def __init__(self, *args, **kwargs):
         self.min_ver = None
@@ -82,7 +82,7 @@ class FtsDictionaryModule(SchemaChildModule):
         Load the module script for fts template, when any of the schema
         node is initialized.
         """
-        return databases.DatabaseModule.NODE_TYPE
+        return databases.DatabaseModule.node_type
 
 
 blueprint = FtsDictionaryModule(__name__)
@@ -192,6 +192,8 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
                             {'get': 'fetch_templates'}]
     })
 
+    keys_to_ignore = ['oid', 'oid-2', 'schema']
+
     def _init_(self, **kwargs):
         self.conn = None
         self.template_path = None
@@ -259,7 +261,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
         """
 
         sql = render_template(
-            "/".join([self.template_path, 'properties.sql']),
+            "/".join([self.template_path, self._PROPERTIES_SQL]),
             scid=scid
         )
         status, res = self.conn.execute_dict(sql)
@@ -290,7 +292,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
 
         res = []
         sql = render_template(
-            "/".join([self.template_path, 'nodes.sql']),
+            "/".join([self.template_path, self._NODES_SQL]),
             scid=scid
         )
         status, rset = self.conn.execute_2darray(sql)
@@ -325,7 +327,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
         """
 
         sql = render_template(
-            "/".join([self.template_path, 'nodes.sql']),
+            "/".join([self.template_path, self._NODES_SQL]),
             dcid=dcid
         )
         status, rset = self.conn.execute_2darray(sql)
@@ -376,7 +378,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
         :return:
         """
         sql = render_template(
-            "/".join([self.template_path, 'properties.sql']),
+            "/".join([self.template_path, self._PROPERTIES_SQL]),
             scid=scid,
             dcid=dcid
         )
@@ -439,7 +441,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
                 )
         # Fetch schema name from schema oid
         sql = render_template(
-            "/".join([self.template_path, 'schema.sql']),
+            "/".join([self.template_path, self._SCHEMA_SQL]),
             data=data,
             conn=self.conn,
         )
@@ -453,7 +455,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
         new_data = data.copy()
         new_data['schema'] = schema
         sql = render_template(
-            "/".join([self.template_path, 'create.sql']),
+            "/".join([self.template_path, self._CREATE_SQL]),
             data=new_data,
             conn=self.conn,
         )
@@ -464,7 +466,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
         # We need dcid to add object in tree at browser,
         # Below sql will give the same
         sql = render_template(
-            "/".join([self.template_path, 'properties.sql']),
+            "/".join([self.template_path, self._PROPERTIES_SQL]),
             name=data['name'],
             scid=data['schema']
         )
@@ -508,7 +510,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
 
         if dcid is not None:
             sql = render_template(
-                "/".join([self.template_path, 'properties.sql']),
+                "/".join([self.template_path, self._PROPERTIES_SQL]),
                 dcid=dcid
             )
 
@@ -549,23 +551,19 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
             data = {'ids': [dcid]}
 
         # Below will decide if it's simple drop or drop with cascade call
-        if self.cmd == 'delete':
-            # This is a cascade operation
-            cascade = True
-        else:
-            cascade = False
+
+        cascade = self._check_cascade_operation()
 
         try:
             for dcid in data['ids']:
                 # Get name for FTS Dictionary from dcid
                 sql = render_template("/".join([self.template_path,
-                                                'delete.sql']),
+                                                self._DELETE_SQL]),
                                       dcid=dcid)
                 status, res = self.conn.execute_dict(sql)
                 if not status:
                     return internal_server_error(errormsg=res)
-
-                if not res['rows']:
+                elif not res['rows']:
                     return make_json_response(
                         success=0,
                         errormsg=_(
@@ -580,7 +578,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
                 # Drop FTS Dictionary
                 result = res['rows'][0]
                 sql = render_template("/".join([self.template_path,
-                                                'delete.sql']),
+                                                self._DELETE_SQL]),
                                       name=result['name'],
                                       schema=result['schema'],
                                       cascade=cascade
@@ -639,6 +637,49 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
             status=200
         )
 
+    def _get_sql_for_create(self, data, schema):
+        """
+        This function is used to get the create sql.
+        :param data:
+        :param schema:
+        :return:
+        """
+        # Replace schema oid with schema name
+        new_data = data.copy()
+        new_data['schema'] = schema
+
+        if (
+            'template' in new_data and
+            'name' in new_data and
+            'schema' in new_data
+        ):
+            sql = render_template("/".join([self.template_path,
+                                            self._CREATE_SQL]),
+                                  data=new_data,
+                                  conn=self.conn
+                                  )
+        else:
+            sql = "-- definition incomplete"
+        return sql
+
+    def _check_template_name_and_schema_name(self, data, old_data):
+        """
+        This function is used to check the template and schema name.
+        :param data:
+        :param old_data:
+        :return:
+        """
+        if 'schema' not in data:
+            data['schema'] = old_data['schema']
+
+        # Handle templates and its schema name properly
+        if old_data['template_schema'] is not None and \
+                old_data['template_schema'] != "pg_catalog":
+            old_data['template'] = self.qtIdent(
+                self.conn, old_data['template_schema'],
+                old_data['template']
+            )
+
     def get_sql(self, gid, sid, did, scid, data, dcid=None):
         """
         This function will return SQL for model data
@@ -652,7 +693,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
         # Fetch sql for update
         if dcid is not None:
             sql = render_template(
-                "/".join([self.template_path, 'properties.sql']),
+                "/".join([self.template_path, self._PROPERTIES_SQL]),
                 dcid=dcid,
                 scid=scid
             )
@@ -660,26 +701,16 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
             status, res = self.conn.execute_dict(sql)
             if not status:
                 return internal_server_error(errormsg=res)
-
-            if len(res['rows']) == 0:
+            elif len(res['rows']) == 0:
                 return gone(_("Could not find the FTS Dictionary node."))
 
             old_data = res['rows'][0]
-            if 'schema' not in data:
-                data['schema'] = old_data['schema']
-
-            # Handle templates and its schema name properly
-            if old_data['template_schema'] is not None and \
-                    old_data['template_schema'] != "pg_catalog":
-                old_data['template'] = self.qtIdent(
-                    self.conn, old_data['template_schema'],
-                    old_data['template']
-                )
+            self._check_template_name_and_schema_name(data, old_data)
 
             # If user has changed the schema then fetch new schema directly
             # using its oid otherwise fetch old schema name using its oid
             sql = render_template(
-                "/".join([self.template_path, 'schema.sql']),
+                "/".join([self.template_path, self._SCHEMA_SQL]),
                 data=data)
 
             status, new_schema = self.conn.execute_scalar(sql)
@@ -693,7 +724,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
 
             # Fetch old schema name using old schema oid
             sql = render_template(
-                "/".join([self.template_path, 'schema.sql']),
+                "/".join([self.template_path, self._SCHEMA_SQL]),
                 data=old_data)
 
             status, old_schema = self.conn.execute_scalar(sql)
@@ -704,7 +735,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
             old_data['schema'] = old_schema
 
             sql = render_template(
-                "/".join([self.template_path, 'update.sql']),
+                "/".join([self.template_path, self._UPDATE_SQL]),
                 data=new_data, o_data=old_data
             )
             # Fetch sql query for modified data
@@ -714,29 +745,14 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
             return sql.strip('\n'), old_data['name']
         else:
             # Fetch schema name from schema oid
-            sql = render_template("/".join([self.template_path, 'schema.sql']),
-                                  data=data)
+            sql = render_template("/".join([self.template_path,
+                                            self._SCHEMA_SQL]), data=data)
 
             status, schema = self.conn.execute_scalar(sql)
             if not status:
                 return internal_server_error(errormsg=schema)
 
-            # Replace schema oid with schema name
-            new_data = data.copy()
-            new_data['schema'] = schema
-
-            if (
-                'template' in new_data and
-                'name' in new_data and
-                'schema' in new_data
-            ):
-                sql = render_template("/".join([self.template_path,
-                                                'create.sql']),
-                                      data=new_data,
-                                      conn=self.conn
-                                      )
-            else:
-                sql = u"-- definition incomplete"
+            sql = self._get_sql_for_create(data, schema)
             return sql.strip('\n'), data['name']
 
     @check_precondition
@@ -773,8 +789,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
         )
 
     @check_precondition
-    def sql(self, gid, sid, did, scid, dcid, diff_schema=None,
-            json_resp=True):
+    def sql(self, gid, sid, did, scid, dcid, **kwargs):
         """
         This function will reverse generate sql for sql panel
         :param gid: group id
@@ -782,12 +797,13 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
         :param did: database id
         :param scid: schema id
         :param dcid: FTS Dictionary id
-        :param diff_schema: Target Schema for schema diff
         :param json_resp: True then return json response
         """
+        json_resp = kwargs.get('json_resp', True)
+        target_schema = kwargs.get('target_schema', None)
 
         sql = render_template(
-            "/".join([self.template_path, 'properties.sql']),
+            "/".join([self.template_path, self._PROPERTIES_SQL]),
             scid=scid,
             dcid=dcid
         )
@@ -819,7 +835,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
 
         # Fetch schema name from schema oid
         sql = render_template("/".join(
-            [self.template_path, 'schema.sql']), data=res['rows'][0])
+            [self.template_path, self._SCHEMA_SQL]), data=res['rows'][0])
 
         status, schema = self.conn.execute_scalar(sql)
 
@@ -828,15 +844,15 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
 
         # Replace schema oid with schema name
         res['rows'][0]['schema'] = schema
+        if target_schema:
+            res['rows'][0]['schema'] = target_schema
 
-        if diff_schema:
-            res['rows'][0]['schema'] = diff_schema
-
-        sql = render_template("/".join([self.template_path, 'create.sql']),
+        sql = render_template("/".join([self.template_path,
+                                        self._CREATE_SQL]),
                               data=res['rows'][0],
                               conn=self.conn, is_displaying=True)
 
-        sql_header = u"""-- Text Search Dictionary: {0}.{1}\n\n""".format(
+        sql_header = """-- Text Search Dictionary: {0}.{1}\n\n""".format(
             res['rows'][0]['schema'], res['rows'][0]['name'])
         sql_header += """-- DROP TEXT SEARCH DICTIONARY {0};\n
 """.format(self.qtIdent(self.conn, res['rows'][0]['schema'],
@@ -900,7 +916,7 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
         """
         res = dict()
         SQL = render_template("/".join([self.template_path,
-                                        'nodes.sql']), scid=scid)
+                                        self._NODES_SQL]), scid=scid)
         status, rset = self.conn.execute_2darray(SQL)
         if not status:
             return internal_server_error(errormsg=res)
@@ -912,33 +928,31 @@ class FtsDictionaryView(PGChildNodeView, SchemaDiffObjectCompare):
 
         return res
 
-    def get_sql_from_diff(self, gid, sid, did, scid, oid, data=None,
-                          diff_schema=None, drop_sql=False):
+    def get_sql_from_diff(self, **kwargs):
         """
         This function is used to get the DDL/DML statements.
-        :param gid: Group ID
-        :param sid: Serve ID
-        :param did: Database ID
-        :param scid: Schema ID
-        :param oid: Collation ID
-        :param data: Difference data
-        :param diff_schema: Target Schema
-        :param drop_sql: True if need to drop the fts configuration
+        :param kwargs
         :return:
         """
-        sql = ''
+        gid = kwargs.get('gid')
+        sid = kwargs.get('sid')
+        did = kwargs.get('did')
+        scid = kwargs.get('scid')
+        oid = kwargs.get('oid')
+        data = kwargs.get('data', None)
+        drop_sql = kwargs.get('drop_sql', False)
+        target_schema = kwargs.get('target_schema', None)
+
         if data:
-            if diff_schema:
-                data['schema'] = diff_schema
             sql, name = self.get_sql(gid=gid, sid=sid, did=did, scid=scid,
                                      data=data, dcid=oid)
         else:
             if drop_sql:
                 sql = self.delete(gid=gid, sid=sid, did=did,
                                   scid=scid, dcid=oid, only_sql=True)
-            elif diff_schema:
+            elif target_schema:
                 sql = self.sql(gid=gid, sid=sid, did=did, scid=scid, dcid=oid,
-                               diff_schema=diff_schema, json_resp=False)
+                               target_schema=target_schema, json_resp=False)
             else:
                 sql = self.sql(gid=gid, sid=sid, did=did, scid=scid, dcid=oid,
                                json_resp=False)

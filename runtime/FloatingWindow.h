@@ -9,11 +9,9 @@
 //
 ////////////////////////////////////////////////////////////////////////////
 
-
 #ifndef FLOATINGWINDOW_H
 #define FLOATINGWINDOW_H
 
-#include "pgAdmin4.h"
 #include "MenuActions.h"
 
 #include <QMainWindow>
@@ -30,7 +28,11 @@ public:
     explicit FloatingWindow(QWidget *parent = Q_NULLPTR);
 
     bool Init();
-    void enableShutdownMenu();
+    void enablePostStartOptions();
+    void enableViewLogOption();
+    void disableViewLogOption();
+    void enableConfigOption();
+    void disableConfigOption();
     void setMenuActions(MenuActions * menuActions);
 
 private:
@@ -46,8 +48,8 @@ private:
     QAction *m_logAction = Q_NULLPTR;
     QAction *m_quitAction = Q_NULLPTR;
 
-    QMenu *m_floatingWindowMenu;
-    MenuActions *m_menuActions;
+    QMenu *m_floatingWindowMenu = Q_NULLPTR;
+    MenuActions *m_menuActions = Q_NULLPTR;
 
 signals:
     void shutdownSignal(QUrl);

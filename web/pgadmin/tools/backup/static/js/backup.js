@@ -210,7 +210,7 @@ define([
       type: 'int',
       deps: ['format'],
       disabled: function(m) {
-        return !(m.get('format') === 'directory');
+        return (m.get('format') !== 'directory');
       },
       visible: function(m) {
         if (!_.isUndefined(m.get('type')) && m.get('type') === 'server')
@@ -580,7 +580,7 @@ define([
         callback: 'start_backup_global',
         priority: 12,
         label: gettext('Backup Globals...'),
-        icon: 'fa fa-floppy-o',
+        icon: 'fa fa-save',
         enable: menuUtils.menuEnabledServer,
       }, {
         name: 'backup_server',
@@ -589,7 +589,7 @@ define([
         callback: 'start_backup_server',
         priority: 12,
         label: gettext('Backup Server...'),
-        icon: 'fa fa-floppy-o',
+        icon: 'fa fa-save',
         enable: menuUtils.menuEnabledServer,
       }, {
         name: 'backup_global_ctx',
@@ -599,7 +599,7 @@ define([
         callback: 'start_backup_global',
         priority: 12,
         label: gettext('Backup Globals...'),
-        icon: 'fa fa-floppy-o',
+        icon: 'fa fa-save',
         enable: menuUtils.menuEnabledServer,
       }, {
         name: 'backup_server_ctx',
@@ -609,7 +609,7 @@ define([
         callback: 'start_backup_server',
         priority: 12,
         label: gettext('Backup Server...'),
-        icon: 'fa fa-floppy-o',
+        icon: 'fa fa-save',
         enable: menuUtils.menuEnabledServer,
       }, {
         name: 'backup_object',
@@ -618,7 +618,7 @@ define([
         callback: 'backup_objects',
         priority: 11,
         label: gettext('Backup...'),
-        icon: 'fa fa-floppy-o',
+        icon: 'fa fa-save',
         enable: supportedNodes.enabled.bind(
           null, pgBrowser.treeMenu, menuUtils.backupSupportedNodes
         ),
@@ -633,7 +633,7 @@ define([
           callback: 'backup_objects',
           priority: 11,
           label: gettext('Backup...'),
-          icon: 'fa fa-floppy-o',
+          icon: 'fa fa-save',
           enable: supportedNodes.enabled.bind(
             null, pgBrowser.treeMenu, menuUtils.backupSupportedNodes
           ),
@@ -650,7 +650,7 @@ define([
         alertify,
         BackupModel
       );
-      dialog.draw(action, item, {'globals': true}, pgBrowser.stdW.md, pgBrowser.stdH.md);
+      dialog.draw(action, item, {'globals': true}, pgBrowser.stdW.calc(pgBrowser.stdW.md), pgBrowser.stdH.calc(pgBrowser.stdH.md));
     },
     start_backup_server: function(action, item) {
       let dialog = new globalBackupDialog.BackupDialog(
@@ -659,7 +659,7 @@ define([
         alertify,
         BackupObjectModel
       );
-      dialog.draw(action, item, {'server': true}, pgBrowser.stdW.md, pgBrowser.stdH.md);
+      dialog.draw(action, item, {'server': true}, pgBrowser.stdW.calc(pgBrowser.stdW.md), pgBrowser.stdH.calc(pgBrowser.stdH.md));
     },
     // Callback to draw Backup Dialog for objects
     backup_objects: function(action, treeItem) {
@@ -669,7 +669,7 @@ define([
         alertify,
         BackupObjectModel
       );
-      dialog.draw(action, treeItem, null, pgBrowser.stdW.md, pgBrowser.stdH.md);
+      dialog.draw(action, treeItem, null, pgBrowser.stdW.calc(pgBrowser.stdW.md), pgBrowser.stdH.calc(pgBrowser.stdH.md));
     },
   };
   return pgBrowser.Backup;

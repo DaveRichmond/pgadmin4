@@ -53,11 +53,8 @@
 .file_listing #contents.grid li.selected {
   cursor: pointer;
   border: $table-hover-border;
-  background: $table-hover-bg-color;
-}
-
-.fileinfo table#contents tr td {
-  font-family: $font-family-primary;
+  background: $grid-hover-bg-color;
+  color: $grid-hover-fg-color;
 }
 
 .fileinfo #contents li span.less_text {
@@ -70,6 +67,8 @@
 }
 
 .fileinfo table#contents tr td {
+  font-family: $font-family-primary;
+
   & span.less_text {
     text-overflow: ellipsis;
     overflow: hidden;
@@ -185,7 +184,7 @@
 }
 
 .upload_file .file_upload_main {
-  height: 127px;;
+  height: 127px;
   width: 120px;
   display: inline-block;
   margin: 0 15px 15px 0 !important;
@@ -319,6 +318,16 @@
   cursor: pointer;
 }
 
+.cap_select_file:hover {
+  color: $grid-hover-fg-color !important;
+  .fm_folder_list,
+  .fm_folder_grid,
+  .fm_file_grid,
+  .fm_file_list {
+    color: $grid-hover-fg-color !important;
+  }
+}
+
 .add-folder-icon {
   position: relative;
   top: -8px;
@@ -345,7 +354,7 @@ table.tablesorter {
   table.tablesorter {
     th:focus,
     tr:focus {
-      border: 2px solid $input-focus-border-color !important;;
+      border: 2px solid $input-focus-border-color !important;
     }
   }
 

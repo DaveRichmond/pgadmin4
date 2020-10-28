@@ -45,12 +45,10 @@ RUN npm install && \
 	npm audit fix && \
 	rm -f yarn.lock && \
 	yarn import && \
-# Commented the below line to avoid vulnerability in decompress package and
-# audit only dependencies folder. Refer https://www.npmjs.com/advisories/1217.
-# Pull request is already been send https://github.com/kevva/decompress/pull/73,
-# once fixed we will uncomment it.
+# Commented the below line to avoid vulnerability in lodash package.
+# Refer https://www.npmjs.com/advisories/1523.
+# Once fixed we will uncomment it.
 #	yarn audit && \
-	yarn audit --groups dependencies && \
 	rm -f package-lock.json && \
     yarn run bundle && \
     rm -rf node_modules \
@@ -83,7 +81,8 @@ RUN apk add --no-cache \
         flask_gravatar \
         flask_migrate \
         simplejson \
-        cryptography
+        cryptography \
+        netaddr
 
 # Copy the docs from the local tree. Explicitly remove any existing builds that
 # may be present
@@ -148,6 +147,10 @@ COPY --from=app-builder /pgadmin4/web /pgadmin4
 COPY --from=docs-builder /pgadmin4/docs/en_US/_build/html/ /pgadmin4/docs
 COPY requirements.txt /pgadmin4/requirements.txt
 
+# License files
+COPY LICENSE /pgadmin4/LICENSE
+COPY DEPENDENCIES /pgadmin4/DEPENDENCIES
+
 # Install build-dependencies, build & install C extensions and purge deps in
 # one RUN step
 RUN apk add --no-cache --virtual \
@@ -175,6 +178,7 @@ RUN ln -sf /usr/lib/libpq.so.5.12 /usr/lib/libpq.so.5
 
 # Copy the runner script
 COPY pkg/docker/run_pgadmin.py /pgadmin4
+COPY pkg/docker/gunicorn_config.py /pgadmin4
 COPY pkg/docker/entrypoint.sh /entrypoint.sh
 
 # Precompile and optimize python code to save time and space on startup

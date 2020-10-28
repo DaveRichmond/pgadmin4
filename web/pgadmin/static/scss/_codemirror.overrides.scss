@@ -64,7 +64,7 @@
   & .cm-link {color: $color-editor-fg;}
 
   & :not(.cm-fat-cursor) .CodeMirror-cursor {
-    border-left: thin solid $color-editor-fg;;
+    border-left: thin solid $color-editor-fg;
     border-right: none;
     width: 0;
   }
@@ -97,13 +97,6 @@
   display: none;
 }
 
-.CodeMirror-foldmarker {
-  color: $color-primary;
-  text-shadow: #b9f 1px 1px 2px, #b9f -1px -1px 2px, #b9f 1px -1px 2px, #b9f -1px 1px 2px;
-  line-height: .3;
-  cursor: pointer;
-}
-
 .CodeMirror-linenumber {
   color: $color-fg;
 }
@@ -127,10 +120,12 @@
 
 .CodeMirror-foldgutter-open:after {
   content: "\25BC";
+  font-weight: 900;
 }
 
 .CodeMirror-foldgutter-folded:after {
   content: "\25B6";
+  font-weight: 900;
 }
 
 
@@ -175,7 +170,7 @@
 }
 
 .CodeMirror .CodeMirror-selected {
-  background: $color-primary-light !important;
+  background: $sql-editor-selection-bg !important;
 }
 
 .CodeMirror-activeline-background {
@@ -206,4 +201,8 @@
             background-color: $scrollbar-base-color;
         }
     }
+}
+
+.bg-gray-lighter {
+  background-color: $sql-editor-disable-bg !important;
 }

@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 import sys
 import random
 
@@ -38,11 +37,13 @@ class CheckForXssFeatureTest(BaseFeatureTest):
     scenarios = [
         ("Test XSS check for panels and query tool", dict())
     ]
-    test_table_name = "<h1>X" + str(random.randint(1000, 3000))
-    # test_table_name = "<h1>X"
     test_type_name = '"<script>alert(1)</script>"'
+    check_xss_chars = '&lt;h1&gt;X'
+    check_xss_chars_set2 = '&lt;script&gt;alert(1)&lt;/script&gt;'
 
     def before(self):
+        self.test_table_name = "<h1>X" + str(random.randint(1000, 3000))
+
         test_utils.create_type(
             self.server, self.test_db, self.test_type_name,
             ['"<script>alert(1)</script>" "char"',
@@ -78,7 +79,8 @@ class CheckForXssFeatureTest(BaseFeatureTest):
                 self._check_xss_in_dependents_tab()
                 retry = 0
             except WebDriverException as e:
-                print("Exception in dependent check {0}".format(retry))
+                print("Exception in dependent check {0}".format(retry),
+                      file=sys.stderr)
                 if retry == 1:
                     raise e
                 retry -= 1
@@ -126,7 +128,7 @@ class CheckForXssFeatureTest(BaseFeatureTest):
 
         self._check_escaped_characters(
             source_code,
-            "&lt;h1&gt;X",
+            self.check_xss_chars,
             "Browser tree"
         )
 
@@ -144,7 +146,7 @@ class CheckForXssFeatureTest(BaseFeatureTest):
 
         self._check_escaped_characters(
             source_code,
-            "&lt;h1&gt;X",
+            self.check_xss_chars,
             "SQL tab (Code Mirror)"
         )
 
@@ -166,9 +168,11 @@ class CheckForXssFeatureTest(BaseFeatureTest):
                                             "td[2]").get_attribute('innerHTML')
                 retry = 0
             except WebDriverException as e:
-                print("Exception in dependent tab {0}")
+                print("Exception in dependent tab {0}".format(retry),
+                      file=sys.stderr)
                 self.page.click_tab("Dependencies")
                 if retry == 1:
+                    self.page.click_tab("Dependents")
                     raise e
                 retry -= 1
 
@@ -227,7 +231,7 @@ class CheckForXssFeatureTest(BaseFeatureTest):
 
         self._check_escaped_characters(
             source_code,
-            '&lt;script&gt;alert(1)&lt;/script&gt;',
+            self.check_xss_chars_set2,
             "Query tool (History Entry)"
         )
 
@@ -244,7 +248,7 @@ class CheckForXssFeatureTest(BaseFeatureTest):
 
         self._check_escaped_characters(
             source_code,
-            '&lt;script&gt;alert(1)&lt;/script&gt;',
+            self.check_xss_chars_set2,
             "Query tool (History Details-Message)"
         )
 
@@ -262,7 +266,7 @@ class CheckForXssFeatureTest(BaseFeatureTest):
 
         self._check_escaped_characters(
             source_code,
-            '&lt;script&gt;alert(1)&lt;/script&gt;',
+            self.check_xss_chars_set2,
             "Query tool (History Details-Error)"
         )
 
@@ -284,7 +288,7 @@ class CheckForXssFeatureTest(BaseFeatureTest):
 
         self._check_escaped_characters(
             source_code,
-            '&lt;script&gt;alert(1)&lt;/script&gt;',
+            self.check_xss_chars_set2,
             "View Data (SlickGrid)"
         )
 
@@ -311,7 +315,7 @@ class CheckForXssFeatureTest(BaseFeatureTest):
                     )
                 ).perform()
                 break
-            except Exception as e:
+            except Exception:
                 if idx != 2:
                     continue
                 else:
@@ -327,7 +331,7 @@ class CheckForXssFeatureTest(BaseFeatureTest):
 
         self._check_escaped_characters(
             source_code,
-            "&lt;h1&gt;X",
+            self.check_xss_chars,
             "Explain tab (Graphical explain plan)"
         )
 

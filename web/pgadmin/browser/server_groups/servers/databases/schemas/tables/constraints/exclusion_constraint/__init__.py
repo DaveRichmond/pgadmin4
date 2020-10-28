@@ -50,8 +50,8 @@ class ExclusionConstraintModule(ConstraintTypeModule):
         initialized.
     """
 
-    NODE_TYPE = 'exclusion_constraint'
-    COLLECTION_LABEL = _("Exclusion Constraints")
+    _NODE_TYPE = 'exclusion_constraint'
+    _COLLECTION_LABEL = _("Exclusion Constraints")
 
     def __init__(self, *args, **kwargs):
         """
@@ -92,7 +92,7 @@ class ExclusionConstraintModule(ConstraintTypeModule):
 
         Returns: node type of the server module.
         """
-        return database.DatabaseModule.NODE_TYPE
+        return database.DatabaseModule.node_type
 
     @property
     def module_use_template_javascript(self):
@@ -180,6 +180,7 @@ class ExclusionConstraintView(PGChildNodeView):
     """
 
     node_type = 'exclusion_constraint'
+    EXCLUSION_CONSTRAINT_PATH = 'exclusion_constraint/sql/#{0}#'
 
     parent_ids = [
         {'type': 'int', 'id': 'gid'},
@@ -226,7 +227,7 @@ class ExclusionConstraintView(PGChildNodeView):
                 if self.manager.db_info is not None and \
                 kwargs['did'] in self.manager.db_info else 0
 
-            self.template_path = 'exclusion_constraint/sql/#{0}#'.format(
+            self.template_path = self.EXCLUSION_CONSTRAINT_PATH.format(
                 self.manager.version)
 
             # We need parent's name eg table name and schema name
@@ -327,7 +328,7 @@ class ExclusionConstraintView(PGChildNodeView):
         self.manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
         self.conn = self.manager.connection(did=did)
 
-        self.template_path = 'exclusion_constraint/sql/#{0}#'.format(
+        self.template_path = self.EXCLUSION_CONSTRAINT_PATH.format(
             self.manager.version)
 
         # We need parent's name eg table name and schema name
@@ -336,7 +337,7 @@ class ExclusionConstraintView(PGChildNodeView):
         self.table = table
 
         SQL = render_template("/".join([self.template_path,
-                                        'properties.sql']),
+                                        self._PROPERTIES_SQL]),
                               did=did,
                               tid=tid)
         status, res = self.conn.execute_dict(SQL)
@@ -365,7 +366,7 @@ class ExclusionConstraintView(PGChildNodeView):
         """
 
         SQL = render_template("/".join([self.template_path,
-                                        'nodes.sql']),
+                                        self._NODES_SQL]),
                               tid=tid,
                               exid=exid)
         status, rset = self.conn.execute_2darray(SQL)
@@ -403,7 +404,7 @@ class ExclusionConstraintView(PGChildNodeView):
         """
         res = []
         SQL = render_template("/".join([self.template_path,
-                                        'nodes.sql']),
+                                        self._NODES_SQL]),
                               tid=tid)
         status, rset = self.conn.execute_2darray(SQL)
 
@@ -438,7 +439,7 @@ class ExclusionConstraintView(PGChildNodeView):
         self.manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
         self.conn = self.manager.connection(did=did)
 
-        self.template_path = 'exclusion_constraint/sql/#{0}#'.format(
+        self.template_path = self.EXCLUSION_CONSTRAINT_PATH.format(
             self.manager.version)
 
         # We need parent's name eg table name and schema name
@@ -448,7 +449,7 @@ class ExclusionConstraintView(PGChildNodeView):
 
         res = []
         SQL = render_template("/".join([self.template_path,
-                                        'nodes.sql']),
+                                        self._NODES_SQL]),
                               tid=tid)
         status, rset = self.conn.execute_2darray(SQL)
 
@@ -461,6 +462,41 @@ class ExclusionConstraintView(PGChildNodeView):
                     icon="icon-exclusion_constraint"
                 ))
         return res
+
+    @staticmethod
+    def parse_input_data(data):
+        """
+        This function is used to parse the input data.
+        :param data:
+        :return:
+        """
+        for k, v in data.items():
+            try:
+                # comments should be taken as is because if user enters a
+                # json comment it is parsed by loads which should not happen
+                if k in ('comment',):
+                    data[k] = v
+                else:
+                    data[k] = json.loads(v, encoding='utf-8')
+            except (ValueError, TypeError, KeyError):
+                data[k] = v
+
+        return data
+
+    @staticmethod
+    def check_required_args(data, required_args):
+        """
+        This function is used to check the required arguments.
+        :param data:
+        :param required_args:
+        :return:
+        """
+        for arg in required_args:
+            if arg not in data or \
+                    (isinstance(data[arg], list) and len(data[arg]) < 1):
+                return arg
+
+        return None
 
     @check_precondition
     def create(self, gid, sid, did, scid, tid, exid=None):
@@ -480,36 +516,22 @@ class ExclusionConstraintView(PGChildNodeView):
         """
         required_args = ['columns']
 
-        data = request.form if request.form else json.loads(
-            request.data, encoding='utf-8'
-        )
-
-        for k, v in data.items():
-            try:
-                # comments should be taken as is because if user enters a
-                # json comment it is parsed by loads which should not happen
-                if k in ('comment',):
-                    data[k] = v
-                else:
-                    data[k] = json.loads(v, encoding='utf-8')
-            except (ValueError, TypeError, KeyError):
-                data[k] = v
-
-        for arg in required_args:
-            if arg not in data or \
-                    (isinstance(data[arg], list) and len(data[arg]) < 1):
-                return make_json_response(
-                    status=400,
-                    success=0,
-                    errormsg=_(
-                        "Could not find required parameter ({})."
-                    ).format(arg)
-                )
+        data = json.loads(request.data, encoding='utf-8')
+        data = self.parse_input_data(data)
+        arg_missing = self.check_required_args(data, required_args)
+        if arg_missing is not None:
+            return make_json_response(
+                status=400,
+                success=0,
+                errormsg=_(
+                    "Could not find required parameter ({})."
+                ).format(arg_missing)
+            )
 
         data['schema'] = self.schema
         data['table'] = self.table
         try:
-            if 'name' not in data or data['name'] == "":
+            if data.get('name', '') == "":
                 SQL = render_template(
                     "/".join([self.template_path, 'begin.sql']))
                 # Start transaction.
@@ -520,7 +542,7 @@ class ExclusionConstraintView(PGChildNodeView):
 
             # The below SQL will execute CREATE DDL only
             SQL = render_template(
-                "/".join([self.template_path, 'create.sql']),
+                "/".join([self.template_path, self._CREATE_SQL]),
                 data=data, conn=self.conn
             )
             status, res = self.conn.execute_scalar(SQL)
@@ -528,7 +550,7 @@ class ExclusionConstraintView(PGChildNodeView):
                 self.end_transaction()
                 return internal_server_error(errormsg=res)
 
-            if 'name' not in data or data['name'] == "":
+            if data.get('name', '') == "":
                 sql = render_template(
                     "/".join([self.template_path,
                               'get_oid_with_transaction.sql']),
@@ -545,7 +567,7 @@ class ExclusionConstraintView(PGChildNodeView):
 
             else:
                 sql = render_template(
-                    "/".join([self.template_path, 'get_oid.sql']),
+                    "/".join([self.template_path, self._OID_SQL]),
                     name=data['name']
                 )
                 status, res = self.conn.execute_dict(sql)
@@ -605,7 +627,7 @@ class ExclusionConstraintView(PGChildNodeView):
                 return internal_server_error(errormsg=res)
 
             sql = render_template(
-                "/".join([self.template_path, 'get_oid.sql']),
+                "/".join([self.template_path, self._OID_SQL]),
                 name=data['name']
             )
             status, res = self.conn.execute_dict(sql)
@@ -648,11 +670,7 @@ class ExclusionConstraintView(PGChildNodeView):
             data = {'ids': [exid]}
 
         # Below code will decide if it's simple drop or drop with cascade call
-        if self.cmd == 'delete':
-            # This is a cascade operation
-            cascade = True
-        else:
-            cascade = False
+        cascade = self._check_cascade_operation()
         try:
             for exid in data['ids']:
                 sql = render_template(
@@ -680,7 +698,7 @@ class ExclusionConstraintView(PGChildNodeView):
                 data['table'] = self.table
 
                 sql = render_template("/".join([self.template_path,
-                                                'delete.sql']),
+                                                self._DELETE_SQL]),
                                       data=data,
                                       cascade=cascade)
                 status, res = self.conn.execute_scalar(sql)
@@ -761,7 +779,7 @@ class ExclusionConstraintView(PGChildNodeView):
         """
         try:
             SQL = render_template(
-                "/".join([self.template_path, 'properties.sql']),
+                "/".join([self.template_path, self._PROPERTIES_SQL]),
                 did=did, tid=tid, conn=self.conn, cid=exid)
             status, result = self.conn.execute_dict(SQL)
             if not status:
@@ -784,13 +802,8 @@ class ExclusionConstraintView(PGChildNodeView):
 
             columns = []
             for row in res['rows']:
-                if row['options'] & 1:
-                    order = False
-                    nulls_order = True if (row['options'] & 2) else False
-                else:
-                    order = True
-                    nulls_order = True if (row['options'] & 2) else False
-
+                nulls_order = True if (row['options'] & 2) else False
+                order = False if row['options'] & 1 else True
                 columns.append({"column": row['coldef'].strip('"'),
                                 "oper_class": row['opcname'],
                                 "order": order,
@@ -814,16 +827,16 @@ class ExclusionConstraintView(PGChildNodeView):
 
                 data['include'] = [col['colname'] for col in res['rows']]
 
-            if not data['amname'] or data['amname'] == '':
+            if data.get('amname', '') == "":
                 data['amname'] = 'btree'
 
             SQL = render_template(
-                "/".join([self.template_path, 'create.sql']), data=data)
+                "/".join([self.template_path, self._CREATE_SQL]), data=data)
 
-            sql_header = u"-- Constraint: {0}\n\n-- ".format(data['name'])
+            sql_header = "-- Constraint: {0}\n\n-- ".format(data['name'])
 
             sql_header += render_template(
-                "/".join([self.template_path, 'delete.sql']),
+                "/".join([self.template_path, self._DELETE_SQL]),
                 data=data)
             sql_header += "\n"
 
@@ -863,7 +876,7 @@ class ExclusionConstraintView(PGChildNodeView):
         if is_pgstattuple:
             # Fetch index details only if extended stats available
             SQL = render_template(
-                "/".join([self.template_path, 'properties.sql']),
+                "/".join([self.template_path, self._PROPERTIES_SQL]),
                 did=did, tid=tid, conn=self.conn, cid=exid)
             status, result = self.conn.execute_dict(SQL)
             if not status:

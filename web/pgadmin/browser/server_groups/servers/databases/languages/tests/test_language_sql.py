@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 
 import uuid
 from pgadmin.utils.route import BaseTestGenerator
@@ -57,7 +56,7 @@ class LanguagesGetSql(BaseTestGenerator):
                 response = self.get_language_sql()
                 actual_response_code = response.status_code
                 expected_status_code = self.expected_data['status_code']
-        self.assertEquals(actual_response_code, expected_status_code)
+        self.assertEqual(actual_response_code, expected_status_code)
 
     def get_language_sql(self):
         """

@@ -22,6 +22,8 @@ from pgadmin.utils.ajax import make_json_response, bad_request
 
 from config import PG_DEFAULT_DRIVER
 from pgadmin.model import Server
+from pgadmin.utils.constants import MIMETYPE_APP_JS
+import config
 
 MODULE_NAME = 'import_export'
 
@@ -70,18 +72,19 @@ class IEMessage(IProcessDesc):
 
     Defines the message shown for the import/export operation.
     """
-
-    def __init__(self, _sid, _schema, _tbl, _database, _storage, *_args):
-        self.sid = _sid
-        self.schema = _schema
-        self.table = _tbl
-        self.database = _database
+    def __init__(self, *_args, **io_params):
+        self.sid = io_params['sid']
+        self.schema = io_params['schema']
+        self.table = io_params['table']
+        self.database = io_params['database']
         self._cmd = ''
+        self.is_import = io_params['is_import']
+        self.bfile = io_params['filename']
 
-        if _storage:
-            _storage = _storage.replace('\\', '/')
+        if io_params['storage']:
+            io_params['storage'] = io_params['storage'].replace('\\', '/')
 
-        def cmdArg(x):
+        def cmd_arg(x):
             if x:
                 x = x.replace('\\', '\\\\')
                 x = x.replace('"', '\\"')
@@ -97,19 +100,25 @@ class IEMessage(IProcessDesc):
                     replace_next = True
                 self._cmd += ' ' + arg
             elif replace_next:
-                arg = cmdArg(arg)
-                if _storage is not None:
-                    arg = arg.replace(_storage, '<STORAGE_DIR>')
+                arg = cmd_arg(arg)
+                if io_params['storage'] is not None:
+                    arg = arg.replace(io_params['storage'], '<STORAGE_DIR>')
                 self._cmd += ' "' + arg + '"'
             else:
-                self._cmd += cmdArg(arg)
+                self._cmd += cmd_arg(arg)
 
-    @property
-    def message(self):
+    def get_server_details(self):
         # Fetch the server details like hostname, port, roles etc
         s = Server.query.filter_by(
             id=self.sid, user_id=current_user.id
         ).first()
+
+        return s.name, s.host, s.port
+
+    @property
+    def message(self):
+        # Fetch the server details like hostname, port, roles etc
+        name, host, port = self.get_server_details()
 
         return _(
             "Copying table data '{0}.{1}' on database '{2}' "
@@ -118,19 +127,18 @@ class IEMessage(IProcessDesc):
             html.safe_str(self.schema),
             html.safe_str(self.table),
             html.safe_str(self.database),
-            html.safe_str(s.host),
-            html.safe_str(s.port)
+            html.safe_str(host),
+            html.safe_str(port)
         )
 
     @property
     def type_desc(self):
-        return _("Copying table data")
+        _type_desc = _("Import - ") if self.is_import else _("Export - ")
+        return _type_desc + _("Copying table data")
 
     def details(self, cmd, args):
         # Fetch the server details like hostname, port, roles etc
-        s = Server.query.filter_by(
-            id=self.sid, user_id=current_user.id
-        ).first()
+        name, host, port = self.get_server_details()
 
         res = '<div>'
         res += _(
@@ -141,9 +149,9 @@ class IEMessage(IProcessDesc):
             html.safe_str(self.table),
             html.safe_str(self.database),
             "{0} ({1}:{2})".format(
-                html.safe_str(s.name),
-                html.safe_str(s.host),
-                html.safe_str(s.port)
+                html.safe_str(name),
+                html.safe_str(host),
+                html.safe_str(port)
             )
         )
 
@@ -169,7 +177,7 @@ def script():
     return Response(
         response=render_template("import_export/js/import_export.js", _=_),
         status=200,
-        mimetype="application/javascript"
+        mimetype=MIMETYPE_APP_JS
     )
 
 
@@ -185,19 +193,67 @@ def filename_with_file_manager_path(_file, _present=False):
     storage_dir = get_storage_directory()
 
     if storage_dir:
-        _file = os.path.join(storage_dir, _file.lstrip(u'/').lstrip(u'\\'))
+        _file = os.path.join(storage_dir, _file.lstrip('/').lstrip('\\'))
     elif not os.path.isabs(_file):
         _file = os.path.join(document_dir(), _file)
 
     if not _present:
         # Touch the file to get the short path of the file on windows.
         with open(_file, 'a'):
-            pass
+            return fs_short_path(_file)
     else:
         if not os.path.isfile(_file):
             return None
 
     return fs_short_path(_file)
+
+
+def _get_ignored_column_list(data, driver, conn):
+    """
+    Get list of ignored columns for import/export.
+    :param data: Data.
+    :param driver: PG Driver.
+    :param conn: Connection.
+    :return: return ignored column list.
+    """
+    icols = None
+
+    if data['icolumns']:
+        ignore_cols = data['icolumns']
+
+        # format the ignore column list required as per copy command
+        # requirement
+        if ignore_cols and len(ignore_cols) > 0:
+            icols = ", ".join([
+                driver.qtIdent(conn, col)
+                for col in ignore_cols])
+    return icols
+
+
+def _get_required_column_list(data, driver, conn):
+    """
+    Get list of required columns for import/export.
+    :param data: Data.
+    :param driver: PG Driver.
+    :param conn: Connection.
+    :return: return required column list.
+    """
+    cols = None
+
+    # format the column import/export list required as per copy command
+    # requirement
+    if data['columns']:
+        columns = data['columns']
+        if columns and len(columns) > 0:
+            for col in columns:
+                if cols:
+                    cols += ', '
+                else:
+                    cols = '('
+                cols += driver.qtIdent(conn, col)
+            cols += ')'
+
+    return cols
 
 
 @blueprint.route('/job/<int:sid>', methods=['POST'], endpoint="create_job")
@@ -255,39 +311,16 @@ def create_import_export_job(sid):
 
         if not _file:
             return bad_request(errormsg=_('Please specify a valid file'))
-
-        if IS_WIN:
+        elif IS_WIN:
             _file = _file.replace('\\', '/')
 
         data['filename'] = _file
     else:
         return bad_request(errormsg=_('Please specify a valid file'))
 
-    cols = None
-    icols = None
-
-    if data['icolumns']:
-        ignore_cols = data['icolumns']
-
-        # format the ignore column list required as per copy command
-        # requirement
-        if ignore_cols and len(ignore_cols) > 0:
-            icols = ", ".join([
-                driver.qtIdent(conn, col)
-                for col in ignore_cols])
-
-    # format the column import/export list required as per copy command
-    # requirement
-    if data['columns']:
-        columns = data['columns']
-        if columns and len(columns) > 0:
-            for col in columns:
-                if cols:
-                    cols += ', '
-                else:
-                    cols = '('
-                cols += driver.qtIdent(conn, col)
-            cols += ')'
+    # Get required and ignored column list
+    icols = _get_ignored_column_list(data, driver, conn)
+    cols = _get_required_column_list(data, driver, conn)
 
     # Create the COPY FROM/TO  from template
     query = render_template(
@@ -301,22 +334,34 @@ def create_import_export_job(sid):
     args = ['--command', query]
 
     try:
+
+        io_params = {
+            'sid': sid,
+            'schema': data['schema'],
+            'table': data['table'],
+            'database': data['database'],
+            'is_import': data['is_import'],
+            'filename': data['filename'],
+            'storage': storage_dir,
+            'utility': utility
+        }
+
         p = BatchProcess(
             desc=IEMessage(
-                sid,
-                data['schema'],
-                data['table'],
-                data['database'],
-                storage_dir,
-                utility, *args
+                *args,
+                **io_params
             ),
             cmd=utility, args=args
         )
         manager.export_password_env(p.id)
 
         env = dict()
-        env['PGHOST'] = server.host
-        env['PGPORT'] = str(server.port)
+
+        env['PGHOST'] = \
+            manager.local_bind_host if manager.use_ssh_tunnel else server.host
+        env['PGPORT'] = \
+            str(manager.local_bind_port) if manager.use_ssh_tunnel else str(
+                server.port)
         env['PGUSER'] = server.username
         env['PGDATABASE'] = data['database']
         p.set_env_variables(server, env=env)

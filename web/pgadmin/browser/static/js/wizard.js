@@ -129,12 +129,12 @@ define([
       '        <div class="wizard-buttons d-flex">' +
       '          <div>' +
       '            <button tabindex="0" aria-label="' + gettext('Help') + '" title = "' + gettext('Help for this dialog.') + '"' +
-      '              class="btn btn-secondary pull-left wizard-help" <%=this.options.wizard_help ? "" : "disabled" %>>' +
+      '              class="btn btn-primary-icon pull-left wizard-help" <%=this.options.wizard_help ? "" : "disabled" %>>' +
       '              <span class="fa fa-lg fa-question" role="img"></span></button>' +
       '          </div>' +
       '          <div class="ml-auto">' +
       '              <button class="btn btn-secondary wizard-cancel" <%=this.options.disable_cancel ? "disabled" : ""%>>' +
-      '                <i class="fa fa-close" role="img"></i>&nbsp;' + gettext('Cancel') + '</button>' +
+      '                <i class="fa fa-times" role="img"></i>&nbsp;' + gettext('Cancel') + '</button>' +
       '              <button class="btn btn-secondary wizard-back" <%=this.options.disable_prev ? "disabled" : ""%>>' +
       '                <i class="fa fa-backward" role="img"></i>&nbsp;' + gettext('Back') + '</button>' +
       '              <button class="btn btn-secondary wizard-next" <%=this.options.disable_next ? "disabled" : ""%>>' +

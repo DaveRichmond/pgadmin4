@@ -9,7 +9,6 @@
 
 """ This file collect all modules/files present in tests directory and add
 them to TestSuite. """
-from __future__ import print_function
 
 import argparse
 import atexit
@@ -26,7 +25,7 @@ import time
 import unittest
 
 if sys.version_info < (3, 4):
-    raise Exception('The test suite must be run under Python 3.4 or later.')
+    raise RuntimeError('The test suite must be run under Python 3.4 or later.')
 
 import builtins
 
@@ -128,6 +127,25 @@ app.test_client_class = TestClient
 test_client = app.test_client()
 test_client.setApp(app)
 
+
+class CaptureMail:
+    # A hack Mail service that simply captures what would be sent.
+    def __init__(self, app):
+        app.extensions["mail"] = self
+        self.sent = []
+        self.ascii_attachments = []
+
+    def send(self, msg):
+        self.sent.append(msg.body)
+
+    def pop(self):
+        if len(self.sent):
+            return self.sent.pop(0)
+        return None
+
+
+CaptureMail(app)
+
 setattr(unittest.result.TestResult, "passed", [])
 
 unittest.runner.TextTestResult.addSuccess = test_utils.add_success
@@ -215,53 +233,7 @@ def get_test_modules(arguments):
             exclude_pkgs.extend(['resql'])
 
         if not test_utils.is_parallel_ui_tests(args):
-            from selenium import webdriver
-            from selenium.webdriver.chrome.options import Options
-            from selenium.webdriver.common.desired_capabilities import \
-                DesiredCapabilities
-
-            default_browser = 'chrome'
-
-            # Check default browser provided through command line. If provided
-            # then use that browser as default browser else check for the
-            # setting provided in test_config.json file.
-            if (
-                'default_browser' in arguments and
-                arguments['default_browser'] is not None
-            ):
-                default_browser = arguments['default_browser'].lower()
-            elif (
-                test_setup.config_data and
-                "default_browser" in test_setup.config_data
-            ):
-                default_browser = test_setup.config_data[
-                    'default_browser'].lower()
-
-            if default_browser == 'firefox':
-                cap = DesiredCapabilities.FIREFOX
-                cap['requireWindowFocus'] = True
-                cap['enablePersistentHover'] = False
-                profile = webdriver.FirefoxProfile()
-                profile.set_preference("dom.disable_beforeunload", True)
-                driver = webdriver.Firefox(capabilities=cap,
-                                           firefox_profile=profile)
-                driver.implicitly_wait(1)
-            else:
-                options = Options()
-                if test_setup.config_data and \
-                    'headless_chrome' in test_setup.config_data and \
-                        test_setup.config_data['headless_chrome']:
-                    options.add_argument("--headless")
-                options.add_argument("--no-sandbox")
-                options.add_argument("--disable-setuid-sandbox")
-                options.add_argument("--window-size=1280,1024")
-                options.add_argument("--disable-infobars")
-                options.add_experimental_option('w3c', False)
-                driver = webdriver.Chrome(chrome_options=options)
-
-            # maximize browser window
-            driver.maximize_window()
-
+            driver = setup_webdriver_specification(arguments)
             app_starter = AppStarter(driver, config)
             app_starter.start_app()
 
@@ -269,6 +241,76 @@ def get_test_modules(arguments):
     # Register cleanup function to cleanup on exit
     atexit.register(handle_cleanup)
 
+    # Load Test modules
+    module_list = load_modules(arguments, exclude_pkgs)
+    return module_list
+
+
+def setup_webdriver_specification(arguments):
+    """
+    Method return web-driver object set up according to values passed
+    in arguments
+    :param arguments:
+    :return: webdriver object
+    """
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.common.desired_capabilities import \
+        DesiredCapabilities
+
+    default_browser = 'chrome'
+
+    # Check default browser provided through command line. If provided
+    # then use that browser as default browser else check for the
+    # setting provided in test_config.json file.
+    if (
+        'default_browser' in arguments and
+        arguments['default_browser'] is not None
+    ):
+        default_browser = arguments['default_browser'].lower()
+    elif (
+        test_setup.config_data and
+        "default_browser" in test_setup.config_data
+    ):
+        default_browser = test_setup.config_data[
+            'default_browser'].lower()
+
+    if default_browser == 'firefox':
+        cap = DesiredCapabilities.FIREFOX
+        cap['requireWindowFocus'] = True
+        cap['enablePersistentHover'] = False
+        profile = webdriver.FirefoxProfile()
+        profile.set_preference("dom.disable_beforeunload", True)
+        driver_local = webdriver.Firefox(capabilities=cap,
+                                         firefox_profile=profile)
+        driver_local.implicitly_wait(1)
+    else:
+        options = Options()
+        if test_setup.config_data and \
+            'headless_chrome' in test_setup.config_data and \
+                test_setup.config_data['headless_chrome']:
+            options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-setuid-sandbox")
+        options.add_argument("--window-size=1280,1024")
+        options.add_argument("--disable-infobars")
+        options.add_experimental_option('w3c', False)
+        driver_local = webdriver.Chrome(chrome_options=options)
+
+    # maximize browser window
+    driver_local.maximize_window()
+    return driver_local
+
+
+def load_modules(arguments, exclude_pkgs):
+    """
+    Method returns list of modules which is formed by removing packages from
+    exclude_pkgs arguments.
+    :param arguments:
+    :param exclude_pkgs:
+    :return:
+    """
+    from pgadmin.utils.route import TestsGeneratorRegistry
     # Load the test modules which are in given package(i.e. in arguments.pkg)
     if arguments['pkg'] is None or arguments['pkg'] == "all":
         TestsGeneratorRegistry.load_generators('pgadmin', exclude_pkgs)
@@ -410,6 +452,7 @@ class StreamToLogger(object):
             self.logger.log(self.log_level, line.rstrip())
 
     def flush(self):
+        # Function required to be implemented for logger
         pass
 
 
@@ -499,13 +542,15 @@ def execute_test(test_module_list_passed, server_passed, driver_passed):
         if connection:
             test_utils.drop_database(connection, test_db_name)
             connection.close()
-
         # Delete test server
-        test_utils.delete_test_server(test_client)
+        # test_utils.delete_test_server(test_client)
+        test_utils.delete_server(test_client, server_information)
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)
         print(str(exc))
-        print("Exception in {0}".format(threading.current_thread().ident))
+        print("Exception in {0} {1}".format(
+            threading.current_thread().ident,
+            threading.currentThread().getName()))
     finally:
         # Delete web-driver instance
         thread_name = "parallel_tests" + server_passed['name']
@@ -616,7 +661,7 @@ def run_sequential_tests(url_client, servers_details, sequential_tests_lists,
         print(str(exc))
     finally:
         # Clean driver object created
-        driver_object.quit()
+        test_utils.quit_webdriver(driver_object)
 
 
 def print_test_results():
@@ -739,91 +784,95 @@ if __name__ == '__main__':
     # Check if feature tests included & parallel tests switch passed
     if test_utils.is_feature_test_included(args) and \
             test_utils.is_parallel_ui_tests(args):
+        try:
+            # Get selenium config dict
+            selenoid_config = test_setup.config_data['selenoid_config']
 
-        # Get selenium config dict
-        selenoid_config = test_setup.config_data['selenoid_config']
+            # Set DEFAULT_SERVER value
+            default_server = selenoid_config['pgAdmin_default_server']
+            os.environ["PGADMIN_CONFIG_DEFAULT_SERVER"] = str(default_server)
+            config.DEFAULT_SERVER = str(default_server)
 
-        # Set DEFAULT_SERVER value
-        default_server = selenoid_config['pgAdmin_default_server']
-        os.environ["PGADMIN_CONFIG_DEFAULT_SERVER"] = str(default_server)
-        config.DEFAULT_SERVER = str(default_server)
+            # Get hub url
+            hub_url = selenoid_config['selenoid_url']
 
-        # Get hub url
-        hub_url = selenoid_config['selenoid_url']
+            # Get selenium grid status & list of available browser out passed
+            selenium_grid_status, list_of_browsers \
+                = test_utils.get_selenium_grid_status_and_browser_list(hub_url,
+                                                                       args)
 
-        # Get selenium grid status & list of available browser out passed
-        selenium_grid_status, list_of_browsers \
-            = test_utils.get_selenium_grid_status_and_browser_list(hub_url)
+            # Execute tests if selenium-grid is up
+            if selenium_grid_status and len(list_of_browsers) > 0:
+                app_starter_local = None
+                # run across browsers
+                for browser_info in list_of_browsers:
+                    try:
+                        # browser info
+                        browser_name, browser_version = \
+                            test_utils.get_browser_details(browser_info,
+                                                           hub_url)
 
-        # Execute tests if selenium-grid is up
-        if selenium_grid_status and len(list_of_browsers) > 0:
-            app_starter_local = None
-            # run across browsers
-            for browser_info in list_of_browsers:
-                try:
-                    # browser info
-                    browser_name, browser_version = \
-                        test_utils.get_browser_details(browser_info, hub_url)
+                        # test lists can be executed in parallel & sequentially
+                        parallel_tests, sequential_tests = \
+                            test_utils.get_parallel_sequential_module_list(
+                                test_module_list)
 
-                    # tests lists can be executed in parallel & sequentially
-                    parallel_tests, sequential_tests = \
-                        test_utils.get_parallel_sequential_module_list(
-                            test_module_list)
+                        # Print test summary
+                        test_utils.print_test_summary(
+                            test_module_list, parallel_tests, sequential_tests,
+                            browser_name, browser_version)
 
-                    # Print test summary
-                    test_utils.print_test_summary(test_module_list,
-                                                  parallel_tests,
-                                                  sequential_tests,
-                                                  browser_name,
-                                                  browser_version)
+                        # Create app form source code
+                        app_starter_local = AppStarter(None, config)
+                        client_url = app_starter_local.start_app()
 
-                    # Create app form source code
-                    app_starter_local = AppStarter(None, config)
-                    client_url = app_starter_local.start_app()
+                        # Running Parallel tests
+                        if len(parallel_tests) > 0:
+                            parallel_sessions = \
+                                int(selenoid_config['max_parallel_sessions'])
 
-                    # Running Parallel tests
-                    if len(parallel_tests) > 0:
-                        parallel_sessions = int(selenoid_config[
-                                                'max_parallel_sessions'])
+                            run_parallel_tests(
+                                client_url, servers_info, parallel_tests,
+                                browser_name, browser_version,
+                                parallel_sessions)
 
-                        run_parallel_tests(client_url, servers_info,
-                                           parallel_tests, browser_name,
-                                           browser_version, parallel_sessions)
+                        # Sequential Tests
+                        if len(sequential_tests) > 0:
+                            run_sequential_tests(
+                                client_url, servers_info, sequential_tests,
+                                browser_name, browser_version)
 
-                    # Wait till all threads started in parallel are finished
-                    while True:
-                        try:
-                            if threading.activeCount() <= 1:
-                                break
-                            else:
-                                time.sleep(10)
-                        except Exception as e:
-                            traceback.print_exc(file=sys.stderr)
-                            print(str(e))
+                        # Clean up environment
+                        if app_starter_local:
+                            app_starter_local.stop_app()
 
-                    # Sequential Tests
-                    if len(sequential_tests) > 0:
-                        run_sequential_tests(client_url, servers_info,
-                                             sequential_tests, browser_name,
-                                             browser_version)
+                        # Pause before printing result in order
+                        # not to mix output
+                        time.sleep(5)
 
-                    # Clean up environment
-                    if app_starter_local:
-                        app_starter_local.stop_app()
+                        # Print note for completion of execution in a browser.
+                        print(
+                            "\n============= Test execution with {0} is "
+                            "completed.=============".format(browser_name),
+                            file=sys.stderr)
+                        print_test_results()
 
-                except SystemExit:
-                    if app_starter_local:
-                        app_starter_local.stop_app()
-                    if handle_cleanup:
-                        handle_cleanup()
-                # Pause before printing result in order not to mix output
-                time.sleep(5)
-                # Print note for completion of execution in a browser.
+                    except SystemExit:
+                        if app_starter_local:
+                            app_starter_local.stop_app()
+                        if handle_cleanup:
+                            handle_cleanup()
+                        raise
+            else:
                 print(
-                    "\n============= Test execution with {0} is "
-                    "completed.=============".format(browser_name),
-                    file=sys.stderr)
-                print_test_results()
+                    "\n============= Either Selenium Grid is NOT up OR"
+                    " browser list is 0 =============", file=sys.stderr)
+                failure = True
+        except Exception as exc:
+            # Print exception stack trace
+            traceback.print_exc(file=sys.stderr)
+            print(str(exc))
+            failure = True
         del os.environ["PGADMIN_CONFIG_DEFAULT_SERVER"]
     else:
         try:
@@ -835,6 +884,7 @@ if __name__ == '__main__':
         except SystemExit:
             if handle_cleanup:
                 handle_cleanup()
+            raise
         print_test_results()
 
     # Stop code coverage

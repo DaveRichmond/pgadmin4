@@ -36,16 +36,8 @@ define('pgadmin.node.type', [
       Backgrid.Extension.DependentCell.prototype.initialize.apply(this, arguments);
     },
     dependentChanged: function () {
-      this.$el.empty();
-      var model = this.model;
-      var column = this.column;
-      var editable = this.column.get('editable');
-
-      var is_editable = _.isFunction(editable) ? !!editable.apply(column, [model]) : !!editable;
-      if (is_editable){ this.$el.addClass('editable'); }
-      else { this.$el.removeClass('editable'); }
-
-      this.delegateEvents();
+      this.model.set(this.column.get('name'), null);
+      this.render();
       return this;
     },
     remove: Backgrid.Extension.DependentCell.prototype.remove,
@@ -269,6 +261,7 @@ define('pgadmin.node.type', [
       collection_type: 'coll-type',
       hasSQL: true,
       hasDepends: true,
+      width: pgBrowser.stdW.md + 'px',
       Init: function() {
         /* Avoid multiple registration of menus */
         if (this.initialized)
@@ -351,11 +344,11 @@ define('pgadmin.node.type', [
           select2: { allowClear: false },
           options: function() {
             return [
-              {label: 'Composite', value: 'c'},
-              {label: 'Enumeration', value: 'e'},
-              {label: 'External', value: 'b'},
-              {label: 'Range', value: 'r'},
-              {label: 'Shell', value: 'p'},
+              {label: gettext('Composite'), value: 'c'},
+              {label: gettext('Enumeration'), value: 'e'},
+              {label: gettext('External'), value: 'b'},
+              {label: gettext('Range'), value: 'r'},
+              {label: gettext('Shell'), value: 'p'},
             ];
           },
           // If create mode then by default open composite type
@@ -776,7 +769,7 @@ define('pgadmin.node.type', [
               if(acl.length > 0)
                 acl.reset();
             }
-            return !(m.get('typtype') === 'p');
+            return (m.get('typtype') !== 'p');
           },
         },{
           id: 'seclabels', label: gettext('Security labels'),
@@ -792,7 +785,7 @@ define('pgadmin.node.type', [
               if(secLabs.length > 0)
                 secLabs.reset();
             }
-            return !(m.get('typtype') === 'p');
+            return (m.get('typtype') !== 'p');
           },
         }],
         validate: function() {

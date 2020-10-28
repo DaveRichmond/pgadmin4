@@ -54,8 +54,8 @@ class TriggerModule(CollectionNodeModule):
         initialized.
     """
 
-    NODE_TYPE = 'trigger'
-    COLLECTION_LABEL = gettext("Triggers")
+    _NODE_TYPE = 'trigger'
+    _COLLECTION_LABEL = gettext("Triggers")
 
     def __init__(self, *args, **kwargs):
         """
@@ -70,14 +70,14 @@ class TriggerModule(CollectionNodeModule):
         self.min_gpdbver = 1000000000
         super(TriggerModule, self).__init__(*args, **kwargs)
 
-    def BackendSupported(self, manager, **kwargs):
+    def backend_supported(self, manager, **kwargs):
         """
         Load this module if vid is view, we will not load it under
         material view
         """
         if manager.server_type == 'gpdb':
             return False
-        if super(TriggerModule, self).BackendSupported(manager, **kwargs):
+        if super(TriggerModule, self).backend_supported(manager, **kwargs):
             conn = manager.connection(did=kwargs['did'])
 
             if 'vid' not in kwargs:
@@ -114,14 +114,14 @@ class TriggerModule(CollectionNodeModule):
         Load the module script for server, when any of the server-group node is
         initialized.
         """
-        return database.DatabaseModule.NODE_TYPE
+        return database.DatabaseModule.node_type
 
     @property
     def node_inode(self):
         """
         Load the module node as a leaf node
         """
-        return False
+        return True
 
     @property
     def module_use_template_javascript(self):
@@ -215,6 +215,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
     """
 
     node_type = blueprint.node_type
+    node_label = "Trigger"
 
     parent_ids = [
         {'type': 'int', 'id': 'gid'},
@@ -279,6 +280,11 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
             )
             self.template_path = 'triggers/sql/{0}/#{1}#'.format(
                 self.manager.server_type, self.manager.version)
+
+            self.trigger_function_template_path = \
+                'trigger_functions/{0}/sql/#{1}#'.format(
+                    self.manager.server_type, self.manager.version)
+
             # Store server type
             self.server_type = self.manager.server_type
             # We need parent's name eg table name and schema name
@@ -291,6 +297,69 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
             return f(*args, **kwargs)
 
         return wrap
+
+    @check_precondition
+    def get_children_nodes(self, manager, **kwargs):
+        """
+        Function is used to get the child nodes.
+        :param manager:
+        :param kwargs:
+        :return:
+        """
+        nodes = []
+        scid = kwargs.get('scid')
+        tid = kwargs.get('tid')
+        trid = kwargs.get('trid')
+
+        try:
+            SQL = render_template(
+                "/".join([self.template_path, 'get_function_oid.sql']),
+                tid=tid, trid=trid
+            )
+            status, rset = self.conn.execute_2darray(SQL)
+            if not status:
+                return internal_server_error(errormsg=rset)
+
+            if len(rset['rows']) == 0:
+                return gone(
+                    gettext("Could not find the specified trigger function"))
+
+            # For language EDB SPL we should not display any node.
+            if rset['rows'][0]['lanname'] != 'edbspl':
+                trigger_function_schema_oid = rset['rows'][0]['tfuncschoid']
+
+                sql = render_template("/".join(
+                    [self.trigger_function_template_path, self._NODE_SQL]),
+                    scid=trigger_function_schema_oid,
+                    fnid=rset['rows'][0]['tfuncoid']
+                )
+                status, res = self.conn.execute_2darray(sql)
+                if not status:
+                    return internal_server_error(errormsg=rset)
+
+                if len(res['rows']) == 0:
+                    return gone(gettext(
+                        "Could not find the specified trigger function"))
+
+                row = res['rows'][0]
+                func_name = row['name']
+                # If trigger function is from another schema then we should
+                # display the name as schema qulified name.
+                if scid != trigger_function_schema_oid:
+                    func_name = \
+                        rset['rows'][0]['tfuncschema'] + '.' + row['name']
+
+                trigger_func = current_app.blueprints['NODE-trigger_function']
+                nodes.append(trigger_func.generate_browser_node(
+                    row['oid'], trigger_function_schema_oid,
+                    gettext(func_name),
+                    icon="icon-trigger_function", funcowner=row['funcowner'],
+                    language=row['lanname'], inode=False)
+                )
+        except Exception as e:
+            return internal_server_error(errormsg=str(e))
+
+        return nodes
 
     @check_precondition
     def get_trigger_functions(self, gid, sid, did, scid, tid, trid=None):
@@ -349,7 +418,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
         """
 
         SQL = render_template("/".join([self.template_path,
-                                        'properties.sql']), tid=tid)
+                                        self._PROPERTIES_SQL]), tid=tid)
         status, res = self.conn.execute_dict(SQL)
 
         if not status:
@@ -379,7 +448,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
         """
         res = []
         SQL = render_template("/".join([self.template_path,
-                                        'nodes.sql']),
+                                        self._NODES_SQL]),
                               tid=tid,
                               trid=trid)
         status, rset = self.conn.execute_2darray(SQL)
@@ -387,9 +456,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
             return internal_server_error(errormsg=rset)
 
         if len(rset['rows']) == 0:
-            return gone(
-                gettext("""Could not find the trigger in the table.""")
-            )
+            return gone(self.not_found_error_msg())
 
         res = self.blueprint.generate_browser_node(
             rset['rows'][0]['oid'],
@@ -423,7 +490,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
         """
         res = []
         SQL = render_template("/".join([self.template_path,
-                                        'nodes.sql']), tid=tid)
+                                        self._NODES_SQL]), tid=tid)
         status, rset = self.conn.execute_2darray(SQL)
         if not status:
             return internal_server_error(errormsg=rset)
@@ -477,7 +544,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
         :return:
         """
         SQL = render_template("/".join([self.template_path,
-                                        'properties.sql']),
+                                        self._PROPERTIES_SQL]),
                               tid=tid, trid=trid,
                               datlastsysoid=self.datlastsysoid)
 
@@ -487,8 +554,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
             return False, internal_server_error(errormsg=res)
 
         if len(res['rows']) == 0:
-            return False, gone(
-                gettext("""Could not find the trigger in the table."""))
+            return False, gone(self.not_found_error_msg())
 
         # Making copy of output for future use
         data = dict(res['rows'][0])
@@ -545,11 +611,11 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
         data['schema'] = self.schema
         data['table'] = self.table
         if len(data['table']) == 0:
-            return gone(gettext("The specified object could not be found."))
+            return gone(self.not_found_error_msg())
 
         try:
             SQL = render_template("/".join([self.template_path,
-                                            'create.sql']),
+                                            self._CREATE_SQL]),
                                   data=data, conn=self.conn)
             status, res = self.conn.execute_scalar(SQL)
             if not status:
@@ -557,7 +623,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
 
             # we need oid to to add object in tree at browser
             SQL = render_template("/".join([self.template_path,
-                                            'get_oid.sql']),
+                                            self._OID_SQL]),
                                   tid=tid, data=data)
             status, trid = self.conn.execute_scalar(SQL)
             if not status:
@@ -575,7 +641,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
             return internal_server_error(errormsg=str(e))
 
     @check_precondition
-    def delete(self, gid, sid, did, scid, tid, trid=None, only_sql=False):
+    def delete(self, gid, sid, did, scid, tid, **kwargs):
         """
         This function will updates existing the trigger object
 
@@ -587,6 +653,9 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
            tid: Table ID
            trid: Trigger ID
         """
+        trid = kwargs.get('trid', None)
+        only_sql = kwargs.get('only_sql', False)
+
         if trid is None:
             data = request.form if request.form else json.loads(
                 request.data, encoding='utf-8'
@@ -595,40 +664,34 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
             data = {'ids': [trid]}
 
         # Below will decide if it's simple drop or drop with cascade call
-        if self.cmd == 'delete':
-            # This is a cascade operation
-            cascade = True
-        else:
-            cascade = False
+
+        cascade = self._check_cascade_operation()
 
         try:
             for trid in data['ids']:
                 # We will first fetch the trigger name for current request
                 # so that we create template for dropping trigger
                 SQL = render_template("/".join([self.template_path,
-                                                'properties.sql']),
+                                                self._PROPERTIES_SQL]),
                                       tid=tid, trid=trid,
                                       datlastsysoid=self.datlastsysoid)
 
                 status, res = self.conn.execute_dict(SQL)
                 if not status:
                     return internal_server_error(errormsg=res)
-
-                if not res['rows']:
+                elif not res['rows']:
                     return make_json_response(
                         success=0,
                         errormsg=gettext(
                             'Error: Object not found.'
                         ),
-                        info=gettext(
-                            'The specified trigger could not be found.\n'
-                        )
+                        info=self.not_found_error_msg()
                     )
 
                 data = dict(res['rows'][0])
 
                 SQL = render_template("/".join([self.template_path,
-                                                'delete.sql']),
+                                                self._DELETE_SQL]),
                                       data=data,
                                       conn=self.conn,
                                       cascade=cascade
@@ -669,8 +732,9 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
             data['table'] = self.table
 
             SQL, name = trigger_utils.get_sql(
-                self.conn, data, tid, trid, self.datlastsysoid,
-                self.blueprint.show_system_objects)
+                self.conn, data=data, tid=tid, trid=trid,
+                datlastsysoid=self.datlastsysoid,
+                show_system_objects=self.blueprint.show_system_objects)
 
             if not isinstance(SQL, str):
                 return SQL
@@ -683,7 +747,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
             # update the trigger then new OID is getting generated
             # so we need to return new OID of trigger.
             SQL = render_template(
-                "/".join([self.template_path, 'get_oid.sql']),
+                "/".join([self.template_path, self._OID_SQL]),
                 tid=tid, data=data
             )
             status, new_trid = self.conn.execute_scalar(SQL)
@@ -691,7 +755,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
                 return internal_server_error(errormsg=new_trid)
             # Fetch updated properties
             SQL = render_template("/".join([self.template_path,
-                                            'properties.sql']),
+                                            self._PROPERTIES_SQL]),
                                   tid=tid, trid=new_trid,
                                   datlastsysoid=self.datlastsysoid)
 
@@ -701,8 +765,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
                 return internal_server_error(errormsg=res)
 
             if len(res['rows']) == 0:
-                return gone(
-                    gettext("""Could not find the trigger in the table."""))
+                return gone(self.not_found_error_msg())
 
             # Making copy of output for future use
             data = dict(res['rows'][0])
@@ -751,8 +814,9 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
 
         try:
             sql, name = trigger_utils.get_sql(
-                self.conn, data, tid, trid, self.datlastsysoid,
-                self.blueprint.show_system_objects)
+                self.conn, data=data, tid=tid, trid=trid,
+                datlastsysoid=self.datlastsysoid,
+                show_system_objects=self.blueprint.show_system_objects)
             if not isinstance(sql, str):
                 return sql
             sql = sql.strip('\n').strip(' ')
@@ -781,19 +845,35 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
         """
 
         SQL = trigger_utils.get_reverse_engineered_sql(
-            self.conn, self.schema, self.table, tid, trid,
-            self.datlastsysoid, self.blueprint.show_system_objects)
+            self.conn, schema=self.schema, table=self.table, tid=tid,
+            trid=trid, datlastsysoid=self.datlastsysoid,
+            show_system_objects=self.blueprint.show_system_objects)
 
         return ajax_response(response=SQL)
 
     @check_precondition
-    def get_sql_from_diff(self, gid, sid, did, scid, tid, oid,
-                          data=None, diff_schema=None, drop_sql=False):
+    def get_sql_from_diff(self, **kwargs):
+        """
+        This function is used to get the DDL/DML statements.
+        :param kwargs
+        :return:
+        """
+        gid = kwargs.get('gid')
+        sid = kwargs.get('sid')
+        did = kwargs.get('did')
+        scid = kwargs.get('scid')
+        tid = kwargs.get('tid')
+        oid = kwargs.get('oid')
+        data = kwargs.get('data', None)
+        drop_sql = kwargs.get('drop_sql', False)
+        target_schema = kwargs.get('target_schema', None)
+
         if data:
             SQL, name = trigger_utils.get_sql(
-                self.conn, data, tid, oid,
-                self.datlastsysoid,
-                self.blueprint.show_system_objects, True)
+                self.conn, data=data, tid=tid, trid=oid,
+                datlastsysoid=self.datlastsysoid,
+                show_system_objects=self.blueprint.show_system_objects,
+                is_schema_diff=True)
 
             if not isinstance(SQL, str):
                 return SQL
@@ -805,13 +885,13 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
                                   only_sql=True)
             else:
                 schema = self.schema
-                if diff_schema:
-                    schema = diff_schema
+                if target_schema:
+                    schema = target_schema
+
                 SQL = trigger_utils.get_reverse_engineered_sql(
-                    self.conn, schema,
-                    self.table, tid, oid,
-                    self.datlastsysoid,
-                    self.blueprint.show_system_objects,
+                    self.conn, schema=schema, table=self.table, tid=tid,
+                    trid=oid, datlastsysoid=self.datlastsysoid,
+                    show_system_objects=self.blueprint.show_system_objects,
                     template_path=None, with_header=False)
 
         return SQL
@@ -839,7 +919,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
         try:
 
             SQL = render_template("/".join([self.template_path,
-                                            'properties.sql']),
+                                            self._PROPERTIES_SQL]),
                                   tid=tid, trid=trid,
                                   datlastsysoid=self.datlastsysoid)
 
@@ -847,9 +927,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
             if not status:
                 return internal_server_error(errormsg=res)
             if len(res['rows']) == 0:
-                return gone(
-                    gettext("""Could not find the trigger in the table.""")
-                )
+                return gone(self.not_found_error_msg())
 
             o_data = dict(res['rows'][0])
 
@@ -952,7 +1030,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
             res = data
         else:
             SQL = render_template("/".join([self.template_path,
-                                            'nodes.sql']), tid=tid)
+                                            self._NODES_SQL]), tid=tid)
             status, triggers = self.conn.execute_2darray(SQL)
             if not status:
                 current_app.logger.error(triggers)
@@ -989,7 +1067,7 @@ class TriggerView(PGChildNodeView, SchemaDiffObjectCompare):
                                           scid=src_params['scid'],
                                           tid=src_params['tid'],
                                           oid=source['oid'],
-                                          diff_schema=target_schema)
+                                          target_schema=target_schema)
         elif comp_status == 'target_only':
             diff = self.get_sql_from_diff(gid=tgt_params['gid'],
                                           sid=tgt_params['sid'],

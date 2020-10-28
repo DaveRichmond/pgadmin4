@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 
 import uuid
 from . import utils as language_utils
@@ -39,6 +38,10 @@ class LanguagesGetFunctionAndTemplateTestCase(BaseTestGenerator):
         self.language_id = language_utils.create_language(self.server,
                                                           self.db_name,
                                                           self.lang_name)
+        if hasattr(self, 'server_max_version'):
+            if self.server_information['server_version'] > \
+                    self.server_max_version:
+                self.skipTest(self.skip_msg)
 
     def runTest(self):
         """This function will get the language under test database."""
@@ -52,7 +55,7 @@ class LanguagesGetFunctionAndTemplateTestCase(BaseTestGenerator):
                 response = self.get_language_functions_template()
                 actual_response_code = response.status_code
                 expected_status_code = self.expected_data['status_code']
-        self.assertEquals(actual_response_code, expected_status_code)
+        self.assertEqual(actual_response_code, expected_status_code)
 
     def get_language_functions_template(self):
         """

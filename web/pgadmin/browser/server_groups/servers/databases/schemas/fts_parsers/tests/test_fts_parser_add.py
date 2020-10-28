@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 
 import json
 import uuid
@@ -72,7 +71,7 @@ class FtsParserAddTestCase(BaseTestGenerator):
             data=json.dumps(self.data),
             content_type='html/json')
 
-        self.assertEquals(response.status_code, 200)
+        self.assertEqual(response.status_code, 200)
 
     def tearDown(self):
         """This function delete the fts_parser and disconnect the test

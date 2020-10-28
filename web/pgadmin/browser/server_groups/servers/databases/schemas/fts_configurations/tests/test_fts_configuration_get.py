@@ -7,7 +7,6 @@
 #
 ##########################################################################
 
-from __future__ import print_function
 
 import uuid
 
@@ -72,7 +71,7 @@ class FTSConfGetTestCase(BaseTestGenerator):
             str(self.fts_conf_id),
             content_type='html/json')
 
-        self.assertEquals(get_response.status_code, 200)
+        self.assertEqual(get_response.status_code, 200)
 
     def tearDown(self):
         """This function delete the fts_config and disconnect the test

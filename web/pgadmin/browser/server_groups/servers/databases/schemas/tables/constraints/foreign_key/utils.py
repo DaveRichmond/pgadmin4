@@ -12,8 +12,10 @@
 from flask import render_template
 from flask_babelex import gettext as _
 from pgadmin.utils.ajax import internal_server_error
-from pgadmin.utils.exception import ObjectGone
+from pgadmin.utils.exception import ObjectGone, ExecuteError
 from functools import wraps
+
+FKEY_PROPERTIES_SQL = 'properties.sql'
 
 
 def get_template_path(f):
@@ -47,7 +49,7 @@ def get_foreign_keys(conn, tid, fkid=None, template_path=None):
     """
 
     sql = render_template("/".join(
-        [template_path, 'properties.sql']), tid=tid, cid=fkid)
+        [template_path, FKEY_PROPERTIES_SQL]), tid=tid, cid=fkid)
 
     status, result = conn.execute_dict(sql)
     if not status:
@@ -69,7 +71,9 @@ def get_foreign_keys(conn, tid, fkid=None, template_path=None):
         for row in res['rows']:
             columns.append({"local_column": row['conattname'],
                             "references": fk['confrelid'],
-                            "referenced": row['confattname']})
+                            "referenced": row['confattname'],
+                            "references_table_name":
+                                fk['refnsp'] + '.' + fk['reftab']})
             cols.append(row['conattname'])
 
         fk['columns'] = columns
@@ -108,7 +112,7 @@ def search_coveringindex(conn, tid, cols, template_path=None):
                           tid=tid)
     status, constraints = conn.execute_dict(SQL)
     if not status:
-        raise Exception(constraints)
+        raise ExecuteError(constraints)
 
     for constraint in constraints['rows']:
         sql = render_template(
@@ -118,7 +122,7 @@ def search_coveringindex(conn, tid, cols, template_path=None):
         status, rest = conn.execute_dict(sql)
 
         if not status:
-            raise Exception(rest)
+            raise ExecuteError(rest)
 
         index_cols = set()
         for r in rest['rows']:
@@ -144,7 +148,7 @@ def get_parent(conn, tid, template_path=None):
                                     'get_parent.sql']), tid=tid)
     status, rset = conn.execute_2darray(SQL)
     if not status:
-        raise Exception(rset)
+        raise ExecuteError(rset)
 
     schema = ''
     table = ''
@@ -153,6 +157,31 @@ def get_parent(conn, tid, template_path=None):
         table = rset['rows'][0]['table']
 
     return schema, table
+
+
+def _get_sql_for_delete_fk_constraint(data, constraint, sql, template_path,
+                                      conn):
+    """
+    Get sql for delete foreign key constraints.
+    :param data:
+    :param constraint:
+    :param sql: sql for append
+    :param template_path: template path for sql.
+    :param conn:
+    :return:
+    """
+    if 'deleted' in constraint:
+        for c in constraint['deleted']:
+            c['schema'] = data['schema']
+            c['table'] = data['name']
+
+            # Sql for drop
+            sql.append(
+                render_template("/".join(
+                    [template_path,
+                     'delete.sql']),
+                    data=c, conn=conn).strip('\n')
+            )
 
 
 @get_template_path
@@ -172,18 +201,8 @@ def get_foreign_key_sql(conn, tid, data, template_path=None):
     if 'foreign_key' in data:
         constraint = data['foreign_key']
         # If constraint(s) is/are deleted
-        if 'deleted' in constraint:
-            for c in constraint['deleted']:
-                c['schema'] = data['schema']
-                c['table'] = data['name']
-
-                # Sql for drop
-                sql.append(
-                    render_template("/".join(
-                        [template_path,
-                         'delete.sql']),
-                        data=c, conn=conn).strip('\n')
-                )
+        _get_sql_for_delete_fk_constraint(data, constraint, sql, template_path,
+                                          conn)
 
         if 'changed' in constraint:
             for c in constraint['changed']:
@@ -219,21 +238,9 @@ def get_sql(conn, data, tid, fkid=None, template_path=None):
     :param template_path: Template Path
     :return:
     """
-    name = data['name'] if 'name' in data else None
     if fkid is not None:
-        sql = render_template("/".join([template_path, 'properties.sql']),
-                              tid=tid, cid=fkid)
-        status, res = conn.execute_dict(sql)
-        if not status:
-            raise Exception(res)
-
-        if len(res['rows']) == 0:
-            raise ObjectGone(
-                _('Could not find the foreign key constraint in the table.'))
-
-        old_data = res['rows'][0]
-        if 'name' not in data:
-            name = data['name'] = old_data['name']
+        old_data, name = _get_properties_for_fk_const(tid, fkid, data,
+                                                      template_path, conn)
 
         sql = render_template("/".join([template_path, 'update.sql']),
                               data=data, o_data=old_data)
@@ -249,7 +256,7 @@ def get_sql(conn, data, tid, fkid=None, template_path=None):
 
             status, res = conn.execute_dict(col_sql)
             if not status:
-                raise Exception(res)
+                raise ExecuteError(res)
 
             columns = []
             for row in res['rows']:
@@ -263,40 +270,118 @@ def get_sql(conn, data, tid, fkid=None, template_path=None):
                 "/".join([template_path, 'create_index.sql']),
                 data=data, conn=conn)
     else:
-        if 'columns' not in data or \
-                (isinstance(data['columns'], list) and
-                 len(data['columns']) < 1):
-            return _('-- definition incomplete'), name
-
-        if data['autoindex'] and \
-                ('coveringindex' not in data or data['coveringindex'] == ''):
-            return _('-- definition incomplete'), name
-
-        # Get the parent schema and table.
-        schema, table = get_parent(conn,
-                                   data['columns'][0]['references'])
-
-        # Below handling will be used in Schema diff in case
-        # of different database comparison
-
-        if schema and table:
-            data['remote_schema'] = schema
-            data['remote_table'] = table
-
-        if 'remote_schema' not in data:
-            data['remote_schema'] = None
-        elif 'schema' in data and (schema is None or schema == ''):
-            data['remote_schema'] = data['schema']
-
-        if 'remote_table' not in data:
-            data['remote_table'] = None
-
-        sql = render_template("/".join([template_path, 'create.sql']),
-                              data=data, conn=conn)
-
-        if data['autoindex']:
-            sql += render_template(
-                "/".join([template_path, 'create_index.sql']),
-                data=data, conn=conn)
+        is_error, errmsg, name, sql = _get_sql_for_create_fk_const(
+            data, conn, template_path)
+        if is_error:
+            return _(errmsg), name
 
     return sql, name
+
+
+def _get_properties_for_fk_const(tid, fkid, data, template_path, conn):
+    """
+    Get property data for fk constraint.
+    tid: table Id
+    fkid: Foreign key constraint ID.
+    data: Data.
+    template_path: template path for get sql.
+    conn: Connection.
+    """
+    name = data['name'] if 'name' in data else None
+    sql = render_template("/".join([template_path, FKEY_PROPERTIES_SQL]),
+                          tid=tid, cid=fkid)
+    status, res = conn.execute_dict(sql)
+    if not status:
+        raise ExecuteError(res)
+
+    if len(res['rows']) == 0:
+        raise ObjectGone(
+            _('Could not find the foreign key constraint in the table.'))
+
+    old_data = res['rows'][0]
+    if 'name' not in data:
+        name = data['name'] = old_data['name']
+
+    return old_data, name
+
+
+def _get_sql_for_create_fk_const(data, conn, template_path):
+    """
+    Get SQL for create new foreign key constrains.
+    data: Data.
+    conn: Connection
+    template_path: template path for get template.
+    """
+    name = data['name'] if 'name' in data else None
+    if 'columns' not in data or \
+        (isinstance(data['columns'], list) and
+         len(data['columns']) < 1):
+        return True, '-- definition incomplete', name, ''
+
+    if data['autoindex'] and \
+            ('coveringindex' not in data or data['coveringindex'] == ''):
+        return True, '-- definition incomplete', name, ''
+
+    # Get the parent schema and table.
+    schema, table = get_parent(conn,
+                               data['columns'][0]['references'])
+
+    # Below handling will be used in Schema diff in case
+    # of different database comparison
+    _checks_for_schema_diff(table, schema, data)
+
+    sql = render_template("/".join([template_path, 'create.sql']),
+                          data=data, conn=conn)
+
+    if data['autoindex']:
+        sql += render_template(
+            "/".join([template_path, 'create_index.sql']),
+            data=data, conn=conn)
+
+    return False, '', '', sql
+
+
+def _checks_for_schema_diff(table, schema, data):
+    """
+    Check for schema diff in case of different database comparisons.
+    table: table data
+    schema: schema data
+    data:Data
+    """
+    if schema and table:
+        data['remote_schema'] = schema
+        data['remote_table'] = table
+
+    if 'remote_schema' not in data:
+        data['remote_schema'] = None
+    elif 'schema' in data and (schema is None or schema == ''):
+        data['remote_schema'] = data['schema']
+
+    if 'remote_table' not in data:
+        data['remote_table'] = None
+
+
+@get_template_path
+def get_fkey_dependencies(conn, tid, template_path=None):
+    """
+    This function is used to get the references table of all the foreign
+    keys of the given table.
+
+    :param conn:
+    :param tid:
+    :param template_path:
+    :return:
+    """
+    deps = []
+    sql = render_template("/".join(
+        [template_path, FKEY_PROPERTIES_SQL]), tid=tid)
+
+    status, result = conn.execute_dict(sql)
+    if not status:
+        return status, internal_server_error(errormsg=result)
+
+    for fk in result['rows']:
+        ref_name = fk['refnsp'] + '.' + fk['reftab']
+        deps.append({'type': 'table', 'name': ref_name})
+
+    return True, deps

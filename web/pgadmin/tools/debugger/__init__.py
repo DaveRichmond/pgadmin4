@@ -31,11 +31,19 @@ from pgadmin.settings import get_setting
 from config import PG_DEFAULT_DRIVER
 from pgadmin.model import db, DebuggerFunctionArguments
 from pgadmin.tools.debugger.utils.debugger_instance import DebuggerInstance
+from pgadmin.browser.server_groups.servers.databases.extensions.utils \
+    import get_extension_details
+from pgadmin.utils.constants import PREF_LABEL_DISPLAY, \
+    PREF_LABEL_KEYBOARD_SHORTCUTS, MIMETYPE_APP_JS, SERVER_CONNECTION_CLOSED
 
 MODULE_NAME = 'debugger'
 
 # Constants
+PLDBG_EXTN = 'pldbgapi'
 ASYNC_OK = 1
+DEBUGGER_SQL_PATH = 'debugger/sql'
+DEBUGGER_SQL_V1_PATH = 'debugger/sql/v1'
+DEBUGGER_SQL_V3_PATH = 'debugger/sql/v3'
 
 
 class DebuggerModule(PgAdminModule):
@@ -72,9 +80,34 @@ class DebuggerModule(PgAdminModule):
         self.open_in_new_tab = self.preference.register(
             'display', 'debugger_new_browser_tab',
             gettext("Open in new browser tab"), 'boolean', False,
-            category_label=gettext('Display'),
+            category_label=PREF_LABEL_DISPLAY,
             help_str=gettext('If set to True, the Debugger '
                              'will be opened in a new browser tab.')
+        )
+
+        self.tab_title = self.preference.register(
+            'display', 'debugger_tab_title_placeholder',
+            gettext("Tab title"),
+            'text', '%FUNCTION%(%ARGS%)',
+            category_label=PREF_LABEL_DISPLAY,
+            help_str=gettext(
+                'Supported placeholders are %FUNCTION%, %ARGS%, %SCHEMA% and'
+                ' %DATABASE%. Users can provide any string with or '
+                'without placeholders of their choice. The blank title will be'
+                ' revert back to the default title with placeholders.'
+            )
+        )
+
+        self.tab_title = self.preference.register(
+            'display', 'debugger_tab_title_placeholder',
+            gettext("Debugger tab title placeholder"),
+            'text', '%FUNCTION%/%SCHEMA%/%DATABASE%',
+            category_label=PREF_LABEL_DISPLAY,
+            help_str=gettext(
+                'Supported placeholders: FUNCTION, SCHEMA and DATABASE. '
+                'You can also provide any string with or '
+                'without placeholders'
+            )
         )
 
         self.preference.register(
@@ -86,7 +119,7 @@ class DebuggerModule(PgAdminModule):
                     'char': 'c'
                 }
             },
-            category_label=gettext('Keyboard shortcuts'),
+            category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
             fields=accesskey_fields
         )
 
@@ -99,7 +132,7 @@ class DebuggerModule(PgAdminModule):
                     'char': 's'
                 }
             },
-            category_label=gettext('Keyboard shortcuts'),
+            category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
             fields=accesskey_fields
         )
 
@@ -112,7 +145,7 @@ class DebuggerModule(PgAdminModule):
                     'char': 'i'
                 }
             },
-            category_label=gettext('Keyboard shortcuts'),
+            category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
             fields=accesskey_fields
         )
 
@@ -125,7 +158,7 @@ class DebuggerModule(PgAdminModule):
                     'char': 'o'
                 }
             },
-            category_label=gettext('Keyboard shortcuts'),
+            category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
             fields=accesskey_fields
         )
 
@@ -138,7 +171,7 @@ class DebuggerModule(PgAdminModule):
                     'char': 't'
                 }
             },
-            category_label=gettext('Keyboard shortcuts'),
+            category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
             fields=accesskey_fields
         )
 
@@ -151,7 +184,7 @@ class DebuggerModule(PgAdminModule):
                     'char': 'x'
                 }
             },
-            category_label=gettext('Keyboard shortcuts'),
+            category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
             fields=accesskey_fields
         )
 
@@ -169,7 +202,7 @@ class DebuggerModule(PgAdminModule):
                     'char': 'q'
                 }
             },
-            category_label=gettext('Keyboard shortcuts'),
+            category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
             fields=shortcut_fields
         )
 
@@ -187,7 +220,7 @@ class DebuggerModule(PgAdminModule):
                     'char': '['
                 }
             },
-            category_label=gettext('Keyboard shortcuts'),
+            category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
             fields=shortcut_fields
         )
 
@@ -205,7 +238,7 @@ class DebuggerModule(PgAdminModule):
                     'char': ']'
                 }
             },
-            category_label=gettext('Keyboard shortcuts'),
+            category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
             fields=shortcut_fields
         )
 
@@ -223,7 +256,7 @@ class DebuggerModule(PgAdminModule):
                     'char': 'Tab'
                 }
             },
-            category_label=gettext('Keyboard shortcuts'),
+            category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
             fields=shortcut_fields
         )
 
@@ -272,7 +305,7 @@ def script():
     return Response(
         response=render_template("debugger/js/debugger.js", _=gettext),
         status=200,
-        mimetype="application/javascript"
+        mimetype=MIMETYPE_APP_JS
     )
 
 
@@ -283,7 +316,7 @@ def script_debugger_js():
     return Response(
         response=render_template("debugger/js/debugger_ui.js", _=gettext),
         status=200,
-        mimetype="application/javascript"
+        mimetype=MIMETYPE_APP_JS
     )
 
 
@@ -297,8 +330,20 @@ def script_debugger_direct_js():
     return Response(
         response=render_template("debugger/js/direct.js", _=gettext),
         status=200,
-        mimetype="application/javascript"
+        mimetype=MIMETYPE_APP_JS
     )
+
+
+def execute_dict_search_path(conn, sql, search_path):
+    sql = "SET search_path={0};".format(search_path) + sql
+    status, res = conn.execute_dict(sql)
+    return status, res
+
+
+def execute_async_search_path(conn, sql, search_path):
+    sql = "SET search_path={0};".format(search_path) + sql
+    status, res = conn.execute_async(sql)
+    return status, res
 
 
 @blueprint.route(
@@ -353,13 +398,10 @@ def init_function(node_type, sid, did, scid, fid, trid=None):
     else:
         is_proc_supported = True if manager.version >= 110000 else False
 
-    # Set the template path required to read the sql files
-    template_path = 'debugger/sql'
-
     if node_type == 'trigger':
         # Find trigger function id from trigger id
         sql = render_template(
-            "/".join([template_path, 'get_trigger_function_info.sql']),
+            "/".join([DEBUGGER_SQL_PATH, 'get_trigger_function_info.sql']),
             table_id=fid, trigger_id=trid
         )
 
@@ -378,7 +420,7 @@ def init_function(node_type, sid, did, scid, fid, trid=None):
 
     sql = ''
     sql = render_template(
-        "/".join([template_path, 'get_function_debug_info.sql']),
+        "/".join([DEBUGGER_SQL_PATH, 'get_function_debug_info.sql']),
         is_ppas_database=ppas_server,
         hasFeatureFunctionDefaults=True,
         fid=fid,
@@ -492,7 +534,6 @@ def init_function(node_type, sid, did, scid, fid, trid=None):
             for pr_arg_mode in pro_arg_modes:
                 if pr_arg_mode == 'o' or pr_arg_mode == 't':
                     data['require_input'] = False
-                    continue
                 else:
                     data['require_input'] = True
                     break
@@ -607,6 +648,102 @@ def direct_new(trans_id):
     )
 
 
+def get_debugger_version(conn, search_path):
+    """
+    Function returns the debugger version.
+    :param conn:
+    :return:
+    """
+    debugger_version = 0
+    status, rid = conn.execute_scalar(
+        "SET search_path={0};"
+        "SELECT COUNT(*) FROM pg_catalog.pg_proc p"
+        " LEFT JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid"
+        " WHERE n.nspname = ANY(current_schemas(false)) AND"
+        " p.proname = 'pldbg_get_proxy_info';".format(search_path)
+    )
+
+    if not status:
+        return False, internal_server_error(errormsg=rid)
+
+    if int(rid) == 0:
+        debugger_version = 1
+    else:
+        status, rid = conn.execute_scalar(
+            "SELECT proxyapiver FROM pldbg_get_proxy_info();")
+
+        if status and rid in (2, 3):
+            debugger_version = rid
+
+    return True, debugger_version
+
+
+def validate_debug(conn, debug_type, is_superuser):
+    """
+    This function is used to validate the options required for debugger.
+    :param conn:
+    :param debug_type:
+    :param is_superuser:
+    :return:
+    """
+    if debug_type == 'indirect' and not is_superuser:
+        # If user is super user then we should check debugger library is
+        # loaded or not
+        msg = gettext("You must be a superuser to set a global breakpoint"
+                      " and perform indirect debugging.")
+        return False, internal_server_error(errormsg=msg)
+
+    status, rid_pre = conn.execute_scalar(
+        "SHOW shared_preload_libraries"
+    )
+    if not status:
+        return False, internal_server_error(
+            gettext("Could not fetch debugger plugin information.")
+        )
+
+    # Need to check if plugin is really loaded or not with
+    # "plugin_debugger" string
+    if debug_type == 'indirect' and "plugin_debugger" not in rid_pre:
+        msg = gettext(
+            "The debugger plugin is not enabled. "
+            "Please add the plugin to the shared_preload_libraries "
+            "setting in the postgresql.conf file and restart the "
+            "database server for indirect debugging."
+        )
+        current_app.logger.debug(msg)
+        return False, internal_server_error(msg)
+
+    # Check debugger extension version for EPAS 11 and above.
+    # If it is 1.0 then return error to upgrade the extension.
+    status, ext_version = conn.execute_scalar(
+        "SELECT installed_version FROM pg_catalog.pg_available_extensions "
+        "WHERE name = 'pldbgapi'"
+    )
+    if not status:
+        return False, internal_server_error(errormsg=ext_version)
+    if conn.manager.server_type == 'ppas' and conn.manager.sversion >= 110000 \
+            and float(ext_version) < 1.1:
+        return False, internal_server_error(
+            errormsg=gettext("Please upgrade the pldbgapi extension "
+                             "to 1.1 or above and try again."))
+
+    return True, None
+
+
+def get_search_path(conn):
+    status, res = get_extension_details(conn, PLDBG_EXTN)
+    if not status:
+        return False, internal_server_error(errormsg=res)
+
+    status, res = conn.execute_scalar(
+        "SELECT current_setting('search_path')||',{0}'".format(res['schema']))
+
+    if not status:
+        return False, internal_server_error(errormsg=res)
+
+    return True, res
+
+
 @blueprint.route(
     '/initialize_target/<debug_type>/<int:trans_id>/<int:sid>/<int:did>/'
     '<int:scid>/<int:func_id>',
@@ -644,11 +781,8 @@ def initialize_target(debug_type, trans_id, sid, did,
 
     # Create asynchronous connection using random connection id.
     conn_id = str(random.randint(1, 9999999))
-    try:
-        manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
-        conn = manager.connection(did=did, conn_id=conn_id)
-    except Exception as e:
-        return internal_server_error(errormsg=str(e))
+    manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
+    conn = manager.connection(did=did, conn_id=conn_id)
 
     # Connect the Server
     status, msg = conn.connect()
@@ -656,57 +790,14 @@ def initialize_target(debug_type, trans_id, sid, did,
         return internal_server_error(errormsg=str(msg))
 
     user = manager.user_info
-    if debug_type == 'indirect':
-        # If user is super user then we should check debugger library is
-        # loaded or not
-        if not user['is_superuser']:
-            msg = gettext("You must be a superuser to set a global breakpoint"
-                          " and perform indirect debugging.")
-            return internal_server_error(errormsg=msg)
-        else:
-            status_in, rid_pre = conn.execute_scalar(
-                "SHOW shared_preload_libraries"
-            )
-            if not status_in:
-                return internal_server_error(
-                    gettext("Could not fetch debugger plugin information.")
-                )
-
-            # Need to check if plugin is really loaded or not with
-            # "plugin_debugger" string
-            if "plugin_debugger" not in rid_pre:
-                msg = gettext(
-                    "The debugger plugin is not enabled. "
-                    "Please add the plugin to the shared_preload_libraries "
-                    "setting in the postgresql.conf file and restart the "
-                    "database server for indirect debugging."
-                )
-                current_app.logger.debug(msg)
-                return internal_server_error(msg)
-
-    # Check debugger extension version for EPAS 11 and above.
-    # If it is 1.0 then return error to upgrade the extension.
-    if manager.server_type == 'ppas' and manager.sversion >= 110000:
-        status, ext_version = conn.execute_scalar(
-            "SELECT installed_version FROM pg_catalog.pg_available_extensions "
-            "WHERE name = 'pldbgapi'"
-        )
-
-        if not status:
-            return internal_server_error(errormsg=ext_version)
-        else:
-            if float(ext_version) < 1.1:
-                return internal_server_error(
-                    errormsg=gettext("Please upgrade the pldbgapi extension "
-                                     "to 1.1 or above and try again."))
-
-    # Set the template path required to read the sql files
-    template_path = 'debugger/sql'
+    status, error = validate_debug(conn, debug_type, user['is_superuser'])
+    if not status:
+        return error
 
     if tri_id is not None:
         # Find trigger function id from trigger id
         sql = render_template(
-            "/".join([template_path, 'get_trigger_function_info.sql']),
+            "/".join([DEBUGGER_SQL_PATH, 'get_trigger_function_info.sql']),
             table_id=func_id, trigger_id=tri_id
         )
 
@@ -718,30 +809,14 @@ def initialize_target(debug_type, trans_id, sid, did,
 
         func_id = tr_set['rows'][0]['tgfoid']
 
-    status = True
+    status, search_path = get_search_path(conn)
+    if not status:
+        return search_path
 
     # Find out the debugger version and store it in session variables
-    status, rid = conn.execute_scalar(
-        "SELECT COUNT(*) FROM pg_catalog.pg_proc p"
-        " LEFT JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid"
-        " WHERE n.nspname = ANY(current_schemas(false)) AND"
-        " p.proname = 'pldbg_get_proxy_info';"
-    )
-
+    status, debugger_version = get_debugger_version(conn, search_path)
     if not status:
-        return internal_server_error(errormsg=rid)
-    else:
-        if rid == 0:
-            debugger_version = 1
-
-        status, rid = conn.execute_scalar(
-            "SELECT proxyapiver FROM pldbg_get_proxy_info();")
-
-        if status:
-            if rid == 2 or rid == 3:
-                debugger_version = rid
-            else:
-                status = False
+        return debugger_version
 
     # Add the debugger version information to pgadmin4 log file
     current_app.logger.debug("Debugger version is: %d", debugger_version)
@@ -753,9 +828,8 @@ def initialize_target(debug_type, trans_id, sid, did,
     # provide the data from another session so below condition will
     # be be required
     if request.method == 'POST':
-        data = json.loads(request.values['data'], encoding='utf-8')
-        if data:
-            de_inst.function_data['args_value'] = data
+        de_inst.function_data['args_value'] = \
+            json.loads(request.values['data'], encoding='utf-8')
 
     # Update the debugger data session variable
     # Here frame_id is required when user debug the multilevel function.
@@ -770,6 +844,7 @@ def initialize_target(debug_type, trans_id, sid, did,
         'function_name': de_inst.function_data['name'],
         'debug_type': debug_type,
         'debugger_version': debugger_version,
+        'search_path': search_path,
         'frame_id': 0,
         'restart_debug': 0
     }
@@ -820,10 +895,7 @@ def restart_debugging(trans_id):
         return make_json_response(
             data={
                 'status': False,
-                'result': gettext(
-                    'Not connected to server or connection with the server '
-                    'has been closed.'
-                )
+                'result': SERVER_CONNECTION_CLOSED
             }
         )
 
@@ -863,10 +935,7 @@ def restart_debugging(trans_id):
         )
     else:
         status = False
-        result = gettext(
-            'Not connected to server or connection with the server has '
-            'been closed.'
-        )
+        result = SERVER_CONNECTION_CLOSED
         return make_json_response(data={'status': status, 'result': result})
 
 
@@ -892,10 +961,7 @@ def start_debugger_listener(trans_id):
         return make_json_response(
             data={
                 'status': False,
-                'result': gettext(
-                    'Not connected to server or connection with the server '
-                    'has been closed.'
-                )
+                'result': SERVER_CONNECTION_CLOSED
             }
         )
 
@@ -911,9 +977,9 @@ def start_debugger_listener(trans_id):
     # find the debugger version and execute the query accordingly
     dbg_version = de_inst.debugger_data['debugger_version']
     if dbg_version <= 2:
-        template_path = 'debugger/sql/v1'
+        template_path = DEBUGGER_SQL_V1_PATH
     else:
-        template_path = 'debugger/sql/v2'
+        template_path = DEBUGGER_SQL_V3_PATH
 
     # If user again start the same debug function with different arguments
     # then we need to save that values to session variable and database.
@@ -960,7 +1026,8 @@ def start_debugger_listener(trans_id):
                         packge_oid=de_inst.function_data['pkg'],
                         function_oid=de_inst.debugger_data['function_id']
                     )
-                status, res = conn.execute_dict(sql)
+                status, res = execute_dict_search_path(
+                    conn, sql, de_inst.debugger_data['search_path'])
                 if not status:
                     return internal_server_error(errormsg=res)
 
@@ -999,7 +1066,7 @@ def start_debugger_listener(trans_id):
             # Below are two different template to execute and start executer
             if manager.server_type != 'pg' and manager.version < 90300:
                 str_query = render_template(
-                    "/".join(['debugger/sql', 'execute_edbspl.sql']),
+                    "/".join([DEBUGGER_SQL_PATH, 'execute_edbspl.sql']),
                     func_name=func_name,
                     is_func=de_inst.function_data['is_func'],
                     lan_name=de_inst.function_data['language'],
@@ -1010,7 +1077,7 @@ def start_debugger_listener(trans_id):
                 )
             else:
                 str_query = render_template(
-                    "/".join(['debugger/sql', 'execute_plpgsql.sql']),
+                    "/".join([DEBUGGER_SQL_PATH, 'execute_plpgsql.sql']),
                     func_name=func_name,
                     is_func=de_inst.function_data['is_func'],
                     ret_type=de_inst.function_data['return_type'],
@@ -1018,7 +1085,8 @@ def start_debugger_listener(trans_id):
                     is_ppas_database=de_inst.function_data['is_ppas_database']
                 )
 
-            status, result = conn.execute_async(str_query)
+            status, result = execute_async_search_path(
+                conn, str_query, de_inst.debugger_data['search_path'])
             if not status:
                 return internal_server_error(errormsg=result)
         else:
@@ -1028,7 +1096,8 @@ def start_debugger_listener(trans_id):
                 sql = render_template(
                     "/".join([template_path, 'create_listener.sql']))
 
-                status, res = conn.execute_dict(sql)
+                status, res = execute_dict_search_path(
+                    conn, sql, de_inst.debugger_data['search_path'])
                 if not status:
                     return internal_server_error(errormsg=res)
 
@@ -1049,7 +1118,8 @@ def start_debugger_listener(trans_id):
                         function_oid=de_inst.debugger_data['function_id']
                     )
 
-                    status, res = conn.execute_dict(sql)
+                    status, res = execute_dict_search_path(
+                        conn, sql, de_inst.debugger_data['search_path'])
                     if not status:
                         return internal_server_error(errormsg=res)
                 else:
@@ -1059,7 +1129,8 @@ def start_debugger_listener(trans_id):
                         function_oid=de_inst.debugger_data['function_id']
                     )
 
-                    status, res = conn.execute_dict(sql)
+                    status, res = execute_dict_search_path(
+                        conn, sql, de_inst.debugger_data['search_path'])
                     if not status:
                         return internal_server_error(errormsg=res)
 
@@ -1069,7 +1140,8 @@ def start_debugger_listener(trans_id):
                     session_id=int_session_id
                 )
 
-                status, res = conn.execute_async(sql)
+                status, res = execute_async_search_path(
+                    conn, sql, de_inst.debugger_data['search_path'])
                 if not status:
                     return internal_server_error(errormsg=res)
 
@@ -1084,19 +1156,13 @@ def start_debugger_listener(trans_id):
                 )
             else:
                 status = False
-                result = gettext(
-                    'Not connected to server or connection with the server '
-                    'has been closed.'
-                )
+                result = SERVER_CONNECTION_CLOSED
                 return make_json_response(
                     data={'status': status, 'result': result}
                 )
     else:
         status = False
-        result = gettext(
-            'Not connected to server or connection with the server has '
-            'been closed.'
-        )
+        result = SERVER_CONNECTION_CLOSED
 
     return make_json_response(data={'status': status, 'result': result})
 
@@ -1129,10 +1195,7 @@ def execute_debugger_query(trans_id, query_type):
         return make_json_response(
             data={
                 'status': False,
-                'result': gettext(
-                    'Not connected to server or connection with the server '
-                    'has been closed.'
-                )
+                'result': SERVER_CONNECTION_CLOSED
             }
         )
 
@@ -1143,51 +1206,44 @@ def execute_debugger_query(trans_id, query_type):
         conn_id=de_inst.debugger_data['exe_conn_id'])
 
     # find the debugger version and execute the query accordingly
-    dbg_version = de_inst.debugger_data['debugger_version']
-    if dbg_version <= 2:
-        template_path = 'debugger/sql/v1'
-    else:
-        template_path = 'debugger/sql/v2'
+    template_path = DEBUGGER_SQL_V1_PATH \
+        if de_inst.debugger_data['debugger_version'] <= 2 \
+        else DEBUGGER_SQL_V3_PATH
 
-    if conn.connected():
-        sql = render_template(
-            "/".join([template_path, query_type + ".sql"]),
-            session_id=de_inst.debugger_data['session_id']
-        )
-        # As the query type is continue or step_into or step_over then we
-        # may get result after some time so poll the result.
-        # We need to update the frame id variable when user move the next
-        # step for debugging.
-        if query_type == 'continue' or query_type == 'step_into' or \
-                query_type == 'step_over':
-            # We should set the frame_id to 0 when execution starts.
-            if de_inst.debugger_data['frame_id'] != 0:
-                de_inst.debugger_data['frame_id'] = 0
-                de_inst.update_session()
+    if not conn.connected():
+        result = SERVER_CONNECTION_CLOSED
+        return internal_server_error(errormsg=result)
 
-            status, result = conn.execute_async(sql)
-            if not status:
-                internal_server_error(errormsg=result)
-            return make_json_response(
-                data={'status': status, 'result': result}
-            )
-        elif query_type == 'abort_target':
-            status, result = conn.execute_dict(sql)
-            if not status:
-                return internal_server_error(errormsg=result)
-            else:
-                return make_json_response(
-                    info=gettext('Debugging aborted successfully.'),
-                    data={'status': 'Success', 'result': result}
-                )
-        else:
-            status, result = conn.execute_dict(sql)
+    sql = render_template(
+        "/".join([template_path, query_type + ".sql"]),
+        session_id=de_inst.debugger_data['session_id']
+    )
+    # As the query type is continue or step_into or step_over then we
+    # may get result after some time so poll the result.
+    # We need to update the frame id variable when user move the next
+    # step for debugging.
+    if query_type in ('continue', 'step_into', 'step_over'):
+        # We should set the frame_id to 0 when execution starts.
+        de_inst.debugger_data['frame_id'] = 0
+        de_inst.update_session()
+
+        status, result = execute_async_search_path(
+            conn, sql, de_inst.debugger_data['search_path'])
         if not status:
             return internal_server_error(errormsg=result)
-    else:
-        result = gettext('Not connected to server or connection '
-                         'with the server has been closed.')
+        return make_json_response(
+            data={'status': status, 'result': result}
+        )
+
+    status, result = execute_dict_search_path(
+        conn, sql, de_inst.debugger_data['search_path'])
+    if not status:
         return internal_server_error(errormsg=result)
+    if query_type == 'abort_target':
+        return make_json_response(
+            info=gettext('Debugging aborted successfully.'),
+            data={'status': 'Success', 'result': result}
+        )
 
     return make_json_response(
         data={'status': 'Success', 'result': result['rows']}
@@ -1214,10 +1270,7 @@ def messages(trans_id):
         return make_json_response(
             data={
                 'status': 'NotConnected',
-                'result': gettext(
-                    'Not connected to server or connection with the server '
-                    'has been closed.'
-                )
+                'result': SERVER_CONNECTION_CLOSED
             }
         )
 
@@ -1230,7 +1283,8 @@ def messages(trans_id):
     port_number = ''
 
     if conn.connected():
-        status, result = conn.poll()
+        status = 'Busy'
+        _, result = conn.poll()
         notify = conn.messages()
         if notify:
             # In notice message we need to find "PLDBGBREAK" string to find
@@ -1240,28 +1294,18 @@ def messages(trans_id):
             # From the above message we need to find out port number
             # as "7" so below logic will find 7 as port number
             # and attach listened to that port number
-            port_found = False
-            tmp_list = list(filter(lambda x: 'PLDBGBREAK' in x, notify))
+            tmp_list = [x for x in notify if 'PLDBGBREAK' in x]
             if len(tmp_list) > 0:
                 port_number = re.search(r'\d+', tmp_list[0])
                 if port_number is not None:
                     status = 'Success'
                     port_number = port_number.group(0)
-                    port_found = True
-
-            if not port_found:
-                status = 'Busy'
-        else:
-            status = 'Busy'
 
         return make_json_response(
             data={'status': status, 'result': port_number}
         )
     else:
-        result = gettext(
-            'Not connected to server or connection with the '
-            'server has been closed.'
-        )
+        result = SERVER_CONNECTION_CLOSED
         return internal_server_error(errormsg=str(result))
 
 
@@ -1290,10 +1334,7 @@ def start_execution(trans_id, port_num):
         return make_json_response(
             data={
                 'status': 'NotConnected',
-                'result': gettext(
-                    'Not connected to server or connection with the server '
-                    'has been closed.'
-                )
+                'result': SERVER_CONNECTION_CLOSED
             }
         )
 
@@ -1316,14 +1357,15 @@ def start_execution(trans_id, port_num):
     # find the debugger version and execute the query accordingly
     dbg_version = de_inst.debugger_data['debugger_version']
     if dbg_version <= 2:
-        template_path = 'debugger/sql/v1'
+        template_path = DEBUGGER_SQL_V1_PATH
     else:
-        template_path = 'debugger/sql/v2'
+        template_path = DEBUGGER_SQL_V3_PATH
 
     # connect to port and store the session ID in the session variables
     sql = render_template(
         "/".join([template_path, 'attach_to_port.sql']), port=port_num)
-    status_port, res_port = conn.execute_dict(sql)
+    status_port, res_port = execute_dict_search_path(
+        conn, sql, de_inst.debugger_data['search_path'])
     if not status_port:
         return internal_server_error(errormsg=res_port)
 
@@ -1369,10 +1411,7 @@ def set_clear_breakpoint(trans_id, line_no, set_type):
         return make_json_response(
             data={
                 'status': False,
-                'result': gettext(
-                    'Not connected to server or connection with the server '
-                    'has been closed.'
-                )
+                'result': SERVER_CONNECTION_CLOSED
             }
         )
 
@@ -1385,9 +1424,9 @@ def set_clear_breakpoint(trans_id, line_no, set_type):
     # find the debugger version and execute the query accordingly
     dbg_version = de_inst.debugger_data['debugger_version']
     if dbg_version <= 2:
-        template_path = 'debugger/sql/v1'
+        template_path = DEBUGGER_SQL_V1_PATH
     else:
-        template_path = 'debugger/sql/v2'
+        template_path = DEBUGGER_SQL_V3_PATH
 
     query_type = ''
 
@@ -1399,7 +1438,8 @@ def set_clear_breakpoint(trans_id, line_no, set_type):
         "/".join([template_path, "get_stack_info.sql"]),
         session_id=de_inst.debugger_data['session_id']
     )
-    status, res_stack = conn.execute_dict(sql_)
+    status, res_stack = execute_dict_search_path(
+        conn, sql_, de_inst.debugger_data['search_path'])
     if not status:
         return internal_server_error(errormsg=res_stack)
 
@@ -1421,15 +1461,13 @@ def set_clear_breakpoint(trans_id, line_no, set_type):
             foid=foid, line_number=line_no
         )
 
-        status, result = conn.execute_dict(sql)
+        status, result = execute_dict_search_path(
+            conn, sql, de_inst.debugger_data['search_path'])
         if not status:
             return internal_server_error(errormsg=result)
     else:
         status = False
-        result = gettext(
-            'Not connected to server or connection with the server '
-            'has been closed.'
-        )
+        result = SERVER_CONNECTION_CLOSED
 
     return make_json_response(
         data={'status': status, 'result': result['rows']}
@@ -1457,10 +1495,7 @@ def clear_all_breakpoint(trans_id):
         return make_json_response(
             data={
                 'status': False,
-                'result': gettext(
-                    'Not connected to server or connection '
-                    'with the server has been closed.'
-                )
+                'result': SERVER_CONNECTION_CLOSED
             }
         )
     manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(
@@ -1472,9 +1507,9 @@ def clear_all_breakpoint(trans_id):
     # find the debugger version and execute the query accordingly
     dbg_version = de_inst.debugger_data['debugger_version']
     if dbg_version <= 2:
-        template_path = 'debugger/sql/v1'
+        template_path = DEBUGGER_SQL_V1_PATH
     else:
-        template_path = 'debugger/sql/v2'
+        template_path = DEBUGGER_SQL_V3_PATH
 
     if conn.connected():
         # get the data sent through post from client
@@ -1488,16 +1523,15 @@ def clear_all_breakpoint(trans_id):
                     line_number=line_no
                 )
 
-                status, result = conn.execute_dict(sql)
+                status, result = execute_dict_search_path(
+                    conn, sql, de_inst.debugger_data['search_path'])
                 if not status:
                     return internal_server_error(errormsg=result)
         else:
             return make_json_response(data={'status': False})
     else:
         status = False
-        result = gettext(
-            'Not connected to server or connection with the server has '
-            'been closed.')
+        result = SERVER_CONNECTION_CLOSED
 
     return make_json_response(
         data={'status': status, 'result': result['rows']}
@@ -1525,8 +1559,7 @@ def deposit_parameter_value(trans_id):
         return make_json_response(
             data={
                 'status': False,
-                'result': gettext('Not connected to server or connection '
-                                  'with the server has been closed.')
+                'result': SERVER_CONNECTION_CLOSED
             }
         )
     manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(
@@ -1538,9 +1571,9 @@ def deposit_parameter_value(trans_id):
     # find the debugger version and execute the query accordingly
     dbg_version = de_inst.debugger_data['debugger_version']
     if dbg_version <= 2:
-        template_path = 'debugger/sql/v1'
+        template_path = DEBUGGER_SQL_V1_PATH
     else:
-        template_path = 'debugger/sql/v2'
+        template_path = DEBUGGER_SQL_V3_PATH
 
     if conn.connected():
         # get the data sent through post from client
@@ -1554,7 +1587,8 @@ def deposit_parameter_value(trans_id):
                 val=data[0]['value']
             )
 
-            status, result = conn.execute_dict(sql)
+            status, result = execute_dict_search_path(
+                conn, sql, de_inst.debugger_data['search_path'])
             if not status:
                 return internal_server_error(errormsg=result)
 
@@ -1573,10 +1607,7 @@ def deposit_parameter_value(trans_id):
             )
     else:
         status = False
-        result = gettext(
-            'Not connected to server or connection with the server has '
-            'been closed.'
-        )
+        result = SERVER_CONNECTION_CLOSED
 
     return make_json_response(data={'status': status, 'result': result})
 
@@ -1603,10 +1634,7 @@ def select_frame(trans_id, frame_id):
         return make_json_response(
             data={
                 'status': False,
-                'result': gettext(
-                    'Not connected to server or connection '
-                    'with the server has been closed.'
-                )
+                'result': SERVER_CONNECTION_CLOSED
             }
         )
 
@@ -1619,9 +1647,9 @@ def select_frame(trans_id, frame_id):
     # find the debugger version and execute the query accordingly
     dbg_version = de_inst.debugger_data['debugger_version']
     if dbg_version <= 2:
-        template_path = 'debugger/sql/v1'
+        template_path = DEBUGGER_SQL_V1_PATH
     else:
-        template_path = 'debugger/sql/v2'
+        template_path = DEBUGGER_SQL_V3_PATH
 
     de_inst.debugger_data['frame_id'] = frame_id
     de_inst.update_session()
@@ -1633,15 +1661,13 @@ def select_frame(trans_id, frame_id):
             frame_id=frame_id
         )
 
-        status, result = conn.execute_dict(sql)
+        status, result = execute_dict_search_path(
+            conn, sql, de_inst.debugger_data['search_path'])
         if not status:
             return internal_server_error(errormsg=result)
     else:
         status = False
-        result = gettext(
-            'Not connected to server or connection with the server '
-            'has been closed.'
-        )
+        result = SERVER_CONNECTION_CLOSED
 
     return make_json_response(
         data={'status': status, 'result': result['rows']}
@@ -1672,7 +1698,7 @@ def get_arguments_sqlite(sid, did, scid, func_id):
     """
 
     """Get the count of the existing data available in sqlite database"""
-    DbgFuncArgsCount = DebuggerFunctionArguments.query.filter_by(
+    dbg_func_args_count = DebuggerFunctionArguments.query.filter_by(
         server_id=sid,
         database_id=did,
         schema_id=scid,
@@ -1681,18 +1707,18 @@ def get_arguments_sqlite(sid, did, scid, func_id):
 
     args_data = []
 
-    if DbgFuncArgsCount:
+    if dbg_func_args_count:
         """Update the Debugger Function Arguments settings"""
-        DbgFuncArgs = DebuggerFunctionArguments.query.filter_by(
+        dbg_func_args = DebuggerFunctionArguments.query.filter_by(
             server_id=sid,
             database_id=did,
             schema_id=scid,
             function_id=func_id
         )
 
-        args_list = DbgFuncArgs.all()
+        args_list = dbg_func_args.all()
 
-        for i in range(0, DbgFuncArgsCount):
+        for i in range(0, dbg_func_args_count):
             info = {
                 "arg_id": args_list[i].arg_id,
                 "is_null": args_list[i].is_null,
@@ -1705,13 +1731,13 @@ def get_arguments_sqlite(sid, did, scid, func_id):
         # As we do have entry available for that function so we need to add
         # that entry
         return make_json_response(
-            data={'result': args_data, 'args_count': DbgFuncArgsCount}
+            data={'result': args_data, 'args_count': dbg_func_args_count}
         )
     else:
         # As we do not have any entry available for that function so we need
         # to add that entry
         return make_json_response(
-            data={'result': 'result', 'args_count': DbgFuncArgsCount}
+            data={'result': 'result', 'args_count': dbg_func_args_count}
         )
 
 
@@ -1743,7 +1769,7 @@ def set_arguments_sqlite(sid, did, scid, func_id):
 
     try:
         for i in range(0, len(data)):
-            DbgFuncArgsExists = DebuggerFunctionArguments.query.filter_by(
+            dbg_func_args_exists = DebuggerFunctionArguments.query.filter_by(
                 server_id=data[i]['server_id'],
                 database_id=data[i]['database_id'],
                 schema_id=data[i]['schema_id'],
@@ -1771,8 +1797,8 @@ def set_arguments_sqlite(sid, did, scid, func_id):
 
             # Check if data is already available in database then update the
             # existing value otherwise add the new value
-            if DbgFuncArgsExists:
-                DbgFuncArgs = DebuggerFunctionArguments.query.filter_by(
+            if dbg_func_args_exists:
+                dbg_func_args = DebuggerFunctionArguments.query.filter_by(
                     server_id=data[i]['server_id'],
                     database_id=data[i]['database_id'],
                     schema_id=data[i]['schema_id'],
@@ -1780,10 +1806,10 @@ def set_arguments_sqlite(sid, did, scid, func_id):
                     arg_id=data[i]['arg_id']
                 ).first()
 
-                DbgFuncArgs.is_null = data[i]['is_null']
-                DbgFuncArgs.is_expression = data[i]['is_expression']
-                DbgFuncArgs.use_default = data[i]['use_default']
-                DbgFuncArgs.value = array_string
+                dbg_func_args.is_null = data[i]['is_null']
+                dbg_func_args.is_expression = data[i]['is_expression']
+                dbg_func_args.use_default = data[i]['use_default']
+                dbg_func_args.value = array_string
             else:
                 debugger_func_args = DebuggerFunctionArguments(
                     server_id=data[i]['server_id'],
@@ -1919,9 +1945,7 @@ def poll_end_execution_result(trans_id):
     if de_inst.debugger_data is None:
         return make_json_response(
             data={'status': 'NotConnected',
-                  'result': gettext(
-                      'Not connected to server or connection with the '
-                      'server has been closed.')
+                  'result': SERVER_CONNECTION_CLOSED
                   }
         )
 
@@ -2020,8 +2044,7 @@ def poll_end_execution_result(trans_id):
             )
     else:
         status = 'NotConnected'
-        result = gettext('Not connected to server or connection with the '
-                         'server has been closed.')
+        result = SERVER_CONNECTION_CLOSED
 
     return make_json_response(data={'status': status, 'result': result})
 
@@ -2047,8 +2070,7 @@ def poll_result(trans_id):
         return make_json_response(
             data={
                 'status': 'NotConnected',
-                'result': gettext('Not connected to server or connection '
-                                  'with the server has been closed.')
+                'result': SERVER_CONNECTION_CLOSED
             }
         )
 
@@ -2069,10 +2091,7 @@ def poll_result(trans_id):
             status = 'Busy'
     else:
         status = 'NotConnected'
-        result = gettext(
-            'Not connected to server or connection with the server '
-            'has been closed.'
-        )
+        result = SERVER_CONNECTION_CLOSED
 
     return make_json_response(
         data={
@@ -2082,10 +2101,31 @@ def poll_result(trans_id):
     )
 
 
+def release_connection(manager, dbg_obj):
+    """This function is used to release connection."""
+    conn = manager.connection(
+        did=dbg_obj['database_id'],
+        conn_id=dbg_obj['conn_id'])
+    if conn.connected():
+        conn.cancel_transaction(
+            dbg_obj['conn_id'],
+            dbg_obj['database_id'])
+    manager.release(conn_id=dbg_obj['conn_id'])
+
+    if 'exe_conn_id' in dbg_obj:
+        conn = manager.connection(
+            did=dbg_obj['database_id'],
+            conn_id=dbg_obj['exe_conn_id'])
+        if conn.connected():
+            conn.cancel_transaction(
+                dbg_obj['exe_conn_id'],
+                dbg_obj['database_id'])
+        manager.release(conn_id=dbg_obj['exe_conn_id'])
+
+
 def close_debugger_session(_trans_id, close_all=False):
     """
-    This function is used to cancel the debugger transaction and
-    release the connection.
+    This function is used to cancel the debugger transaction.
 
     :param trans_id: Transaction id
     :return:
@@ -2106,25 +2146,9 @@ def close_debugger_session(_trans_id, close_all=False):
                     connection_manager(dbg_obj['server_id'])
 
                 if manager is not None:
-                    conn = manager.connection(
-                        did=dbg_obj['database_id'],
-                        conn_id=dbg_obj['conn_id'])
-                    if conn.connected():
-                        conn.cancel_transaction(
-                            dbg_obj['conn_id'],
-                            dbg_obj['database_id'])
-                    manager.release(conn_id=dbg_obj['conn_id'])
+                    release_connection(manager, dbg_obj)
 
-                    if 'exe_conn_id' in dbg_obj:
-                        conn = manager.connection(
-                            did=dbg_obj['database_id'],
-                            conn_id=dbg_obj['exe_conn_id'])
-                        if conn.connected():
-                            conn.cancel_transaction(
-                                dbg_obj['exe_conn_id'],
-                                dbg_obj['database_id'])
-                        manager.release(conn_id=dbg_obj['exe_conn_id'])
-        except Exception:
-            raise
-        finally:
             de_inst.clear()
+        except Exception:
+            de_inst.clear()
+            raise

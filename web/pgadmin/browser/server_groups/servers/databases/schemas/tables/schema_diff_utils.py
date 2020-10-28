@@ -22,16 +22,17 @@ class SchemaDiffTableCompare(SchemaDiffObjectCompare):
     table_keys_to_ignore = ['oid', 'schema', 'edit_types', 'attnum',
                             'col_type', 'references', 'reltuples', 'oid-2',
                             'rows_cnt', 'seqrelid', 'atttypid', 'elemoid',
-                            'hastoasttable', 'relhassubclass', 'relacl_str']
+                            'hastoasttable', 'relhassubclass', 'relacl_str',
+                            'setting']
 
     constraint_keys_to_ignore = ['relname', 'nspname', 'parent_tbl',
                                  'attrelid', 'adrelid', 'fknsp', 'confrelid',
                                  'references', 'refnsp', 'remote_schema',
-                                 'conkey', 'indkey']
+                                 'conkey', 'indkey', 'references_table_name']
 
     trigger_keys_to_ignore = ['xmin', 'tgrelid', 'tgfoid', 'tfunction',
                               'tgqual', 'tgconstraint']
-    index_keys_to_ignore = ['relowner', 'indrelid', 'indclass']
+    index_keys_to_ignore = ['indrelid', 'indclass']
 
     keys_to_ignore = table_keys_to_ignore + constraint_keys_to_ignore \
         + trigger_keys_to_ignore + index_keys_to_ignore
@@ -51,26 +52,37 @@ class SchemaDiffTableCompare(SchemaDiffObjectCompare):
                          'did': kwargs.get('target_did'),
                          'scid': kwargs.get('target_scid')}
 
-        ignore_whitespaces = kwargs.get('ignore_whitespaces')
+        group_name = kwargs.get('group_name')
+        source_schema_name = kwargs.get('source_schema_name', None)
+        source_tables = {}
+        target_tables = {}
+
         status, target_schema = self.get_schema(**target_params)
         if not status:
             return internal_server_error(errormsg=target_schema)
 
-        source_tables = self.fetch_tables(**source_params)
-        target_tables = self.fetch_tables(**target_params)
+        if 'scid' in source_params and source_params['scid'] is not None:
+            source_tables = self.fetch_tables(**source_params)
+
+        if 'scid' in target_params and target_params['scid'] is not None:
+            target_tables = self.fetch_tables(**target_params)
 
         # If both the dict have no items then return None.
         if not (source_tables or target_tables) or (
                 len(source_tables) <= 0 and len(target_tables) <= 0):
             return None
 
-        return compare_dictionaries(self, source_params, target_params,
-                                    target_schema, source_tables,
-                                    target_tables,
-                                    self.node_type,
-                                    self.blueprint.COLLECTION_LABEL,
-                                    ignore_whitespaces,
-                                    self.keys_to_ignore)
+        return compare_dictionaries(view_object=self,
+                                    source_params=source_params,
+                                    target_params=target_params,
+                                    target_schema=target_schema,
+                                    source_dict=source_tables,
+                                    target_dict=target_tables,
+                                    node=self.node_type,
+                                    node_label=self.blueprint.collection_label,
+                                    group_name=group_name,
+                                    ignore_keys=self.keys_to_ignore,
+                                    source_schema_name=source_schema_name)
 
     def ddl_compare(self, **kwargs):
         """
@@ -118,8 +130,7 @@ class SchemaDiffTableCompare(SchemaDiffObjectCompare):
 
         for source in source_cols:
             if 'name' in source:
-                if type(target_cols) is list and len(
-                        target_cols) > 0:
+                if isinstance(target_cols, list) and target_cols:
                     tmp = None
                     for item in target_cols:
                         if item['name'] == source['name']:
@@ -184,8 +195,7 @@ class SchemaDiffTableCompare(SchemaDiffObjectCompare):
             different[constraint] = {}
             for source in source_cols:
                 if 'name' in source:
-                    if type(target_cols) is list and len(
-                            target_cols) > 0:
+                    if isinstance(target_cols, list) and target_cols:
                         tmp_src = copy.deepcopy(source)
                         if 'oid' in tmp_src:
                             tmp_src.pop('oid')
@@ -226,22 +236,21 @@ class SchemaDiffTableCompare(SchemaDiffObjectCompare):
 
         return different
 
-    def get_sql_from_submodule_diff(self, source_params, target_params,
-                                    target_schema, source, target, diff_dict,
-                                    ignore_whitespaces):
+    def get_sql_from_submodule_diff(self, **kwargs):
         """
         This function returns the DDL/DML statements of the
         submodules of table based on the comparison status.
 
-        :param source_params:
-        :param target_params:
-        :param target_schema:
-        :param source:
-        :param target:
-        :param diff_dict:
-        :param ignore_whitespaces:
+        :param kwargs:
         :return:
         """
+        source_params = kwargs.get('source_params')
+        target_params = kwargs.get('target_params')
+        target_schema = kwargs.get('target_schema')
+        source = kwargs.get('source')
+        target = kwargs.get('target')
+        diff_dict = kwargs.get('diff_dict')
+
         # Get the difference result for source and target columns
         col_diff = self.table_col_comp(source, target)
         diff_dict.update(col_diff)
@@ -254,7 +263,7 @@ class SchemaDiffTableCompare(SchemaDiffObjectCompare):
         target_params['diff_data'] = diff_dict
         diff = self.get_sql_from_table_diff(**target_params)
 
-        ignore_sub_modules = ['column', 'constraints', 'row_security_policy']
+        ignore_sub_modules = ['column', 'constraints']
         if self.manager.version < 100000:
             ignore_sub_modules.append('partition')
         if self.manager.server_type == 'pg' or self.manager.version < 120000:
@@ -262,11 +271,11 @@ class SchemaDiffTableCompare(SchemaDiffObjectCompare):
 
         # Iterate through all the sub modules of the table
         for module in self.blueprint.submodules:
-            if module.NODE_TYPE not in ignore_sub_modules:
+            if module.node_type not in ignore_sub_modules:
                 module_view = \
-                    SchemaDiffRegistry.get_node_view(module.NODE_TYPE)
+                    SchemaDiffRegistry.get_node_view(module.node_type)
 
-                if module.NODE_TYPE == 'partition' and \
+                if module.node_type == 'partition' and \
                     ('is_partitioned' in source and source['is_partitioned'])\
                         and ('is_partitioned' in target and
                              target['is_partitioned']):
@@ -277,9 +286,9 @@ class SchemaDiffTableCompare(SchemaDiffObjectCompare):
                     )
 
                     diff += '\n' + target_ddl
-                elif module.NODE_TYPE != 'partition':
-                    dict1 = copy.deepcopy(source[module.NODE_TYPE])
-                    dict2 = copy.deepcopy(target[module.NODE_TYPE])
+                elif module.node_type != 'partition':
+                    dict1 = copy.deepcopy(source[module.node_type])
+                    dict2 = copy.deepcopy(target[module.node_type])
 
                     # Find the duplicate keys in both the dictionaries
                     dict1_keys = set(dict1.keys())
@@ -288,50 +297,85 @@ class SchemaDiffTableCompare(SchemaDiffObjectCompare):
 
                     # Keys that are available in source and missing in target.
                     added = dict1_keys - dict2_keys
-                    for item in added:
-                        source_ddl = module_view.ddl_compare(
-                            source_params=source_params,
-                            target_params=target_params,
-                            source=dict1[item],
-                            target=None,
-                            target_schema=target_schema,
-                            comp_status='source_only'
-                        )
-
-                        diff += '\n' + source_ddl
+                    diff = SchemaDiffTableCompare._compare_source_only(
+                        added, module_view, source_params, target_params,
+                        dict1, diff, target_schema)
 
                     # Keys that are available in target and missing in source.
                     removed = dict2_keys - dict1_keys
-                    for item in removed:
-                        target_ddl = module_view.ddl_compare(
-                            source_params=source_params,
-                            target_params=target_params,
-                            source=None,
-                            target=dict2[item],
-                            target_schema=target_schema,
-                            comp_status='target_only'
-                        )
-
-                        diff += '\n' + target_ddl
+                    diff = SchemaDiffTableCompare._compare_target_only(
+                        removed, module_view, source_params, target_params,
+                        dict2, diff, target_schema)
 
                     # Keys that are available in both source and target.
-                    for key in intersect_keys:
-                        # Recursively Compare the two dictionary
-                        if not are_dictionaries_identical(
-                                dict1[key], dict2[key], ignore_whitespaces,
-                                self.keys_to_ignore):
+                    other_param = {
+                        "dict1": dict1,
+                        "dict2": dict2,
+                        "source": source,
+                        "target": target,
+                        "target_schema": target_schema
+                    }
+                    diff = self._compare_source_and_target(
+                        intersect_keys, module_view, source_params,
+                        target_params, diff, **other_param)
 
-                            diff_ddl = module_view.ddl_compare(
-                                source_params=source_params,
-                                target_params=target_params,
-                                source=dict1[key],
-                                target=dict2[key],
-                                target_schema=target_schema,
-                                comp_status='different',
-                                parent_source_data=source,
-                                parent_target_data=target
-                            )
+        return diff
 
-                            diff += '\n' + diff_ddl
+    @staticmethod
+    def _compare_source_only(added, module_view, source_params, target_params,
+                             dict1, diff, target_schema):
+        for item in added:
+            source_ddl = module_view.ddl_compare(
+                source_params=source_params,
+                target_params=target_params,
+                target_schema=target_schema,
+                source=dict1[item],
+                target=None,
+                comp_status='source_only'
+            )
 
+            diff += '\n' + source_ddl
+        return diff
+
+    @staticmethod
+    def _compare_target_only(removed, module_view, source_params,
+                             target_params, dict2, diff, target_schema):
+        for item in removed:
+            target_ddl = module_view.ddl_compare(
+                source_params=source_params,
+                target_params=target_params,
+                target_schema=target_schema,
+                source=None,
+                target=dict2[item],
+                comp_status='target_only'
+            )
+
+            diff += '\n' + target_ddl
+        return diff
+
+    def _compare_source_and_target(self, intersect_keys, module_view,
+                                   source_params, target_params, diff,
+                                   **kwargs):
+        dict1 = kwargs['dict1']
+        dict2 = kwargs['dict2']
+        source = kwargs['source']
+        target = kwargs['target']
+        target_schema = kwargs['target_schema']
+
+        for key in intersect_keys:
+            # Recursively Compare the two dictionary
+            if not are_dictionaries_identical(
+                    dict1[key], dict2[key], self.keys_to_ignore):
+                diff_ddl = module_view.ddl_compare(
+                    source_params=source_params,
+                    target_params=target_params,
+                    target_schema=target_schema,
+                    source=dict1[key],
+                    target=dict2[key],
+                    comp_status='different',
+                    parent_source_data=source,
+                    parent_target_data=target
+                )
+
+                diff += '\n' + diff_ddl
         return diff
